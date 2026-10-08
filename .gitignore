@@ -1,0 +1,25 @@
+﻿# Build artifacts
+core/build/
+daemon/bin/
+*.o *.a *.so
+
+# Go
+daemon/vendor/
+go.sum
+
+# OpenWrt image (besar, tidak perlu di-push)
+*.img
+*.img.gz
+
+# Env & secrets
+.env
+*.key
+*.pem
+
+# OS
+Thumbs.db
+.DS_Store
+
+# IDE
+.vscode/
+*.swp

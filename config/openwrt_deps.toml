@@ -1,0 +1,231 @@
+# Open Core Router — Dependency & Architecture Reference
+# Based on: openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img
+#
+# Image Analysis:
+#   Boot:     GRUB EFI (16 MB — EFI System Partition, LBA 512–33279)
+#   Root FS:  EXT4 (104 MB — Linux root, LBA 33280–246271)
+#   Kernel:   Linux 6.6.x (OpenWrt 25.12 series)
+#   Arch:     x86_64
+#   Init:     procd (NOT systemd)
+#   PkgMgr:   apk (Alpine Package Keeper — migrated from opkg in 25.x)
+#   Config:   UCI (Unified Configuration Interface)
+#   NetMgr:   netifd
+#   Firewall: firewall4 → nftables backend
+#   DHCP/DNS: dnsmasq (built-in, single process)
+#   WebUI:    LuCI (Lua/ucode based)
+
+[image]
+name     = "openwrt-25.12.5-x86-64-generic-ext4-combined-efi.img"
+version  = "25.12.5"
+arch     = "x86_64"
+kernel   = "6.6.x"
+size_mb  = 120
+init     = "procd"
+pkg_mgr  = "apk"
+config   = "uci"
+
+[partitions]
+# Part 1: EFI System Partition
+efi_start_lba = 512
+efi_end_lba   = 33279
+efi_size_mb   = 16
+efi_fs        = "vfat"
+efi_label     = "kernel"
+efi_bootloader = "GRUB2 EFI"
+
+# Part 2: Root FS
+root_start_lba = 33280
+root_end_lba   = 246271
+root_size_mb   = 104
+root_fs        = "ext4"
+root_label     = "rootfs"
+
+[base_packages]
+# Packages pre-installed in OpenWrt 25.12.5 x86-64 image
+# Source: OpenWrt build system base-files + x86 target defaults
+kernel           = "linux-6.6"
+init             = "procd"
+pkg_manager      = "apk"
+libc             = "musl"
+busybox          = "busybox"
+network_daemon   = "netifd"
+firewall         = "firewall4"
+nftables         = "nftables"
+dhcp_dns         = "dnsmasq-full"
+webui            = "luci"
+ssl              = "libustream-mbedtls"
+crypto           = "libmbedtls"
+json             = "libjson-c"
+ubus             = "ubus"
+ubox             = "ubox"
+uci              = "uci"
+rpcd             = "rpcd"
+uhttpd           = "uhttpd"
+logd             = "logd"
+kmod_e1000e      = "kmod-e1000e"
+kmod_virtio_net  = "kmod-virtio-net"
+kmod_tun         = "kmod-tun"
+kmod_nft_core    = "kmod-nft-core"
+kmod_nft_nat     = "kmod-nft-nat"
+kmod_nft_bridge  = "kmod-nft-bridge"
+kmod_wireguard   = "kmod-wireguard"
+ip_full          = "ip-full"
+ipset            = "ipset"
+iptables         = "iptables-nft"
+tc               = "tc-full"
+kmod_sched       = "kmod-sched-cake"
+
+[ocr_required_packages]
+# Packages needed by OCR — installed via: apk add <package>
+routing_suite    = "frr"           # FRRouting: ospfd, bgpd, ripd, staticd
+frr_ospf         = "frr-ospfd"
+frr_bgp          = "frr-bgpd"
+frr_rip          = "frr-ripd"
+frr_static       = "frr-staticd"
+frr_zebra        = "frr-zebra"     # FRR zebra = kernel route sync
+wireguard_tools  = "wireguard-tools"
+openvpn          = "openvpn-openssl"
+strongswan       = "strongswan"    # IPSec IKEv2
+php              = "php83"         # PHP 8.3 for Web UI (NOT default, must install)
+php_fpm          = "php83-fpm"
+php_curl         = "php83-curl"
+php_json         = "php83-json"
+php_mbstring     = "php83-mbstring"
+php_openssl      = "php83-openssl"
+php_pdo_sqlite   = "php83-pdo-sqlite"
+sqlite3          = "libsqlite3"
+lighttpd         = "lighttpd"      # Web server for PHP (or use uhttpd+php)
+tcpdump          = "tcpdump"
+conntrack        = "kmod-nf-conntrack"
+sqm_scripts      = "sqm-scripts"   # QoS with CAKE/HTB
+luci_app_sqm     = "luci-app-sqm"
+nftables_json    = "libnftables"
+jq               = "jq"
+bash             = "bash"
+curl             = "curl"
+openssl_util     = "openssl-util"
+htop             = "htop"
+
+[dependency_flow]
+# OCR Dependency Resolution Order (boot sequence)
+# 1. Kernel → modules loaded (e1000e, virtio-net, wireguard, nft, cake)
+# 2. procd starts → pid 1
+# 3. ubus → IPC bus initialized
+# 4. netifd → reads /etc/config/network → configures interfaces
+# 5. firewall4 → reads /etc/config/firewall → loads nftables rules
+# 6. dnsmasq → reads /etc/config/dhcp → DHCP + DNS
+# 7. frr-zebra → kernel route sync
+# 8. frr-ospfd/bgpd/ripd → routing protocols
+# 9. ocrd (Go daemon) → REST API, calls uci/netifd/frr via ubus/UCI
+# 10. php-fpm + lighttpd → serves PHP Web UI
+# 11. Web UI → calls ocrd REST API
+
+boot_order = [
+  "kernel",
+  "procd",
+  "ubus",
+  "ubox/logd",
+  "netifd",
+  "firewall4",
+  "dnsmasq",
+  "frr-zebra",
+  "frr-staticd",
+  "frr-ospfd",
+  "frr-bgpd",
+  "frr-ripd",
+  "ocrd",
+  "php-fpm",
+  "lighttpd",
+]
+
+[uci_config_files]
+# OpenWrt configuration via UCI — stored in /etc/config/
+network   = "/etc/config/network"     # Interface, VLAN, bridge config
+firewall  = "/etc/config/firewall"    # firewall4 rules
+dhcp      = "/etc/config/dhcp"        # dnsmasq DHCP/DNS
+system    = "/etc/config/system"      # Hostname, timezone, NTP
+wireless  = "/etc/config/wireless"    # WiFi (N/A for x86 base)
+qos       = "/etc/config/sqm"         # QoS (sqm-scripts)
+vpn_wg    = "/etc/config/network"     # WireGuard in network config
+vpn_ovpn  = "/etc/config/openvpn"    # OpenVPN config
+vpn_ipsec = "/etc/config/ipsec"       # strongSwan/IPSec
+frr       = "/etc/frr/frr.conf"       # FRRouting unified config
+ocr       = "/etc/config/ocr"         # OCR daemon settings
+
+[procd_services]
+# Service registration via /etc/init.d/ (procd init scripts)
+# START/STOP priority numbers
+netifd    = { script = "/etc/init.d/network",   start = 10 }
+firewall4 = { script = "/etc/init.d/firewall",  start = 15 }
+dnsmasq   = { script = "/etc/init.d/dnsmasq",   start = 20 }
+frr       = { script = "/etc/init.d/frr",       start = 25 }
+ocrd      = { script = "/etc/init.d/ocrd",      start = 30 }
+php_fpm   = { script = "/etc/init.d/php-fpm",   start = 35 }
+lighttpd  = { script = "/etc/init.d/lighttpd",  start = 40 }
+
+[frr_integration]
+# FRRouting daemon control via vtysh
+zebra_socket = "/var/run/frr/zebra.sock"
+frr_conf     = "/etc/frr/frr.conf"
+vtysh_bin    = "/usr/bin/vtysh"
+daemons_conf = "/etc/frr/daemons"
+
+[firewall_backend]
+# firewall4 uses nftables as backend
+# OCR manipulates firewall via:
+# 1. Writing UCI config: uci set firewall.rule_N.src=...
+# 2. Reloading: /etc/init.d/firewall reload
+# OR directly: nft add rule inet fw4 input ...
+uci_bin      = "/sbin/uci"
+nft_bin      = "/usr/sbin/nft"
+fw4_bin      = "/usr/sbin/fw4"
+fw4_tables   = ["inet fw4"]
+nft_conf     = "/etc/nftables.d/ocr.nft"
+
+[dhcp_dns_backend]
+# dnsmasq handles both DHCP + DNS in OpenWrt
+dnsmasq_conf   = "/etc/dnsmasq.conf"
+dhcp_leases    = "/var/lib/misc/dnsmasq.leases"
+dnsmasq_uci    = "/etc/config/dhcp"
+dnsmasq_pid    = "/var/run/dnsmasq.pid"
+# Control: uci set dhcp.lan.start=100 && /etc/init.d/dnsmasq reload
+
+[wireguard_integration]
+# WireGuard is native kernel module in OpenWrt 25.12
+# Config via UCI network config + wg tool
+kmod_wireguard = "kmod-wireguard"
+wg_bin         = "/usr/bin/wg"
+wg_quick       = "/usr/bin/wg-quick"
+# UCI syntax: config interface 'wg0' / option proto 'wireguard'
+
+[qos_backend]
+# QoS via sqm-scripts (CAKE algorithm)
+sqm_conf   = "/etc/config/sqm"
+sqm_script = "/usr/lib/sqm/cake.qos"
+tc_bin     = "/usr/sbin/tc"
+# CAKE: best-in-class for home/SMB routers — active queue management
+
+[webui_stack]
+# PHP 8.3 + Lighttpd (must install via apk)
+php_bin      = "/usr/bin/php-cli"
+php_fpm_bin  = "/usr/sbin/php-fpm83"
+php_fpm_conf = "/etc/php83/php-fpm.conf"
+lighttpd_bin = "/usr/sbin/lighttpd"
+lighttpd_conf = "/etc/lighttpd/lighttpd.conf"
+webroot      = "/www/ocr"
+# Alternative: uhttpd (built-in) with CGI/FastCGI PHP
+
+[go_daemon]
+# ocrd daemon talks to OpenWrt via:
+# 1. UCI:    exec.Command("uci", "set", "network.eth0.ipaddr", "...")
+# 2. ubus:   ubus call network.interface.lan status
+# 3. netifd: via ubus RPC
+# 4. procd:  service control via ubus
+# 5. nftables: direct nft commands
+# 6. FRR:   via vtysh or frr socket
+go_version    = "1.22"
+build_target  = "linux/amd64"
+binary        = "/usr/sbin/ocrd"
+config        = "/etc/config/ocr"
+pid_file      = "/var/run/ocrd.pid"
+api_addr      = "127.0.0.1:8080"    # Local only, fronted by lighttpd

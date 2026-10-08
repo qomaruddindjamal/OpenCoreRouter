@@ -1,0 +1,495 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Open Core Router — Dashboard</title>
+  <meta name="description" content="Open Core Router — Web management interface for advanced network routing">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <div class="logo-icon">
+          <svg viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="16" cy="16" r="14" stroke="url(#g1)" stroke-width="2"/>
+            <circle cx="16" cy="16" r="5" fill="url(#g1)"/>
+            <line x1="16" y1="2" x2="16" y2="9" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="16" y1="23" x2="16" y2="30" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="2" y1="16" x2="9" y2="16" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+            <line x1="23" y1="16" x2="30" y2="16" stroke="url(#g1)" stroke-width="2" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="g1" x1="2" y1="2" x2="30" y2="30">
+                <stop offset="0%" stop-color="#6EE7F7"/>
+                <stop offset="100%" stop-color="#3B82F6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div class="logo-text">
+          <span class="logo-name">OpenCR</span>
+          <span class="logo-version">v1.0.0</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sidebar-status">
+      <div class="status-dot active" id="conn-status-dot"></div>
+      <span class="status-text" id="conn-status-text">Connected</span>
+    </div>
+
+    <nav class="sidebar-nav">
+      <a href="#" class="nav-item active" data-page="dashboard" id="nav-dashboard">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+        <span>Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-page="interfaces" id="nav-interfaces">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+        <span>Interfaces</span>
+      </a>
+      <a href="#" class="nav-item" data-page="routing" id="nav-routing">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M9 6h6M7.5 8.5l3 7M16.5 8.5l-3 7"/></svg>
+        <span>Routing</span>
+      </a>
+      <a href="#" class="nav-item" data-page="firewall" id="nav-firewall">
+        <svg class="nav-icon" viewBox="0 0 24 24"><path d="M12 2L3 7v6c0 5.25 3.75 10.15 9 11.25C17.25 23.15 21 18.25 21 13V7l-9-5z"/></svg>
+        <span>Firewall</span>
+      </a>
+      <a href="#" class="nav-item" data-page="vpn" id="nav-vpn">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.22 4.22l2.83 2.83M16.95 16.95l2.83 2.83M2 12h4M18 12h4M4.22 19.78l2.83-2.83M16.95 7.05l2.83-2.83"/></svg>
+        <span>VPN</span>
+      </a>
+      <a href="#" class="nav-item" data-page="dhcp" id="nav-dhcp">
+        <svg class="nav-icon" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/></svg>
+        <span>DHCP</span>
+      </a>
+      <a href="#" class="nav-item" data-page="dns" id="nav-dns">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20M12 2a14.5 14.5 0 0 1 0 20M2 12h20"/></svg>
+        <span>DNS</span>
+      </a>
+      <a href="#" class="nav-item" data-page="qos" id="nav-qos">
+        <svg class="nav-icon" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+        <span>QoS</span>
+      </a>
+      <div class="nav-divider"></div>
+      <a href="#" class="nav-item" data-page="system" id="nav-system">
+        <svg class="nav-icon" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M4.93 4.93a10 10 0 0 0 0 14.14"/></svg>
+        <span>System</span>
+      </a>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">A</div>
+        <div class="user-details">
+          <span class="user-name" id="sidebar-username">admin</span>
+          <span class="user-role">Administrator</span>
+        </div>
+      </div>
+      <button class="btn-logout" id="btn-logout" title="Logout">
+        <svg viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+      </button>
+    </div>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main-content" id="main-content">
+    <!-- Top bar -->
+    <header class="topbar">
+      <button class="menu-toggle" id="menu-toggle">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+      </button>
+      <div class="topbar-title" id="page-title">Dashboard</div>
+      <div class="topbar-actions">
+        <div class="live-indicator">
+          <span class="pulse-dot"></span>
+          <span id="live-time">--:--:--</span>
+        </div>
+        <button class="btn-icon" id="btn-refresh" title="Refresh">
+          <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Login overlay -->
+    <div class="login-overlay" id="login-overlay">
+      <div class="login-card">
+        <div class="login-logo">
+          <svg viewBox="0 0 48 48" fill="none">
+            <circle cx="24" cy="24" r="22" stroke="url(#lg1)" stroke-width="2.5"/>
+            <circle cx="24" cy="24" r="8" fill="url(#lg1)"/>
+            <line x1="24" y1="2" x2="24" y2="13" stroke="url(#lg1)" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="24" y1="35" x2="24" y2="46" stroke="url(#lg1)" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="2" y1="24" x2="13" y2="24" stroke="url(#lg1)" stroke-width="2.5" stroke-linecap="round"/>
+            <line x1="35" y1="24" x2="46" y2="24" stroke="url(#lg1)" stroke-width="2.5" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="lg1" x1="2" y1="2" x2="46" y2="46">
+                <stop offset="0%" stop-color="#6EE7F7"/>
+                <stop offset="100%" stop-color="#3B82F6"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <h1 class="login-title">Open Core Router</h1>
+        <p class="login-sub">Management Interface</p>
+        <form class="login-form" id="login-form">
+          <div class="form-group">
+            <label class="form-label">Username</label>
+            <input type="text" class="form-input" id="login-user" value="admin" autocomplete="username">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" id="login-pass" value="admin" autocomplete="current-password">
+          </div>
+          <div class="login-error" id="login-error"></div>
+          <button type="submit" class="btn-primary btn-full" id="btn-login">
+            <span>Sign In</span>
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Pages -->
+    <div class="page active" id="page-dashboard">
+      <!-- Stats cards -->
+      <div class="stats-grid">
+        <div class="stat-card" id="stat-cpu">
+          <div class="stat-header">
+            <span class="stat-label">CPU Usage</span>
+            <svg class="stat-icon" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M9 9h6M9 12h6M9 15h3"/></svg>
+          </div>
+          <div class="stat-value" id="cpu-value">--%</div>
+          <div class="stat-bar"><div class="stat-bar-fill" id="cpu-bar" style="width:0%"></div></div>
+        </div>
+        <div class="stat-card" id="stat-mem">
+          <div class="stat-header">
+            <span class="stat-label">Memory</span>
+            <svg class="stat-icon" viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="10" rx="1"/><path d="M7 7V5M12 7V5M17 7V5M7 17v2M12 17v2M17 17v2"/></svg>
+          </div>
+          <div class="stat-value" id="mem-value">--%</div>
+          <div class="stat-bar"><div class="stat-bar-fill mem" id="mem-bar" style="width:0%"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">Interfaces</span>
+            <svg class="stat-icon" viewBox="0 0 24 24"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+          </div>
+          <div class="stat-value" id="iface-count">--</div>
+          <div class="stat-sub">active interfaces</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-header">
+            <span class="stat-label">Routes</span>
+            <svg class="stat-icon" viewBox="0 0 24 24"><circle cx="6" cy="6" r="3"/><circle cx="18" cy="6" r="3"/><circle cx="12" cy="18" r="3"/><path d="M9 6h6M7.5 8.5l3 7M16.5 8.5l-3 7"/></svg>
+          </div>
+          <div class="stat-value" id="route-count">--</div>
+          <div class="stat-sub">routing entries</div>
+        </div>
+      </div>
+
+      <!-- Charts row -->
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="card-header">
+            <h3 class="card-title">Traffic Overview</h3>
+            <div class="chart-legend">
+              <span class="legend-item tx">▲ TX</span>
+              <span class="legend-item rx">▼ RX</span>
+            </div>
+          </div>
+          <canvas id="traffic-chart" height="160"></canvas>
+        </div>
+        <div class="chart-card small">
+          <div class="card-header">
+            <h3 class="card-title">System Info</h3>
+          </div>
+          <div class="sys-info-list">
+            <div class="info-row">
+              <span class="info-label">Hostname</span>
+              <span class="info-val" id="sys-hostname">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Uptime</span>
+              <span class="info-val" id="sys-uptime">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Kernel</span>
+              <span class="info-val" id="sys-kernel">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Platform</span>
+              <span class="info-val" id="sys-platform">--</span>
+            </div>
+            <div class="info-row">
+              <span class="info-label">Version</span>
+              <span class="info-val">OCR v1.0.0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Interfaces table -->
+      <div class="table-card">
+        <div class="card-header">
+          <h3 class="card-title">Network Interfaces</h3>
+          <button class="btn-sm btn-secondary" id="btn-sync-ifaces">Sync</button>
+        </div>
+        <div class="table-wrapper">
+          <table class="data-table" id="iface-table">
+            <thead>
+              <tr>
+                <th>Interface</th>
+                <th>Status</th>
+                <th>Addresses</th>
+                <th>MTU</th>
+                <th>RX</th>
+                <th>TX</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="iface-tbody">
+              <tr><td colspan="7" class="empty-row">Loading interfaces...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Interfaces page -->
+    <div class="page" id="page-interfaces">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-addr">+ Add Address</button>
+        <button class="btn-secondary" id="btn-add-vlan">+ VLAN</button>
+      </div>
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">All Interfaces</h3></div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr><th>Name</th><th>Index</th><th>Status</th><th>MAC</th><th>MTU</th><th>Addresses</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="iface-full-tbody">
+              <tr><td colspan="7" class="empty-row">Loading...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Routing page -->
+    <div class="page" id="page-routing">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-route">+ Static Route</button>
+      </div>
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">Routing Table</h3></div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr><th>Prefix</th><th>Gateway</th><th>Interface</th><th>Protocol</th><th>Metric</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="route-tbody">
+              <tr><td colspan="6" class="empty-row">Loading routes...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">Routing Protocols</h3></div>
+        <div class="protocols-grid" id="protocols-grid"></div>
+      </div>
+    </div>
+
+    <!-- Firewall page -->
+    <div class="page" id="page-firewall">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-rule">+ Add Rule</button>
+        <button class="btn-warning" id="btn-apply-fw">Apply Rules</button>
+        <button class="btn-danger" id="btn-flush-fw">Flush All</button>
+      </div>
+      <div class="table-card">
+        <div class="card-header">
+          <h3 class="card-title">Firewall Rules</h3>
+          <div class="tabs">
+            <button class="tab active" data-tab="filter">Filter</button>
+            <button class="tab" data-tab="nat">NAT</button>
+          </div>
+        </div>
+        <div class="tab-content active" id="tab-filter">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr><th>#</th><th>Direction</th><th>Source</th><th>Destination</th><th>Protocol</th><th>Action</th><th>Enabled</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="fw-tbody">
+                <tr><td colspan="8" class="empty-row">No firewall rules</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="tab-content" id="tab-nat">
+          <div class="table-wrapper">
+            <table class="data-table">
+              <thead>
+                <tr><th>#</th><th>Type</th><th>Source</th><th>Destination</th><th>To</th><th>Actions</th></tr>
+              </thead>
+              <tbody id="nat-tbody">
+                <tr><td colspan="6" class="empty-row">No NAT rules</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- VPN page -->
+    <div class="page" id="page-vpn">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-wg">+ WireGuard</button>
+        <button class="btn-secondary" id="btn-add-ovpn">+ OpenVPN</button>
+        <button class="btn-secondary" id="btn-add-ipsec">+ IPSec</button>
+      </div>
+      <div class="vpn-grid" id="vpn-grid">
+        <div class="empty-state">
+          <svg viewBox="0 0 64 64" fill="none"><circle cx="32" cy="32" r="30" stroke="currentColor" stroke-width="2" opacity="0.3"/><path d="M20 32a12 12 0 0 1 24 0" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          <p>No VPN tunnels configured</p>
+          <p class="empty-sub">Click "WireGuard" to create your first tunnel</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- DHCP page -->
+    <div class="page" id="page-dhcp">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-pool">+ Add Pool</button>
+      </div>
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">Active Leases</h3></div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr><th>MAC Address</th><th>IP Address</th><th>Hostname</th><th>Expires</th></tr>
+            </thead>
+            <tbody id="lease-tbody">
+              <tr><td colspan="4" class="empty-row">No active leases</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- DNS page -->
+    <div class="page" id="page-dns">
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">DNS Configuration</h3></div>
+        <div class="dns-config-form" id="dns-config-form">
+          <div class="form-group">
+            <label class="form-label">Listen Address</label>
+            <input type="text" class="form-input" id="dns-listen" placeholder="127.0.0.1:53">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Forwarders (one per line)</label>
+            <textarea class="form-textarea" id="dns-forwarders" rows="4" placeholder="8.8.8.8&#10;8.8.4.4&#10;1.1.1.1"></textarea>
+          </div>
+          <button class="btn-primary" id="btn-save-dns">Save DNS Config</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- QoS page -->
+    <div class="page" id="page-qos">
+      <div class="page-actions">
+        <button class="btn-primary" id="btn-add-qos">+ Add Policy</button>
+        <button class="btn-warning" id="btn-apply-qos">Apply QoS</button>
+      </div>
+      <div class="table-card">
+        <div class="card-header"><h3 class="card-title">QoS Policies</h3></div>
+        <div class="table-wrapper">
+          <table class="data-table">
+            <thead>
+              <tr><th>Name</th><th>Interface</th><th>Rate</th><th>Ceil</th><th>Priority</th><th>Actions</th></tr>
+            </thead>
+            <tbody id="qos-tbody">
+              <tr><td colspan="6" class="empty-row">No QoS policies</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- System page -->
+    <div class="page" id="page-system">
+      <div class="sys-cards">
+        <div class="table-card">
+          <div class="card-header"><h3 class="card-title">System Information</h3></div>
+          <div class="sys-info-list" id="sys-full-info"></div>
+        </div>
+        <div class="table-card">
+          <div class="card-header"><h3 class="card-title">System Actions</h3></div>
+          <div class="sys-actions">
+            <button class="btn-warning btn-lg" id="btn-reboot">
+              <svg viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              Reboot System
+            </button>
+            <button class="btn-danger btn-lg" id="btn-shutdown">
+              <svg viewBox="0 0 24 24"><path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/></svg>
+              Shutdown
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="modal" id="modal">
+      <div class="modal-header">
+        <h3 class="modal-title" id="modal-title">Modal</h3>
+        <button class="modal-close" id="modal-close">×</button>
+      </div>
+      <div class="modal-body" id="modal-body"></div>
+      <div class="modal-footer" id="modal-footer">
+        <button class="btn-secondary" id="modal-cancel">Cancel</button>
+        <button class="btn-primary" id="modal-submit">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- DNS extra elements -->
+  <template id="tpl-dns-extra">
+    <div class="form-group">
+      <label class="form-label">Local Domain</label>
+      <input type="text" class="form-input" id="dns-domain" placeholder="lan">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Search Domain</label>
+      <input type="text" class="form-input" id="dns-search" placeholder="home.arpa">
+    </div>
+    <div class="form-group" style="flex-direction:row;align-items:center;gap:10px">
+      <input type="checkbox" id="dns-rebind-protection">
+      <label class="form-label" for="dns-rebind-protection" style="margin:0">
+        Rebind Attack Protection
+      </label>
+    </div>
+    <div class="form-group" style="flex-direction:row;align-items:center;gap:10px">
+      <input type="checkbox" id="dns-nxdomain">
+      <label class="form-label" for="dns-nxdomain" style="margin:0">
+        NXDomain Redirect (Ad-blocking)
+      </label>
+    </div>
+  </template>
+
+  <!-- Load as ES Module -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
