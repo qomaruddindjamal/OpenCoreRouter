@@ -1,0 +1,41 @@
+# Open Core Router — Daemon Configuration
+# /etc/config/ocr
+#
+# Main config for the ocrd management daemon
+# UCI format — managed by `uci` command
+
+config ocrd 'main'
+	option enabled          '1'
+	option listen_addr      '127.0.0.1'
+	option listen_port      '8080'
+	option log_level        'info'
+	option log_file         '/var/log/ocrd.log'
+	option pid_file         '/var/run/ocrd.pid'
+
+config auth 'auth'
+	option method           'jwt'
+	option secret_file      '/etc/ocr/jwt.secret'
+	option token_expiry     '86400'
+	# Default admin — CHANGE after first login
+	option admin_user       'admin'
+	option admin_pass_hash  ''
+
+config api 'api'
+	option version          'v1'
+	option prefix           '/api/v1'
+	option cors_origin      '*'
+	option rate_limit       '100'
+
+config frr 'frr'
+	option enabled          '1'
+	option vtysh            '/usr/bin/vtysh'
+	option frr_conf         '/etc/frr/frr.conf'
+	option zebra_socket     '/var/run/frr/zserv.api'
+	option enable_ospf      '0'
+	option enable_bgp       '0'
+	option enable_rip       '0'
+
+config websocket 'ws'
+	option enabled          '1'
+	option path             '/ws/stats'
+	option interval_sec     '2'

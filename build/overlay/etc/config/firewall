@@ -1,0 +1,117 @@
+# Open Core Router — Firewall Configuration
+# /etc/config/firewall
+#
+# OpenWrt 25.12.5: firewall4 → nftables backend
+# OCR daemon modifies this via `uci` + `/etc/init.d/firewall reload`
+
+config defaults
+	option syn_flood        '1'
+	option input            'ACCEPT'
+	option output           'ACCEPT'
+	option forward          'REJECT'
+	option flow_offloading  '1'
+
+# ── Zones ─────────────────────────────────────────────────────────────────────
+config zone
+	option name         'lan'
+	list   network      'lan'
+	option input        'ACCEPT'
+	option output       'ACCEPT'
+	option forward      'ACCEPT'
+
+config zone
+	option name         'wan'
+	list   network      'wan'
+	list   network      'wan6'
+	option input        'REJECT'
+	option output       'ACCEPT'
+	option forward      'REJECT'
+	option masq         '1'
+	option masq6        '1'
+	option mtu_fix      '1'
+
+# ── Zone forwarding ───────────────────────────────────────────────────────────
+config forwarding
+	option src  'lan'
+	option dest 'wan'
+
+# ── Default rules ─────────────────────────────────────────────────────────────
+# Allow DHCP renew from WAN
+config rule
+	option name         'Allow-DHCP-Renew'
+	option src          'wan'
+	option proto        'udp'
+	option dest_port    '68'
+	option target       'ACCEPT'
+	option family       'ipv4'
+
+# Allow ping from WAN
+config rule
+	option name         'Allow-Ping-WAN'
+	option src          'wan'
+	option proto        'icmp'
+	option icmp_type    'echo-request'
+	option family       'ipv4'
+	option target       'ACCEPT'
+
+# Allow DHCPv6
+config rule
+	option name         'Allow-DHCPv6'
+	option src          'wan'
+	option proto        'udp'
+	option dest_port    '546'
+	option family       'ipv6'
+	option target       'ACCEPT'
+
+# Allow ICMPv6 (NDP)
+config rule
+	option name         'Allow-ICMPv6-Input'
+	option src          'wan'
+	option proto        'icmp6'
+	list icmp_type      'echo-request'
+	list icmp_type      'echo-reply'
+	list icmp_type      'destination-unreachable'
+	list icmp_type      'packet-too-big'
+	list icmp_type      'time-exceeded'
+	list icmp_type      'bad-header'
+	list icmp_type      'unknown-header-type'
+	list icmp_type      'router-solicitation'
+	list icmp_type      '130/0'
+	list icmp_type      '131/0'
+	list icmp_type      '132/0'
+	list icmp_type      '143/0'
+	option limit        '1000/sec'
+	option family       'ipv6'
+	option target       'ACCEPT'
+
+# WireGuard VPN input (default port)
+config rule
+	option name         'Allow-WireGuard'
+	option src          'wan'
+	option dest_port    '51820'
+	option proto        'udp'
+	option target       'ACCEPT'
+
+# OCR API — only from LAN
+config rule
+	option name         'Allow-OCR-API'
+	option src          'lan'
+	option dest_port    '8080'
+	option proto        'tcp'
+	option target       'ACCEPT'
+
+# Web UI (Lighttpd) from LAN
+config rule
+	option name         'Allow-WebUI'
+	option src          'lan'
+	option dest_port    '80 443'
+	option proto        'tcp'
+	option target       'ACCEPT'
+
+# SSH from LAN only (disable WAN SSH by default)
+config rule
+	option name         'Allow-SSH-LAN'
+	option src          'lan'
+	option dest_port    '22'
+	option proto        'tcp'
+	option target       'ACCEPT'

@@ -1,25 +1,56 @@
-﻿# Build artifacts
+# ─── Build output / images ───────────────────────────────────────────────────
+# NEVER commit binary images — generate locally via scripts/build-image.sh
+*.img
+*.img.gz
+*.iso
+*.iso.gz
+*.vmdk
+*.qcow2
+*.vhd
+*.vhdx
+*.ova
+*.raw
+
+# OpenWrt Image Builder output
+build/output/
+build/imagebuilder/
+build/dl/
+build/*.img
+build/*.iso
+build/*.tar.gz
+
+# ─── Compiled artifacts ───────────────────────────────────────────────────────
 core/build/
 daemon/bin/
-*.o *.a *.so
+dist/
+*.o
+*.a
+*.so
+*.elf
 
-# Go
+# ─── Go ───────────────────────────────────────────────────────────────────────
 daemon/vendor/
 go.sum
 
-# OpenWrt image (besar, tidak perlu di-push)
-*.img
-*.img.gz
-
-# Env & secrets
+# ─── Secrets & credentials ────────────────────────────────────────────────────
 .env
+.env.*
 *.key
 *.pem
+*.p12
+*.pfx
+secrets/
+private/
 
-# OS
+# ─── OS & editor ─────────────────────────────────────────────────────────────
 Thumbs.db
 .DS_Store
-
-# IDE
-.vscode/
 *.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# ─── Logs ────────────────────────────────────────────────────────────────────
+*.log
+logs/

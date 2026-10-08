@@ -1,0 +1,28 @@
+# Open Core Router — System Configuration
+# /etc/config/system
+#
+# OpenWrt 25.12.5 UCI system config
+# Controls: hostname, timezone, NTP, LED, logging
+
+config system
+	option hostname   'Open-Core-Router'
+	option timezone   'Asia/Jakarta'
+	option ttylogin   '0'
+	option log_size   '64'
+	option urandom_seed '0'
+	option cronloglevel '5'
+	option description 'Open Core Router 1.0.1'
+	option notes      'Based on OpenWrt 25.12.5 — github.com/qomaruddindjamal/OpenCoreRouter'
+
+config timeserver 'ntp'
+	option enabled    '1'
+	option enable_server '0'
+	list   server    '0.id.pool.ntp.org'
+	list   server    '1.id.pool.ntp.org'
+	list   server    '2.asia.pool.ntp.org'
+	list   server    '3.asia.pool.ntp.org'
+
+config led 'led_power'
+	option name    'power'
+	option sysfs   'power'
+	option trigger 'default-on'

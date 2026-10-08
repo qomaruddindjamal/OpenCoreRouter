@@ -1,0 +1,64 @@
+#!/bin/sh /etc/rc.common
+# Open Core Router — First Boot Setup
+# /etc/init.d/ocr-setup
+#
+# Runs ONCE on first boot to configure the system.
+# Removes itself after successful execution.
+
+START=05
+STOP=99
+USE_PROCD=1
+
+STAMP="/etc/ocr/.setup_done"
+
+start_service() {
+	# Already ran — skip
+	[ -f "$STAMP" ] && return 0
+
+	logger -t ocr-setup "=== Open Core Router 1.0.1 — First Boot Setup ==="
+
+	# ── 1. Set hostname ───────────────────────────────────────────────────────
+	uci set system.@system[0].hostname='Open-Core-Router'
+	uci commit system
+
+	# ── 2. Generate unique machine ID ─────────────────────────────────────────
+	if [ ! -f /etc/machine-id ]; then
+		cat /proc/sys/kernel/random/uuid | tr -d '-' > /etc/machine-id
+	fi
+
+	# ── 3. Enable & start services ────────────────────────────────────────────
+	# FRRouting (procd will start frr-zebra/staticd by default)
+	/etc/init.d/frr enable   2>/dev/null || true
+	/etc/init.d/frr start    2>/dev/null || true
+
+	# lighttpd for Web UI
+	/etc/init.d/lighttpd enable  2>/dev/null || true
+	/etc/init.d/lighttpd start   2>/dev/null || true
+
+	# PHP-FPM for OCR Web UI backend
+	/etc/init.d/php-fpm83 enable 2>/dev/null || true
+	/etc/init.d/php-fpm83 start  2>/dev/null || true
+
+	# ocrd management daemon
+	/etc/init.d/ocrd enable  2>/dev/null || true
+	/etc/init.d/ocrd start   2>/dev/null || true
+
+	# ── 4. Apply firewall rules ───────────────────────────────────────────────
+	/etc/init.d/firewall restart 2>/dev/null || true
+
+	# ── 5. Set root password prompt flag ──────────────────────────────────────
+	# Root has no password by default — Web UI will prompt on first login
+	touch /etc/ocr/.passwd_not_set
+
+	# ── 6. Write setup stamp ──────────────────────────────────────────────────
+	mkdir -p /etc/ocr
+	date -u > "$STAMP"
+	logger -t ocr-setup "First boot setup complete — Open Core Router 1.0.1 ready"
+
+	# Disable this script (runs only once)
+	/etc/init.d/ocr-setup disable
+}
+
+service_triggers() {
+	procd_add_reload_trigger "ocr"
+}

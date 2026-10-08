@@ -1,0 +1,39 @@
+# Open Core Router — FRRouting Daemons
+# /etc/frr/daemons
+#
+# OpenWrt 25.12.5: FRRouting via apk (frr, frr-zebra, frr-ospfd, frr-bgpd, frr-ripd)
+# Enable daemons here — they will be started by /etc/init.d/frr
+
+# FRR version
+frr_profile=traditional
+
+# Core daemons (always on when FRR is enabled)
+zebra=yes
+staticd=yes
+
+# Routing protocols (off by default — enable via OCR Web UI)
+bgpd=no
+ospfd=no
+ospf6d=no
+ripd=no
+ripngd=no
+isisd=no
+pimd=no
+ldpd=no
+nhrpd=no
+eigrpd=no
+babeld=no
+sharpd=no
+pbrd=no
+bfdd=no
+fabricd=no
+vrrpd=no
+pathd=no
+
+# Management
+vtysh_enable=yes
+zebra_options="  -A 127.0.0.1 -s 90000000"
+bgpd_options="   -A 127.0.0.1"
+ospfd_options="  -A 127.0.0.1"
+ospf6d_options=" -A ::1"
+ripd_options="   -A 127.0.0.1"

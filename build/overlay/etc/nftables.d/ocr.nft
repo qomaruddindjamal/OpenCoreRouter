@@ -1,0 +1,59 @@
+# Open Core Router — Custom nftables Rules
+# /etc/nftables.d/ocr.nft
+#
+# This file is included by firewall4 via:
+#   /etc/firewall.user  or  include "/etc/nftables.d/*.nft"
+#
+# Rules here EXTEND the UCI firewall — never replace it.
+# firewall4 manages the base table (inet fw4).
+# OCR-specific tables go in their own namespace.
+
+# ── Connection tracking optimization ──────────────────────────────────────────
+table inet ocr_conntrack {
+    chain prerouting {
+        type filter hook prerouting priority -150;
+        # Skip conntrack for loopback
+        iif lo accept
+        # Flow offload for established connections (hardware offload if available)
+        ct state established,related meta l4proto { tcp, udp } flow add @ocr_flowtable
+    }
+
+    flowtable ocr_flowtable {
+        hook ingress priority 0;
+        devices = { eth0, eth1 };
+    }
+}
+
+# ── Anti-spoofing ─────────────────────────────────────────────────────────────
+table inet ocr_security {
+    chain prerouting {
+        type filter hook prerouting priority -100;
+
+        # Drop packets claiming to be from loopback on external interfaces
+        iif != lo ip saddr 127.0.0.0/8 drop
+        iif != lo ip6 saddr ::1 drop
+
+        # Drop invalid conntrack states
+        ct state invalid drop
+
+        # Rate-limit ICMP/ICMPv6 to prevent ping floods
+        ip protocol icmp limit rate 20/second burst 5 packets accept
+        ip protocol icmp drop
+        ip6 nexthdr icmpv6 limit rate 20/second burst 5 packets accept
+        ip6 nexthdr icmpv6 drop
+    }
+}
+
+# ── Port-knocking stub (managed via OCR Web UI) ───────────────────────────────
+# table inet ocr_portknock { ... }
+
+# ── QoS marks (for use with tc CAKE algorithm) ────────────────────────────────
+table inet ocr_qos {
+    chain mangle_postrouting {
+        type route hook postrouting priority mangle;
+        # DSCP marking for voice/video traffic
+        ip dscp cs4 meta mark set 0x10
+        ip dscp cs5 meta mark set 0x20
+        ip dscp ef  meta mark set 0x30
+    }
+}
