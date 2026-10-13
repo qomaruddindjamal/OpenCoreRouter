@@ -384,6 +384,13 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str(" found\r\n");
                     } else if cmd == b"show tcam" {
                         SERIAL.write_str("TCAM Engine: 16 rules active, default-action=DENY\r\n");
+                    } else if cmd == b"hostname show" || cmd == b"show hostname" {
+                        SERIAL.write_str("hostname: rinjani (domain: rinjani.local)\r\n");
+                    } else if cmd.starts_with(b"hostname set ") {
+                        let new_name = &cmd[13..];
+                        SERIAL.write_str("Hostname updated to: ");
+                        for &b in new_name { SERIAL.write_byte(b); }
+                        SERIAL.write_str(" (Option 12 & mDNS active)\r\n");
                     } else if cmd.starts_with(b"ping") {
                         let target = if cmd.len() > 5 { &cmd[5..] } else { b"192.168.57.1" };
                         SERIAL.write_str("PING ");

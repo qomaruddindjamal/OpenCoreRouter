@@ -420,7 +420,18 @@ pub fn build_dhcp_discover(
     xid: u32,
     out: &mut [u8],
 ) -> Result<usize, &'static str> {
-    let dhcp_len = 240 + 4; // 240 header + 3 opt53 + 1 end = 244 bytes
+    build_dhcp_discover_with_hostname(client_mac, xid, "rinjani", out)
+}
+
+pub fn build_dhcp_discover_with_hostname(
+    client_mac: [u8; 6],
+    xid: u32,
+    hostname: &str,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let host_bytes = hostname.as_bytes();
+    let host_opt_len = if host_bytes.is_empty() { 0 } else { 2 + host_bytes.len() };
+    let dhcp_len = 240 + 4 + host_opt_len; // 240 header + 3 opt53 + opt12 + 1 end
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
     let total_len = 14 + ip_len;
@@ -469,11 +480,21 @@ pub fn build_dhcp_discover(
     out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
     out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
 
-    // Options: 53 (Message Type = 1 Discover) + 255 (End)
-    out[dhcp_start + 240] = 53;
-    out[dhcp_start + 241] = 1;
-    out[dhcp_start + 242] = DHCP_DISCOVER;
-    out[dhcp_start + 243] = 255;
+    // Options: 53 (Message Type = 1 Discover) + 12 (Host Name) + 255 (End)
+    let mut opt_idx = dhcp_start + 240;
+    out[opt_idx] = 53;
+    out[opt_idx + 1] = 1;
+    out[opt_idx + 2] = DHCP_DISCOVER;
+    opt_idx += 3;
+
+    if !host_bytes.is_empty() {
+        out[opt_idx] = 12; // Option 12: Host Name (RFC 2132)
+        out[opt_idx + 1] = host_bytes.len() as u8;
+        out[opt_idx + 2..opt_idx + 2 + host_bytes.len()].copy_from_slice(host_bytes);
+        opt_idx += 2 + host_bytes.len();
+    }
+
+    out[opt_idx] = 255; // End
 
     Ok(total_len)
 }
@@ -485,7 +506,20 @@ pub fn build_dhcp_request(
     xid: u32,
     out: &mut [u8],
 ) -> Result<usize, &'static str> {
-    let dhcp_len = 240 + 10; // 240 header + 3 opt53 + 6 opt50 + 6 opt54 + 1 end
+    build_dhcp_request_with_hostname(client_mac, requested_ip, server_ip, xid, "rinjani", out)
+}
+
+pub fn build_dhcp_request_with_hostname(
+    client_mac: [u8; 6],
+    requested_ip: [u8; 4],
+    server_ip: [u8; 4],
+    xid: u32,
+    hostname: &str,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let host_bytes = hostname.as_bytes();
+    let host_opt_len = if host_bytes.is_empty() { 0 } else { 2 + host_bytes.len() };
+    let dhcp_len = 240 + 10 + host_opt_len; // 240 header + 3 opt53 + 6 opt50 + opt12 + 1 end
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
     let total_len = 14 + ip_len;
@@ -534,14 +568,26 @@ pub fn build_dhcp_request(
     out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
     out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
 
-    // Options: 53 (Request) + 50 (Requested IP) + 255 (End)
-    out[dhcp_start + 240] = 53;
-    out[dhcp_start + 241] = 1;
-    out[dhcp_start + 242] = DHCP_REQUEST;
-    out[dhcp_start + 243] = 50; // Requested IP address
-    out[dhcp_start + 244] = 4;
-    out[dhcp_start + 245..dhcp_start + 249].copy_from_slice(&requested_ip);
-    out[dhcp_start + 249] = 255;
+    // Options: 53 (Request) + 50 (Requested IP) + 12 (Host Name) + 255 (End)
+    let mut opt_idx = dhcp_start + 240;
+    out[opt_idx] = 53;
+    out[opt_idx + 1] = 1;
+    out[opt_idx + 2] = DHCP_REQUEST;
+    opt_idx += 3;
+
+    out[opt_idx] = 50; // Requested IP address
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&requested_ip);
+    opt_idx += 6;
+
+    if !host_bytes.is_empty() {
+        out[opt_idx] = 12; // Option 12: Host Name
+        out[opt_idx + 1] = host_bytes.len() as u8;
+        out[opt_idx + 2..opt_idx + 2 + host_bytes.len()].copy_from_slice(host_bytes);
+        opt_idx += 2 + host_bytes.len();
+    }
+
+    out[opt_idx] = 255;
 
     let _ = server_ip;
     Ok(total_len)
@@ -851,6 +897,119 @@ impl<const MAX_CONNS: usize> TcpListenerFacade<MAX_CONNS> {
         }
         Ok(())
     }
+}
+
+// -----------------------------------------------------------------------------
+// mDNS RESPONDER ENGINE (RFC 6762 — MULTICAST DNS)
+// -----------------------------------------------------------------------------
+
+pub const MDNS_MULTICAST_IPV4: [u8; 4] = [224, 0, 0, 251];
+pub const MDNS_MULTICAST_MAC: [u8; 6] = [0x01, 0x00, 0x5E, 0x00, 0x00, 0xFB];
+pub const MDNS_PORT: u16 = 5353;
+
+pub fn is_mdns_query_for_rinjani(udp_payload: &[u8]) -> bool {
+    // DNS header: 12 bytes
+    if udp_payload.len() < 12 {
+        return false;
+    }
+    // Check flags: QR bit must be 0 (Query)
+    let flags = u16::from_be_bytes([udp_payload[2], udp_payload[3]]);
+    if (flags & 0x8000) != 0 {
+        return false;
+    }
+    let qdcount = u16::from_be_bytes([udp_payload[4], udp_payload[5]]);
+    if qdcount == 0 {
+        return false;
+    }
+
+    // Inspect question section for label sequence: 7 "rinjani" 5 "local" 0
+    let needle = b"\x07rinjani\x05local\x00";
+    if udp_payload[12..].windows(needle.len()).any(|w| w == needle) {
+        return true;
+    }
+    // Also match simple "rinjani" label
+    let short_needle = b"\x07rinjani";
+    udp_payload[12..].windows(short_needle.len()).any(|w| w == short_needle)
+}
+
+pub fn build_mdns_a_response(
+    our_mac: [u8; 6],
+    our_ip: [u8; 4],
+    transaction_id: u16,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    // DNS payload: Header(12) + Name(15) + Type(2)+Class(2)+TTL(4)+DataLen(2)+IP(4) = 41 bytes
+    // Name: \x07rinjani\x05local\x00 (15 bytes)
+    let dns_len = 12 + 15 + 14; // 41 bytes
+    let udp_len = 8 + dns_len;
+    let ip_len = 20 + udp_len;
+    let total_len = 14 + ip_len;
+
+    if out.len() < total_len {
+        return Err("Buffer too small for mDNS response");
+    }
+
+    // 1. Ethernet Header (Multicast)
+    out[0..6].copy_from_slice(&MDNS_MULTICAST_MAC);
+    out[6..12].copy_from_slice(&our_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x0000u16.to_be_bytes());
+    out[22] = 255; // TTL 255 for mDNS (RFC 6762)
+    out[23] = IP_PROTO_UDP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&our_ip);
+    out[30..34].copy_from_slice(&MDNS_MULTICAST_IPV4);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. UDP Header
+    out[34..36].copy_from_slice(&MDNS_PORT.to_be_bytes());
+    out[36..38].copy_from_slice(&MDNS_PORT.to_be_bytes());
+    out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+    out[40..42].copy_from_slice(&[0, 0]);
+
+    // 4. DNS Answer Payload
+    let d_start = 42;
+    // ID
+    out[d_start..d_start + 2].copy_from_slice(&transaction_id.to_be_bytes());
+    // Flags: Response(0x8400) - Authoritative Answer
+    out[d_start + 2..d_start + 4].copy_from_slice(&0x8400u16.to_be_bytes());
+    // QDCOUNT: 0
+    out[d_start + 4..d_start + 6].copy_from_slice(&0u16.to_be_bytes());
+    // ANCOUNT: 1
+    out[d_start + 6..d_start + 8].copy_from_slice(&1u16.to_be_bytes());
+    // NSCOUNT: 0, ARCOUNT: 0
+    out[d_start + 8..d_start + 12].copy_from_slice(&[0; 4]);
+
+    // Name: \x07rinjani\x05local\x00
+    let mut cur = d_start + 12;
+    out[cur..cur + 15].copy_from_slice(b"\x07rinjani\x05local\x00");
+    cur += 15;
+
+    // TYPE A: 1
+    out[cur..cur + 2].copy_from_slice(&1u16.to_be_bytes());
+    cur += 2;
+    // CLASS IN: 0x8001 (Cache Flush + IN)
+    out[cur..cur + 2].copy_from_slice(&0x8001u16.to_be_bytes());
+    cur += 2;
+    // TTL: 120 seconds
+    out[cur..cur + 4].copy_from_slice(&120u32.to_be_bytes());
+    cur += 4;
+    // RDLENGTH: 4
+    out[cur..cur + 2].copy_from_slice(&4u16.to_be_bytes());
+    cur += 2;
+    // RDATA: IPv4
+    out[cur..cur + 4].copy_from_slice(&our_ip);
+    cur += 4;
+
+    Ok(cur)
 }
 
 // -----------------------------------------------------------------------------
@@ -1277,5 +1436,54 @@ mod tests {
         let c3 = listener.accept([192, 168, 56, 1], 50003).unwrap();
         assert_eq!(c3, 0);
         assert_eq!(listener.active_conns, 2);
+    }
+
+    #[test]
+    fn test_23_dhcp_option_12_hostname_rinjani() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let mut buf = [0u8; 512];
+        let len = build_dhcp_discover(mac, 0x52494E4A, &mut buf).unwrap();
+
+        let (_eth, ip_bytes) = parse_ethernet_header(&buf[..len]).unwrap();
+        let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        let (_udp, dhcp_bytes) = parse_udp_header(udp_bytes).unwrap();
+
+        // Option 12 should be in dhcp payload: [12, 7, b'r', b'i', b'n', b'j', b'a', b'n', b'i']
+        let opt12_needle = b"\x0C\x07rinjani";
+        assert!(dhcp_bytes.windows(opt12_needle.len()).any(|w| w == opt12_needle));
+    }
+
+    #[test]
+    fn test_24_mdns_responder_rinjani_local() {
+        // Build mock mDNS query for "rinjani.local"
+        let mut query = [0u8; 40];
+        query[0..2].copy_from_slice(&0x1234u16.to_be_bytes()); // ID
+        query[2..4].copy_from_slice(&0x0000u16.to_be_bytes()); // Standard Query
+        query[4..6].copy_from_slice(&1u16.to_be_bytes()); // QDCOUNT = 1
+        query[12..27].copy_from_slice(b"\x07rinjani\x05local\x00"); // QNAME
+
+        assert!(is_mdns_query_for_rinjani(&query));
+
+        let mut out = [0u8; 256];
+        let len = build_mdns_a_response(
+            [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33],
+            [192, 168, 56, 2],
+            0x1234,
+            &mut out,
+        ).unwrap();
+
+        assert!(len > 60);
+        let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
+        let (ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        assert_eq!(ip.dst_ip, MDNS_MULTICAST_IPV4);
+        let (udp, dns_bytes) = parse_udp_header(udp_bytes).unwrap();
+        assert_eq!(udp.src_port, MDNS_PORT);
+        assert_eq!(udp.dst_port, MDNS_PORT);
+
+        // Verify DNS flags (Response = 0x8400)
+        let flags = u16::from_be_bytes([dns_bytes[2], dns_bytes[3]]);
+        assert_eq!(flags, 0x8400);
+        // Verify RDATA ends with our IP [192, 168, 56, 2]
+        assert_eq!(&dns_bytes[dns_bytes.len() - 4..], &[192, 168, 56, 2]);
     }
 }

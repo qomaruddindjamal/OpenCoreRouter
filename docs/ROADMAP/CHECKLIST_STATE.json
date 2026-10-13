@@ -241,5 +241,48 @@
     "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-55",
+    "name": "TCP Facade Abstraction Layer (asl-router-netstack)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-56",
+    "name": "HTTP/1.1 Engine & Core Web Dispatcher (asl-router-webcore)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-57",
+    "name": "Management REST API v1 & Token-Bucket Rate Limiter (asl-router-api)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-58",
+    "name": "Modular Unminified WebUI MVP & Asset Registry (asl-router-webui)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-59",
+    "name": "Default Hostname rinjani & DHCP Option 12 Identification",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-60",
+    "name": "Multicast DNS (mDNS) Responder for rinjani.local",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
   }
 ]
+
