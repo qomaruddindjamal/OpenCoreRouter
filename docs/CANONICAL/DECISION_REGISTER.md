@@ -21,6 +21,8 @@
 | **ADR-008** | 2026-10-14 | Interrupt vs Polling Strategy | Polling-first sebagai mode default fail-safe. Local APIC timer framework diaktifkan via flag terverifikasi. | `RATIFIED` |
 | **ADR-009** | 2026-10-14 | Language Policy | Kernel/router paket = Rust no_std; Host tools rilis = Rust std; Build script PS diperbolehkan hari ini, migrasi cargo-xtask "sentuh-berarti-ganti"; WebUI htmx+JS, berat WASM; tools/ bebas; bahasa lain = referensi. | `RATIFIED` |
 | **ADR-010** | 2026-10-14 | Open Interoperability Doctrine | Standar terbuka IETF dulu; dialek populer dijembatani dari spek publik (EoIP/MNDP); dilarang RE proprietary (Winbox); prioritas: EoIP+MNDP -> RIP -> OSPF -> BGP; SNMP read-only dulu. | `RATIFIED` |
+| **ADR-011** | 2026-10-14 | TCP Strategy & Architecture | Hybrid smoltcp engine terisolasi di balik facade `asl-router-netstack`. Fastpath data forwarding tetap zero-copy mandiri. | `RATIFIED` |
+| **ADR-012** | 2026-10-14 | Sprint DS-01 Scope & Mitranet M0 | Ratifikasi owner untuk Sprint DS-01 (DHCP Server eth1 + DNS Proxy + WebUI Mitranet M0 + Pelengkap Bukti Runtime NET-03). Opsi 2 di-rename W2; istilah V0-RCI tetap untuk disk image & Real Capacity (OPCR-25..27). | `RATIFIED` |
 
 ---
 

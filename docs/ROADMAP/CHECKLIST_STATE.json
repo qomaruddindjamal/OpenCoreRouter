@@ -252,35 +252,63 @@
   {
     "gate_id": "OPCR-56",
     "name": "HTTP/1.1 Engine & Core Web Dispatcher (asl-router-webcore)",
-    "status": "PASS-LOCKED",
+    "status": "UNIT-TEST-LOCKED-RUNTIME-PENDING",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-57",
     "name": "Management REST API v1 & Token-Bucket Rate Limiter (asl-router-api)",
-    "status": "PASS-LOCKED",
+    "status": "UNIT-TEST-LOCKED-RUNTIME-PENDING",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-58",
     "name": "Modular Unminified WebUI MVP & Asset Registry (asl-router-webui)",
-    "status": "PASS-LOCKED",
+    "status": "UNIT-TEST-LOCKED-RUNTIME-PENDING",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-59",
     "name": "Default Hostname rinjani & DHCP Option 12 Identification",
-    "status": "PASS-LOCKED",
+    "status": "UNIT-TEST-LOCKED-RUNTIME-PENDING",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-60",
     "name": "Multicast DNS (mDNS) Responder for rinjani.local",
-    "status": "PASS-LOCKED",
+    "status": "UNIT-TEST-LOCKED-RUNTIME-PENDING",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-61",
+    "name": "Management Telnet Daemon (eth1 isolated)",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-62",
+    "name": "DNS Proxy & LRU Cache Engine (eth1 bound)",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-63",
+    "name": "WebUI Mitranet Adoption & Visual Parity",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-64",
+    "name": "Runtime Proof Completion (Two-Sided VM & Host Verification)",
+    "status": "REGISTERED-NOT-ATTEMPTED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   }
