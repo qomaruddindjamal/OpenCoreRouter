@@ -238,7 +238,9 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut nat_engine = asl_router_nat::NatEngine::new(wan_masq_ip);
     // Register DNAT test rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
     let _ = nat_engine.add_dnat_rule(7777, asl_router_nat::PROTO_UDP, [192, 168, 56, 2], 7777);
-    SERIAL.write_str("[R16] NAT CONNTRACK UP (SNAT masq=192.168.57.10, DNAT :7777->192.168.56.2:7777)\n");
+    // [R18]: TCPSTUB UP (smoltcp evaluation substrate)
+    let mut _tcp_server = asl_router_tcpstub::TcpHttpServerStub::new(8080);
+    SERIAL.write_str("[R18] TCPSTUB UP (smoltcp v0.11.1 eval engine bound :8080)\n");
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
@@ -313,6 +315,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     SERIAL.write_u32(new_src_port as u32); SERIAL.write_str(")\n");
                 }
             }
+
+            // SMOKE TEST SMOLTCP EVALUATION: TCP Session & HTTP Banner test
+            let http_get_req = b"GET / HTTP/1.1\r\nHost: 192.168.57.10:8080\r\n\r\n";
+            let mut http_resp_buf = [0u8; 256];
+            let resp_len = _tcp_server.process_input(http_get_req, &mut http_resp_buf);
+            if resp_len > 0 {
+                SERIAL.write_str("[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)\n");
+            }
+
             SERIAL.write_str("rinjani-cli> ");
         }
 

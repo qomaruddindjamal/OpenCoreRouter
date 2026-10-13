@@ -11,6 +11,7 @@ The following third-party Rust crates are utilized in the compilation and verifi
 | **limine** | `0.4.3` | Dual `BSD-2-Clause` / `MIT` | Limine protocol boot structures and request tags for bare-metal x86_64 handoff |
 | **spin** | `0.9.8` | `MIT` | Bare-metal `#![no_std]` spinlock synchronisation primitives for fastpath & rings |
 | **bitflags** | `2.4.2` | Dual `MIT` / `Apache-2.0` | Strongly typed bitmask flags for PCI, VirtIO, and packet headers |
+| **smoltcp** | `v0.11.1` (vendored stub) | `0BSD` | Standalone `#![no_std]` TCP/IP network protocol engine for evaluation |
 
 All listed dependencies possess permissive licenses that are 100% compatible with inclusion in and linking with GPL-3.0-or-later works.
 

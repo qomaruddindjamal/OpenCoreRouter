@@ -21,6 +21,7 @@ asl-router-netstack = { path = "../../router/asl-router-netstack" }
 asl-router-hwinv = { path = "../../router/asl-router-hwinv" }
 asl-router-lpm = { path = "../../router/asl-router-lpm" }
 asl-router-nat = { path = "../../router/asl-router-nat" }
+asl-router-tcpstub = { path = "../../router/asl-router-tcpstub" }
 
 [lib]
 crate-type = ["rlib"]

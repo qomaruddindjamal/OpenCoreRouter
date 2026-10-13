@@ -23,6 +23,7 @@ members = [
     "router/asl-router-hwinv",
     "router/asl-router-lpm",
     "router/asl-router-nat",
+    "router/asl-router-tcpstub",
 ]
 
 [workspace.package]

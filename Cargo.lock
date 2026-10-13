@@ -35,6 +35,7 @@ dependencies = [
  "asl-router-netstack",
  "asl-router-pci",
  "asl-router-tcam",
+ "asl-router-tcpstub",
  "asl-sched",
 ]
 
@@ -139,6 +140,16 @@ name = "asl-router-tcam"
 version = "0.1.0"
 dependencies = [
  "asl-kernel-core",
+]
+
+[[package]]
+name = "asl-router-tcpstub"
+version = "0.1.0"
+dependencies = [
+ "asl-router-drivers-virtio",
+ "asl-router-fastpath",
+ "asl-router-netbuf",
+ "asl-router-netstack",
 ]
 
 [[package]]
