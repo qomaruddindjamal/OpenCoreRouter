@@ -1,0 +1,14 @@
+[package]
+name = "opcr-kernel-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+opcr-core = { path = "../opcr-core" }
+opcr-hal = { path = "../opcr-hal" }
+opcr-sched = { path = "../opcr-sched" }
+opcr-memory = { path = "../opcr-memory" }
+opcr-afdx-ipc = { path = "../opcr-afdx-ipc" }
+opcr-bootloader = { path = "../opcr-bootloader" }

@@ -1,0 +1,28 @@
+# Build targets
+target/
+**/*.rs.bk
+*.pdb
+
+# Local environment & secrets
+.env
+.env.*
+*.key
+*.pem
+*.token
+*.pfx
+
+# Local tools & scratch
+tools/*
+!tools/.gitkeep
+
+# OS generated
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE & Editor caches
+.idea/
+.vscode/
+*.swp
+*.swo
