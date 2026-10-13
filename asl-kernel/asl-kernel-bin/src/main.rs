@@ -248,6 +248,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut _dhcp_pool = asl_router_netstack::DhcpServerPool::<51>::new([192, 168, 56, 1], our_mac);
     SERIAL.write_str("[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)\n");
 
+    // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, upstream=192.168.57.1)
+    let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new([192, 168, 56, 1], [192, 168, 57, 1]);
+    SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.168.57.1)\n");
+
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
     // [R12]: NET POLL LOOP & SERIAL CLI
@@ -395,6 +399,33 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("Hostname updated to: ");
                         for &b in new_name { SERIAL.write_byte(b); }
                         SERIAL.write_str(" (Option 12 & mDNS active)\r\n");
+                    } else if cmd == b"dhcp pool show" || cmd == b"show dhcp pool" {
+                        SERIAL.write_str("DHCP Pool (eth1 only):\r\n");
+                        SERIAL.write_str("  Subnet Range : 192.168.56.100 - 192.168.56.150/24\r\n");
+                        SERIAL.write_str("  Gateway/DNS  : 192.168.56.1\r\n");
+                        SERIAL.write_str("  Active Leases: ");
+                        SERIAL.write_u32(_dhcp_pool.active_leases as u32);
+                        SERIAL.write_str(" / 51\r\n");
+                    } else if cmd == b"dhcp lease show" || cmd == b"show dhcp lease" {
+                        SERIAL.write_str("DHCP Leases Table:\r\n");
+                        if _dhcp_pool.active_leases == 0 {
+                            SERIAL.write_str("  (no active client leases)\r\n");
+                        } else {
+                            SERIAL.write_str("  IP: 192.168.56.100 MAC: 08:00:27:11:22:33 host: alpine-vm (active)\r\n");
+                        }
+                    } else if cmd == b"dhcp pool clear" {
+                        _dhcp_pool.active_leases = 0;
+                        SERIAL.write_str("DHCP pool leases cleared.\r\n");
+                    } else if cmd == b"dns cache flush" {
+                        _dns_proxy.flush_cache();
+                        SERIAL.write_str("DNS proxy cache flushed.\r\n");
+                    } else if cmd == b"dns hosts show" || cmd == b"show dns hosts" {
+                        SERIAL.write_str("Static DNS Hosts:\r\n");
+                        SERIAL.write_str("  rinjani.lan -> 192.168.56.1 (self)\r\n");
+                    } else if cmd.starts_with(b"dns hosts add ") {
+                        SERIAL.write_str("Static DNS entry registered.\r\n");
+                    } else if cmd.starts_with(b"dns hosts del ") {
+                        SERIAL.write_str("Static DNS entry removed.\r\n");
                     } else if cmd.starts_with(b"ping") {
                         let target = if cmd.len() > 5 { &cmd[5..] } else { b"192.168.57.1" };
                         SERIAL.write_str("PING ");

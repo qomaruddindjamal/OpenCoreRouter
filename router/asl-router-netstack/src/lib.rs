@@ -1292,6 +1292,313 @@ pub fn build_mdns_a_response(
 }
 
 // -----------------------------------------------------------------------------
+// DNS PROXY & LRU CACHE ENGINE (RFC 1035 — BIND ETH1 UDP 53)
+// -----------------------------------------------------------------------------
+
+pub const DNS_PORT: u16 = 53;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DnsCacheEntry {
+    pub qname_len: u8,
+    pub qname: [u8; 64],
+    pub ip: [u8; 4],
+    pub expire_tick: u64,
+    pub last_used_tick: u64,
+    pub active: bool,
+}
+
+impl DnsCacheEntry {
+    pub const fn empty() -> Self {
+        Self {
+            qname_len: 0,
+            qname: [0; 64],
+            ip: [0; 4],
+            expire_tick: 0,
+            last_used_tick: 0,
+            active: false,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DnsStaticHost {
+    pub name_len: u8,
+    pub name: [u8; 32],
+    pub ip: [u8; 4],
+    pub active: bool,
+}
+
+impl DnsStaticHost {
+    pub const fn empty() -> Self {
+        Self {
+            name_len: 0,
+            name: [0; 32],
+            ip: [0; 4],
+            active: false,
+        }
+    }
+}
+
+pub struct DnsProxyEngine<const CACHE_SIZE: usize = 16, const HOSTS_SIZE: usize = 8> {
+    pub server_ip: [u8; 4],
+    pub upstream_dns: [u8; 4],
+    pub cache: [DnsCacheEntry; CACHE_SIZE],
+    pub hosts: [DnsStaticHost; HOSTS_SIZE],
+    pub default_ttl: u32,
+    pub cache_hits: u32,
+    pub cache_misses: u32,
+}
+
+impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE, HOSTS_SIZE> {
+    pub const fn new(server_ip: [u8; 4], upstream_dns: [u8; 4]) -> Self {
+        let mut engine = Self {
+            server_ip,
+            upstream_dns,
+            cache: [const { DnsCacheEntry::empty() }; CACHE_SIZE],
+            hosts: [const { DnsStaticHost::empty() }; HOSTS_SIZE],
+            default_ttl: 300, // 5 minutes
+            cache_hits: 0,
+            cache_misses: 0,
+        };
+
+        // Static host: rinjani.lan -> server_ip
+        engine.hosts[0] = DnsStaticHost {
+            name_len: 11,
+            name: [
+                b'r', b'i', b'n', b'j', b'a', b'n', b'i', b'.', b'l', b'a', b'n', 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            ],
+            ip: server_ip,
+            active: true,
+        };
+
+        engine
+    }
+
+    pub fn add_static_host(&mut self, name: &str, ip: [u8; 4]) -> Result<(), &'static str> {
+        let bytes = name.as_bytes();
+        if bytes.len() > 32 {
+            return Err("Host name too long (>32 bytes)");
+        }
+        for entry in self.hosts.iter_mut() {
+            if entry.active && entry.name_len as usize == bytes.len() && &entry.name[..bytes.len()] == bytes {
+                entry.ip = ip;
+                return Ok(());
+            }
+        }
+        for entry in self.hosts.iter_mut() {
+            if !entry.active {
+                entry.active = true;
+                entry.name_len = bytes.len() as u8;
+                entry.name[..bytes.len()].copy_from_slice(bytes);
+                entry.ip = ip;
+                return Ok(());
+            }
+        }
+        Err("Static hosts table full")
+    }
+
+    pub fn delete_static_host(&mut self, name: &str) -> bool {
+        let bytes = name.as_bytes();
+        for entry in self.hosts.iter_mut() {
+            if entry.active && entry.name_len as usize == bytes.len() && &entry.name[..bytes.len()] == bytes {
+                entry.active = false;
+                return true;
+            }
+        }
+        false
+    }
+
+    pub fn lookup_static_host(&self, name: &[u8]) -> Option<[u8; 4]> {
+        for entry in self.hosts.iter() {
+            if entry.active && entry.name_len as usize == name.len() && &entry.name[..name.len()] == name {
+                return Some(entry.ip);
+            }
+        }
+        None
+    }
+
+    pub fn lookup_cache(&mut self, qname: &[u8], current_tick: u64) -> Option<[u8; 4]> {
+        for entry in self.cache.iter_mut() {
+            if entry.active && entry.qname_len as usize == qname.len() && &entry.qname[..qname.len()] == qname {
+                if current_tick <= entry.expire_tick {
+                    entry.last_used_tick = current_tick;
+                    self.cache_hits += 1;
+                    return Some(entry.ip);
+                } else {
+                    entry.active = false; // Expired
+                }
+            }
+        }
+        self.cache_misses += 1;
+        None
+    }
+
+    pub fn insert_cache(&mut self, qname: &[u8], ip: [u8; 4], ttl: u32, current_tick: u64) {
+        let qlen = qname.len().min(64);
+        // Find existing or free slot
+        for entry in self.cache.iter_mut() {
+            if !entry.active || (entry.qname_len as usize == qlen && &entry.qname[..qlen] == &qname[..qlen]) {
+                entry.active = true;
+                entry.qname_len = qlen as u8;
+                entry.qname[..qlen].copy_from_slice(&qname[..qlen]);
+                entry.ip = ip;
+                entry.expire_tick = current_tick + (ttl as u64);
+                entry.last_used_tick = current_tick;
+                return;
+            }
+        }
+
+        // LRU eviction: evict slot with oldest last_used_tick
+        let mut oldest_idx = 0;
+        let mut oldest_tick = u64::MAX;
+        for (i, entry) in self.cache.iter().enumerate() {
+            if entry.last_used_tick < oldest_tick {
+                oldest_tick = entry.last_used_tick;
+                oldest_idx = i;
+            }
+        }
+
+        self.cache[oldest_idx] = DnsCacheEntry {
+            qname_len: qlen as u8,
+            qname: [0; 64],
+            ip,
+            expire_tick: current_tick + (ttl as u64),
+            last_used_tick: current_tick,
+            active: true,
+        };
+        self.cache[oldest_idx].qname[..qlen].copy_from_slice(&qname[..qlen]);
+    }
+
+    pub fn flush_cache(&mut self) {
+        for entry in self.cache.iter_mut() {
+            entry.active = false;
+        }
+    }
+}
+
+pub fn parse_dns_query_qname(udp_payload: &[u8], out_qname: &mut [u8]) -> Result<(u16, usize), &'static str> {
+    if udp_payload.len() < 12 {
+        return Err("DNS packet too short (<12B)");
+    }
+    let txid = u16::from_be_bytes([udp_payload[0], udp_payload[1]]);
+    let mut idx = 12;
+    let mut out_idx = 0;
+
+    while idx < udp_payload.len() {
+        let label_len = udp_payload[idx] as usize;
+        if label_len == 0 {
+            idx += 1; // Terminating null
+            break;
+        }
+        idx += 1;
+        if idx + label_len > udp_payload.len() {
+            return Err("Malformed DNS QNAME label");
+        }
+        if out_idx > 0 && out_idx < out_qname.len() {
+            out_qname[out_idx] = b'.';
+            out_idx += 1;
+        }
+        for b in &udp_payload[idx..idx + label_len] {
+            if out_idx < out_qname.len() {
+                out_qname[out_idx] = b.to_ascii_lowercase();
+                out_idx += 1;
+            }
+        }
+        idx += label_len;
+    }
+
+    Ok((txid, out_idx))
+}
+
+pub fn build_dns_a_reply(
+    client_mac: [u8; 6],
+    client_ip: [u8; 4],
+    client_port: u16,
+    server_mac: [u8; 6],
+    server_ip: [u8; 4],
+    txid: u16,
+    qname_labels: &[u8],
+    answer_ip: [u8; 4],
+    ttl: u32,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let qname_len = qname_labels.len();
+    // DNS Payload: Header(12) + Question(qname_len + 4) + Answer(qname_len + 14)
+    let dns_len = 12 + (qname_len + 4) + (qname_len + 14);
+    let udp_len = 8 + dns_len;
+    let ip_len = 20 + udp_len;
+    let total_len = 14 + ip_len;
+
+    if out.len() < total_len {
+        return Err("Output buffer too small for DNS Reply");
+    }
+
+    // 1. Ethernet Header
+    out[0..6].copy_from_slice(&client_mac);
+    out[6..12].copy_from_slice(&server_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x0000u16.to_be_bytes());
+    out[22] = 64;
+    out[23] = IP_PROTO_UDP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&server_ip);
+    out[30..34].copy_from_slice(&client_ip);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. UDP Header
+    out[34..36].copy_from_slice(&DNS_PORT.to_be_bytes());
+    out[36..38].copy_from_slice(&client_port.to_be_bytes());
+    out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+    out[40..42].copy_from_slice(&[0, 0]);
+
+    // 4. DNS Header
+    let d_start = 42;
+    out[d_start..d_start + 2].copy_from_slice(&txid.to_be_bytes());
+    // Flags: Standard query response, No error (0x8180)
+    out[d_start + 2..d_start + 4].copy_from_slice(&0x8180u16.to_be_bytes());
+    // QDCOUNT: 1
+    out[d_start + 4..d_start + 6].copy_from_slice(&1u16.to_be_bytes());
+    // ANCOUNT: 1
+    out[d_start + 6..d_start + 8].copy_from_slice(&1u16.to_be_bytes());
+    // NSCOUNT: 0, ARCOUNT: 0
+    out[d_start + 8..d_start + 12].copy_from_slice(&[0; 4]);
+
+    // Question Section
+    let mut cur = d_start + 12;
+    out[cur..cur + qname_len].copy_from_slice(qname_labels);
+    cur += qname_len;
+    out[cur..cur + 2].copy_from_slice(&1u16.to_be_bytes()); // QTYPE: A
+    cur += 2;
+    out[cur..cur + 2].copy_from_slice(&1u16.to_be_bytes()); // QCLASS: IN
+    cur += 2;
+
+    // Answer Section
+    out[cur..cur + qname_len].copy_from_slice(qname_labels);
+    cur += qname_len;
+    out[cur..cur + 2].copy_from_slice(&1u16.to_be_bytes()); // TYPE: A
+    cur += 2;
+    out[cur..cur + 2].copy_from_slice(&1u16.to_be_bytes()); // CLASS: IN
+    cur += 2;
+    out[cur..cur + 4].copy_from_slice(&ttl.to_be_bytes()); // TTL
+    cur += 4;
+    out[cur..cur + 2].copy_from_slice(&4u16.to_be_bytes()); // RDLENGTH: 4
+    cur += 2;
+    out[cur..cur + 4].copy_from_slice(&answer_ip); // RDATA
+    cur += 4;
+
+    Ok(cur)
+}
+
+// -----------------------------------------------------------------------------
 // EXTENSIVE PROTOCOL PARSER TESTS (>= 15 TESTS)
 // -----------------------------------------------------------------------------
 
@@ -1902,5 +2209,115 @@ mod tests {
         let dhcp = parse_dhcp_message(dhcp_bytes).unwrap();
         assert_eq!(dhcp.msg_type, Some(DHCP_ACK));
     }
+
+    #[test]
+    fn test_33_parse_dns_query_valid_qname() {
+        let mut query = [0u8; 32];
+        query[0..2].copy_from_slice(&0xABCDu16.to_be_bytes());
+        query[12..25].copy_from_slice(b"\x07rinjani\x03lan\x00");
+
+        let mut out_qname = [0u8; 64];
+        let (txid, qlen) = parse_dns_query_qname(&query, &mut out_qname).unwrap();
+        assert_eq!(txid, 0xABCD);
+        assert_eq!(&out_qname[..qlen], b"rinjani.lan");
+    }
+
+    #[test]
+    fn test_34_dns_proxy_static_host_lookup_rinjani_lan() {
+        let dns = DnsProxyEngine::<4, 4>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        let ip = dns.lookup_static_host(b"rinjani.lan");
+        assert_eq!(ip, Some([192, 168, 56, 1]));
+    }
+
+    #[test]
+    fn test_35_dns_proxy_custom_static_host_add_and_delete() {
+        let mut dns = DnsProxyEngine::<4, 4>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        assert!(dns.add_static_host("server.lan", [192, 168, 56, 20]).is_ok());
+        assert_eq!(dns.lookup_static_host(b"server.lan"), Some([192, 168, 56, 20]));
+
+        assert!(dns.delete_static_host("server.lan"));
+        assert_eq!(dns.lookup_static_host(b"server.lan"), None);
+    }
+
+    #[test]
+    fn test_36_dns_proxy_cache_hit_and_miss() {
+        let mut dns = DnsProxyEngine::<4, 4>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        assert_eq!(dns.lookup_cache(b"google.com", 10), None);
+        assert_eq!(dns.cache_misses, 1);
+
+        dns.insert_cache(b"google.com", [142, 250, 190, 46], 60, 10);
+        let ip = dns.lookup_cache(b"google.com", 20);
+        assert_eq!(ip, Some([142, 250, 190, 46]));
+        assert_eq!(dns.cache_hits, 1);
+    }
+
+    #[test]
+    fn test_37_dns_proxy_cache_ttl_expiry() {
+        let mut dns = DnsProxyEngine::<4, 4>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        dns.insert_cache(b"example.com", [93, 184, 216, 34], 10, 100);
+
+        // Before expiry: Tick 105
+        assert!(dns.lookup_cache(b"example.com", 105).is_some());
+
+        // After expiry: Tick 115
+        assert_eq!(dns.lookup_cache(b"example.com", 115), None);
+    }
+
+    #[test]
+    fn test_38_dns_proxy_cache_lru_eviction() {
+        let mut dns = DnsProxyEngine::<2, 2>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        dns.insert_cache(b"host1.lan", [192, 168, 56, 11], 1000, 10);
+        dns.insert_cache(b"host2.lan", [192, 168, 56, 12], 1000, 20);
+
+        // Access host1 to make it newer than host2
+        let _ = dns.lookup_cache(b"host1.lan", 30);
+
+        // Insert host3 -> host2 (oldest last_used) should be evicted
+        dns.insert_cache(b"host3.lan", [192, 168, 56, 13], 1000, 40);
+
+        assert!(dns.lookup_cache(b"host1.lan", 50).is_some());
+        assert!(dns.lookup_cache(b"host3.lan", 50).is_some());
+        assert_eq!(dns.lookup_cache(b"host2.lan", 50), None);
+    }
+
+    #[test]
+    fn test_39_dns_proxy_cache_flush() {
+        let mut dns = DnsProxyEngine::<2, 2>::new([192, 168, 56, 1], [8, 8, 8, 8]);
+        dns.insert_cache(b"host1.lan", [192, 168, 56, 11], 1000, 10);
+        dns.flush_cache();
+        assert_eq!(dns.lookup_cache(b"host1.lan", 20), None);
+    }
+
+    #[test]
+    fn test_40_build_dns_a_reply_formatting() {
+        let mut out = [0u8; 256];
+        let qname = b"\x07rinjani\x03lan\x00";
+        let len = build_dns_a_reply(
+            [0x08, 0x00, 0x27, 0x11, 0x22, 0x33],
+            [192, 168, 56, 100],
+            54321,
+            [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC],
+            [192, 168, 56, 1],
+            0x4321,
+            qname,
+            [192, 168, 56, 1],
+            300,
+            &mut out,
+        ).unwrap();
+
+        let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
+        let (ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        assert_eq!(ip.src_ip, [192, 168, 56, 1]);
+        assert_eq!(ip.dst_ip, [192, 168, 56, 100]);
+
+        let (udp, dns_bytes) = parse_udp_header(udp_bytes).unwrap();
+        assert_eq!(udp.src_port, DNS_PORT);
+        assert_eq!(udp.dst_port, 54321);
+
+        assert_eq!(u16::from_be_bytes([dns_bytes[0], dns_bytes[1]]), 0x4321);
+        assert_eq!(u16::from_be_bytes([dns_bytes[2], dns_bytes[3]]), 0x8180);
+        assert_eq!(&dns_bytes[dns_bytes.len() - 4..], &[192, 168, 56, 1]);
+    }
 }
+
 
