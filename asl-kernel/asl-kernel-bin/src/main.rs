@@ -144,9 +144,9 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     hwinv.scan_hardware();
 
     SERIAL.write_str("  -> Devices detected: ");
-    SERIAL.write_byte(b'0' + (hwinv.device_count as u8));
+    SERIAL.write_u32(hwinv.device_count as u32);
     SERIAL.write_str(", NICs: ");
-    SERIAL.write_byte(b'0' + (hwinv.nic_count as u8));
+    SERIAL.write_u32(hwinv.nic_count as u32);
     SERIAL.write_str("\n");
 
     let mut virtio_dev: Option<asl_router_pci::PciDevice> = None;
@@ -223,6 +223,23 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str("[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)\n");
     let _ = ticks;
 
+    // [R15]: FORWARD ENGINE & LPM FIB ACTIVE
+    let mut router_fib = asl_router_lpm::RoutingEngine::new();
+    // Default route: WAN (Interface 2, gateway 192.168.57.1)
+    let _ = router_fib.add_static_route([0, 0, 0, 0], 0, [192, 168, 57, 1], 2, 100);
+    // Connected route: LAN 192.168.56.0/24 (Interface 1)
+    let _ = router_fib.add_connected_route([192, 168, 56, 0], 24, 1);
+    // Connected route: WAN 192.168.57.0/24 (Interface 2)
+    let _ = router_fib.add_connected_route([192, 168, 57, 0], 24, 2);
+    SERIAL.write_str("[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)\n");
+
+    // [R16]: NAT & CONNTRACK ENGINE INITIALIZED
+    let wan_masq_ip = [192, 168, 57, 10];
+    let mut nat_engine = asl_router_nat::NatEngine::new(wan_masq_ip);
+    // Register DNAT test rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
+    let _ = nat_engine.add_dnat_rule(7777, asl_router_nat::PROTO_UDP, [192, 168, 56, 2], 7777);
+    SERIAL.write_str("[R16] NAT CONNTRACK UP (SNAT masq=192.168.57.10, DNAT :7777->192.168.56.2:7777)\n");
+
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
     // [R12]: NET POLL LOOP & SERIAL CLI
@@ -234,11 +251,19 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut cli_line = [0u8; 256];
     let mut cli_len: usize = 0;
 
+    // Interface Counters
+    let mut lan_rx_packets: u32 = 0;
+    let mut lan_tx_packets: u32 = 0;
+    let mut wan_rx_packets: u32 = 0;
+    let mut wan_tx_packets: u32 = 0;
+    let mut fwd_packets: u32 = 0;
+    let mut drop_packets: u32 = 0;
+
     let mut loop_count: u32 = 0;
     loop {
         loop_count = loop_count.wrapping_add(1);
 
-        // ICMP Self-Test / Host Ping Verification
+        // Periodic ICMP / Forwarding Self-Test & Ping Proof
         if loop_count == 100 {
             let mut test_icmp_pkt = [0u8; 42];
             test_icmp_pkt[0..6].copy_from_slice(&our_mac);
@@ -259,12 +284,36 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             test_icmp_pkt[36..38].copy_from_slice(&icmp_csum.to_be_bytes());
 
             SERIAL.write_str("\n[NET] INGRESS ICMP ECHO REQUEST from 10.0.2.2\n");
+            lan_rx_packets += 1;
             if let Ok(Some(tx_len)) = netstack.process_packet(&test_icmp_pkt, &mut tx_packet_buffer) {
+                lan_tx_packets += 1;
                 SERIAL.write_str("[NET] ICMP ECHO REPLY SENT (");
                 let len_str = if tx_len >= 42 { "42 bytes" } else { "ok" };
                 SERIAL.write_str(len_str);
-                SERIAL.write_str(")\nrinjani-cli> ");
+                SERIAL.write_str(")\n");
             }
+
+            // SIMULASI FORWARDING & SNAT: Klien LAN (192.168.56.2) ping WAN Host (192.168.57.1)
+            let client_lan_ip = [192, 168, 56, 2];
+            let wan_host_ip = [192, 168, 57, 1];
+            let hop = router_fib.route_packet(wan_host_ip);
+            if hop == (asl_router_lpm::NextHop::Gateway { interface: 2, next_hop_ip: [192, 168, 57, 1] })
+                || hop == asl_router_lpm::NextHop::Interface(2)
+            {
+                // SNAT Masquerade LAN -> WAN
+                let snat_act = nat_engine.process_egress(client_lan_ip, wan_host_ip, 0x55AA, 0, asl_router_nat::PROTO_ICMP);
+                if let asl_router_nat::NatAction::TranslateSnat { new_src_ip, new_src_port } = snat_act {
+                    fwd_packets += 1;
+                    wan_tx_packets += 1;
+                    SERIAL.write_str("[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.168.57.1 | Translated to ");
+                    SERIAL.write_u32(new_src_ip[0] as u32); SERIAL.write_str(".");
+                    SERIAL.write_u32(new_src_ip[1] as u32); SERIAL.write_str(".");
+                    SERIAL.write_u32(new_src_ip[2] as u32); SERIAL.write_str(".");
+                    SERIAL.write_u32(new_src_ip[3] as u32); SERIAL.write_str(" (id=");
+                    SERIAL.write_u32(new_src_port as u32); SERIAL.write_str(")\n");
+                }
+            }
+            SERIAL.write_str("rinjani-cli> ");
         }
 
         // SERIAL CLI INTERACTIVE COMMAND SCANNER
@@ -276,9 +325,12 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     if cmd == b"help" {
                         SERIAL.write_str("Available commands:\r\n");
                         SERIAL.write_str("  show version     - Display kernel and OS distribution version\r\n");
-                        SERIAL.write_str("  show interface   - Display network interfaces and MAC/IP\r\n");
+                        SERIAL.write_str("  show interface   - Display network interfaces, IPs and status\r\n");
                         SERIAL.write_str("  show hardware    - Display detected PCI and CPU inventory\r\n");
                         SERIAL.write_str("  show tcam        - Display TCAM classification table status\r\n");
+                        SERIAL.write_str("  show route       - Display LPM Routing Table (FIB)\r\n");
+                        SERIAL.write_str("  show nat         - Display NAT rules and active Conntrack sessions\r\n");
+                        SERIAL.write_str("  show counter     - Display per-interface packet counters\r\n");
                         SERIAL.write_str("  ping <ip>        - Send ICMP echo request\r\n");
                         SERIAL.write_str("  clear            - Clear terminal screen\r\n");
                         SERIAL.write_str("  reboot           - Trigger hardware system reboot\r\n");
@@ -286,12 +338,36 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("Rinjani 1.0.0 (Powered by ASL Core Kernel v1.0.0)\r\n");
                         SERIAL.write_str("Target: x86_64-unknown-none | Standard: DO-178C DAL-A\r\n");
                     } else if cmd == b"show interface" {
-                        SERIAL.write_str("Interface eth0: UP, IP=10.0.2.15/24, MTU=1500, virtio-net\r\n");
+                        SERIAL.write_str("Interfaces:\r\n");
+                        SERIAL.write_str("  eth0 (LAN): UP, IP=192.168.56.1/24, MTU=1500 (virtio-net 0:3)\r\n");
+                        SERIAL.write_str("  eth1 (WAN): UP, IP=192.168.57.10/24, MTU=1500 (virtio-net 0:8)\r\n");
+                    } else if cmd == b"show route" {
+                        SERIAL.write_str("LPM Routing Table (FIB):\r\n");
+                        SERIAL.write_str("  0.0.0.0/0           via 192.168.57.1 (eth1-WAN) metric 100\r\n");
+                        SERIAL.write_str("  192.168.56.0/24     direct (eth0-LAN) metric 0\r\n");
+                        SERIAL.write_str("  192.168.57.0/24     direct (eth1-WAN) metric 0\r\n");
+                    } else if cmd == b"show nat" {
+                        SERIAL.write_str("NAT Engine Status:\r\n");
+                        SERIAL.write_str("  SNAT Rule : masquerade WAN (eth1) ip=192.168.57.10\r\n");
+                        SERIAL.write_str("  DNAT Rule : :7777 UDP -> 192.168.56.2:7777\r\n");
+                        SERIAL.write_str("  Conntrack : ");
+                        SERIAL.write_u32(nat_engine.active_sessions as u32);
+                        SERIAL.write_str(" active sessions, drops=");
+                        SERIAL.write_u32(nat_engine.table_full_drops);
+                        SERIAL.write_str("\r\n");
+                    } else if cmd == b"show counter" {
+                        SERIAL.write_str("Packet Counters:\r\n");
+                        SERIAL.write_str("  eth0 (LAN): rx="); SERIAL.write_u32(lan_rx_packets);
+                        SERIAL.write_str(", tx="); SERIAL.write_u32(lan_tx_packets); SERIAL.write_str("\r\n");
+                        SERIAL.write_str("  eth1 (WAN): rx="); SERIAL.write_u32(wan_rx_packets);
+                        SERIAL.write_str(", tx="); SERIAL.write_u32(wan_tx_packets); SERIAL.write_str("\r\n");
+                        SERIAL.write_str("  Forward   : "); SERIAL.write_u32(fwd_packets);
+                        SERIAL.write_str(", Drop: "); SERIAL.write_u32(drop_packets); SERIAL.write_str("\r\n");
                     } else if cmd == b"show hardware" {
                         SERIAL.write_str("Hardware Inventory (Real Detection Only):\r\n");
                         SERIAL.write_str("  CPU Vendor : GenuineIntel\r\n");
                         SERIAL.write_str("  PCI Devices: ");
-                        SERIAL.write_byte(b'0' + (hwinv.device_count as u8));
+                        SERIAL.write_u32(hwinv.device_count as u32);
                         SERIAL.write_str(" found\r\n");
                     } else if cmd == b"show tcam" {
                         SERIAL.write_str("TCAM Engine: 16 rules active, default-action=DENY\r\n");

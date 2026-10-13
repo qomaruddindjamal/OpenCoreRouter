@@ -29,6 +29,8 @@ dependencies = [
  "asl-router-drivers-virtio",
  "asl-router-fastpath",
  "asl-router-hwinv",
+ "asl-router-lpm",
+ "asl-router-nat",
  "asl-router-netbuf",
  "asl-router-netstack",
  "asl-router-pci",
@@ -73,6 +75,14 @@ version = "0.1.0"
 dependencies = [
  "asl-router-pci",
 ]
+
+[[package]]
+name = "asl-router-lpm"
+version = "0.1.0"
+
+[[package]]
+name = "asl-router-nat"
+version = "0.1.0"
 
 [[package]]
 name = "asl-router-netbuf"

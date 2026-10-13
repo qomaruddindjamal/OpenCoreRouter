@@ -85,6 +85,24 @@ impl SerialPort {
         }
     }
 
+    pub fn write_u32(&self, mut val: u32) {
+        if val == 0 {
+            self.write_byte(b'0');
+            return;
+        }
+        let mut buf = [0u8; 10];
+        let mut i = 0;
+        while val > 0 {
+            buf[i] = b'0' + (val % 10) as u8;
+            val /= 10;
+            i += 1;
+        }
+        while i > 0 {
+            i -= 1;
+            self.write_byte(buf[i]);
+        }
+    }
+
     pub fn has_data(&self) -> bool {
         #[cfg(all(target_arch = "x86_64", target_os = "none"))]
         unsafe {

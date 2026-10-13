@@ -21,6 +21,8 @@ members = [
     "router/asl-router-netstack",
     "router/asl-router-drivers-virtio",
     "router/asl-router-hwinv",
+    "router/asl-router-lpm",
+    "router/asl-router-nat",
 ]
 
 [workspace.package]

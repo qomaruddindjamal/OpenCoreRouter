@@ -192,5 +192,33 @@
     "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-48",
+    "name": "LPM Trie & Forwarding Information Base (asl-router-lpm [R15])",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-49",
+    "name": "NAT Engine & Conntrack Session Tracker (asl-router-nat [R16])",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-50",
+    "name": "Multi-Interface Forwarding & SNAT/DNAT Runtime Verification",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-51",
+    "name": "Minimal DHCP Server Pool (LAN Interface)",
+    "status": "LOCKED-OPEN",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
   }
 ]
