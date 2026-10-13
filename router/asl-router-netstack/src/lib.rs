@@ -594,6 +594,285 @@ pub fn build_dhcp_request_with_hostname(
 }
 
 // -----------------------------------------------------------------------------
+// DHCP SERVER ENGINE (RFC 2131 — BIND ETH1 ONLY)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DhcpLeaseEntry {
+    pub mac: [u8; 6],
+    pub ip: [u8; 4],
+    pub expire_tick: u64,
+    pub hostname_len: u8,
+    pub hostname: [u8; 32],
+    pub active: bool,
+}
+
+impl DhcpLeaseEntry {
+    pub const fn empty() -> Self {
+        Self {
+            mac: [0; 6],
+            ip: [0; 4],
+            expire_tick: 0,
+            hostname_len: 0,
+            hostname: [0; 32],
+            active: false,
+        }
+    }
+}
+
+pub struct DhcpServerPool<const POOL_SIZE: usize = 51> {
+    pub server_ip: [u8; 4],
+    pub server_mac: [u8; 6],
+    pub subnet_mask: [u8; 4],
+    pub router_ip: [u8; 4],
+    pub dns_ip: [u8; 4],
+    pub pool_start_last_octet: u8,
+    pub pool_end_last_octet: u8,
+    pub default_lease_time: u32,
+    pub leases: [DhcpLeaseEntry; POOL_SIZE],
+    pub active_leases: usize,
+}
+
+impl<const POOL_SIZE: usize> DhcpServerPool<POOL_SIZE> {
+    pub const fn new(server_ip: [u8; 4], server_mac: [u8; 6]) -> Self {
+        Self {
+            server_ip,
+            server_mac,
+            subnet_mask: [255, 255, 255, 0],
+            router_ip: server_ip,
+            dns_ip: server_ip,
+            pool_start_last_octet: 100,
+            pool_end_last_octet: 150,
+            default_lease_time: 86400, // 24 hours
+            leases: [const { DhcpLeaseEntry::empty() }; POOL_SIZE],
+            active_leases: 0,
+        }
+    }
+
+    pub fn find_or_allocate_ip(
+        &mut self,
+        mac: [u8; 6],
+        requested_ip: Option<[u8; 4]>,
+        hostname: Option<&[u8]>,
+        current_tick: u64,
+    ) -> Result<[u8; 4], &'static str> {
+        // 1. Check if MAC already has an active or expired lease
+        for entry in self.leases.iter_mut() {
+            if entry.active && entry.mac == mac {
+                entry.expire_tick = current_tick + (self.default_lease_time as u64);
+                if let Some(h) = hostname {
+                    let len = h.len().min(32);
+                    entry.hostname[..len].copy_from_slice(&h[..len]);
+                    entry.hostname_len = len as u8;
+                }
+                return Ok(entry.ip);
+            }
+        }
+
+        // 2. Check if requested IP is within pool and available
+        if let Some(req_ip) = requested_ip {
+            if req_ip[0] == self.server_ip[0]
+                && req_ip[1] == self.server_ip[1]
+                && req_ip[2] == self.server_ip[2]
+                && req_ip[3] >= self.pool_start_last_octet
+                && req_ip[3] <= self.pool_end_last_octet
+            {
+                let mut taken = false;
+                for entry in self.leases.iter() {
+                    if entry.active && entry.ip == req_ip && entry.mac != mac {
+                        taken = true;
+                        break;
+                    }
+                }
+                if !taken {
+                    for entry in self.leases.iter_mut() {
+                        if !entry.active {
+                            entry.active = true;
+                            entry.mac = mac;
+                            entry.ip = req_ip;
+                            entry.expire_tick = current_tick + (self.default_lease_time as u64);
+                            if let Some(h) = hostname {
+                                let len = h.len().min(32);
+                                entry.hostname[..len].copy_from_slice(&h[..len]);
+                                entry.hostname_len = len as u8;
+                            } else {
+                                entry.hostname_len = 0;
+                            }
+                            self.active_leases += 1;
+                            return Ok(req_ip);
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Allocate next free IP in pool (100..=150)
+        let total_pool = (self.pool_end_last_octet - self.pool_start_last_octet + 1) as usize;
+        for i in 0..total_pool {
+            let candidate_octet = self.pool_start_last_octet + (i as u8);
+            let candidate_ip = [
+                self.server_ip[0],
+                self.server_ip[1],
+                self.server_ip[2],
+                candidate_octet,
+            ];
+
+            let mut already_leased = false;
+            for entry in self.leases.iter() {
+                if entry.active && entry.ip == candidate_ip {
+                    already_leased = true;
+                    break;
+                }
+            }
+
+            if !already_leased {
+                for entry in self.leases.iter_mut() {
+                    if !entry.active {
+                        entry.active = true;
+                        entry.mac = mac;
+                        entry.ip = candidate_ip;
+                        entry.expire_tick = current_tick + (self.default_lease_time as u64);
+                        if let Some(h) = hostname {
+                            let len = h.len().min(32);
+                            entry.hostname[..len].copy_from_slice(&h[..len]);
+                            entry.hostname_len = len as u8;
+                        } else {
+                            entry.hostname_len = 0;
+                        }
+                        self.active_leases += 1;
+                        return Ok(candidate_ip);
+                    }
+                }
+            }
+        }
+
+        Err("DHCP pool exhausted")
+    }
+
+    pub fn release_lease(&mut self, mac: [u8; 6], ip: [u8; 4]) -> bool {
+        for entry in self.leases.iter_mut() {
+            if entry.active && entry.mac == mac && entry.ip == ip {
+                entry.active = false;
+                if self.active_leases > 0 {
+                    self.active_leases -= 1;
+                }
+                return true;
+            }
+        }
+        false
+    }
+}
+
+pub fn build_dhcp_server_reply(
+    client_mac: [u8; 6],
+    assigned_ip: [u8; 4],
+    server_ip: [u8; 4],
+    server_mac: [u8; 6],
+    subnet_mask: [u8; 4],
+    router_ip: [u8; 4],
+    dns_ip: [u8; 4],
+    lease_time: u32,
+    xid: u32,
+    is_ack: bool,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    // 240 header + Opt53(3) + Opt54(6) + Opt51(6) + Opt1(6) + Opt3(6) + Opt6(6) + Opt255(1) = 274 bytes
+    let dhcp_len = 240 + 34;
+    let udp_len = 8 + dhcp_len;
+    let ip_len = 20 + udp_len;
+    let total_len = 14 + ip_len;
+
+    if out.len() < total_len {
+        return Err("Output buffer too small for DHCP Server reply");
+    }
+
+    // 1. Ethernet Header (Direct or Broadcast)
+    out[0..6].copy_from_slice(&[0xFF; 6]);
+    out[6..12].copy_from_slice(&server_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header (server_ip -> 255.255.255.255)
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x0000u16.to_be_bytes());
+    out[22] = 64;
+    out[23] = IP_PROTO_UDP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&server_ip);
+    out[30..34].copy_from_slice(&[255, 255, 255, 255]);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. UDP Header (67 -> 68)
+    out[34..36].copy_from_slice(&UDP_PORT_DHCP_SERVER.to_be_bytes());
+    out[36..38].copy_from_slice(&UDP_PORT_DHCP_CLIENT.to_be_bytes());
+    out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+    out[40..42].copy_from_slice(&[0, 0]);
+
+    // 4. DHCP Payload
+    let dhcp_start = 42;
+    for b in &mut out[dhcp_start..dhcp_start + dhcp_len] {
+        *b = 0;
+    }
+    out[dhcp_start] = DHCP_OP_BOOTREPLY;
+    out[dhcp_start + 1] = 1; // 10Mb Ethernet
+    out[dhcp_start + 2] = 6;
+    out[dhcp_start + 3] = 0;
+    out[dhcp_start + 4..dhcp_start + 8].copy_from_slice(&xid.to_be_bytes());
+    out[dhcp_start + 10..dhcp_start + 12].copy_from_slice(&0x8000u16.to_be_bytes()); // Broadcast flag
+    out[dhcp_start + 16..dhcp_start + 20].copy_from_slice(&assigned_ip); // yiaddr
+    out[dhcp_start + 20..dhcp_start + 24].copy_from_slice(&server_ip); // siaddr
+    out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
+    out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+    let mut opt_idx = dhcp_start + 240;
+
+    // Option 53: Offer or Ack
+    out[opt_idx] = 53;
+    out[opt_idx + 1] = 1;
+    out[opt_idx + 2] = if is_ack { DHCP_ACK } else { DHCP_OFFER };
+    opt_idx += 3;
+
+    // Option 54: Server Identifier
+    out[opt_idx] = 54;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&server_ip);
+    opt_idx += 6;
+
+    // Option 51: IP Address Lease Time
+    out[opt_idx] = 51;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&lease_time.to_be_bytes());
+    opt_idx += 6;
+
+    // Option 1: Subnet Mask
+    out[opt_idx] = 1;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&subnet_mask);
+    opt_idx += 6;
+
+    // Option 3: Router
+    out[opt_idx] = 3;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&router_ip);
+    opt_idx += 6;
+
+    // Option 6: Domain Name Server
+    out[opt_idx] = 6;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&dns_ip);
+    opt_idx += 6;
+
+    // Option 255: End
+    out[opt_idx] = 255;
+
+    Ok(total_len)
+}
+
+// -----------------------------------------------------------------------------
 // PACKET BUILDERS
 // -----------------------------------------------------------------------------
 
@@ -1486,4 +1765,142 @@ mod tests {
         // Verify RDATA ends with our IP [192, 168, 56, 2]
         assert_eq!(&dns_bytes[dns_bytes.len() - 4..], &[192, 168, 56, 2]);
     }
+
+    #[test]
+    fn test_25_dhcp_server_pool_allocation_basic() {
+        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        server.pool_start_last_octet = 100;
+        server.pool_end_last_octet = 103;
+
+        let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
+        let ip1 = server.find_or_allocate_ip(mac1, None, Some(b"laptop-1"), 100).unwrap();
+        assert_eq!(ip1, [192, 168, 56, 100]);
+        assert_eq!(server.active_leases, 1);
+    }
+
+    #[test]
+    fn test_26_dhcp_server_pool_mac_binding_idempotent() {
+        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
+        let ip1 = server.find_or_allocate_ip(mac1, None, None, 100).unwrap();
+        let ip2 = server.find_or_allocate_ip(mac1, None, None, 200).unwrap();
+        assert_eq!(ip1, ip2);
+        assert_eq!(server.active_leases, 1);
+    }
+
+    #[test]
+    fn test_27_dhcp_server_pool_requested_ip_match() {
+        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        server.pool_start_last_octet = 100;
+        server.pool_end_last_octet = 103;
+
+        let mac = [0x08, 0x00, 0x27, 0x22, 0x22, 0x22];
+        let ip = server.find_or_allocate_ip(mac, Some([192, 168, 56, 102]), None, 100).unwrap();
+        assert_eq!(ip, [192, 168, 56, 102]);
+    }
+
+    #[test]
+    fn test_28_dhcp_server_pool_exhaustion_error() {
+        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        server.pool_start_last_octet = 100;
+        server.pool_end_last_octet = 101;
+
+        let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
+        let mac2 = [0x08, 0x00, 0x27, 0x22, 0x22, 0x22];
+        let mac3 = [0x08, 0x00, 0x27, 0x33, 0x33, 0x33];
+
+        assert!(server.find_or_allocate_ip(mac1, None, None, 10).is_ok());
+        assert!(server.find_or_allocate_ip(mac2, None, None, 10).is_ok());
+        assert_eq!(server.find_or_allocate_ip(mac3, None, None, 10), Err("DHCP pool exhausted"));
+    }
+
+    #[test]
+    fn test_29_dhcp_server_pool_release_and_reclaim() {
+        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        server.pool_start_last_octet = 100;
+        server.pool_end_last_octet = 101;
+
+        let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
+        let ip1 = server.find_or_allocate_ip(mac1, None, None, 10).unwrap();
+
+        assert!(server.release_lease(mac1, ip1));
+        assert_eq!(server.active_leases, 0);
+
+        // MAC2 can now allocate slot
+        let mac2 = [0x08, 0x00, 0x27, 0x22, 0x22, 0x22];
+        assert!(server.find_or_allocate_ip(mac2, None, None, 20).is_ok());
+    }
+
+    #[test]
+    fn test_30_dhcp_server_pool_renewal() {
+        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        server.default_lease_time = 3600;
+        let mac = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
+        let ip = server.find_or_allocate_ip(mac, None, None, 1000).unwrap();
+        assert_eq!(ip, [192, 168, 56, 100]);
+        assert_eq!(server.leases[0].expire_tick, 4600);
+
+        // Renew at tick 3000
+        server.find_or_allocate_ip(mac, None, None, 3000).unwrap();
+        assert_eq!(server.leases[0].expire_tick, 6600);
+    }
+
+    #[test]
+    fn test_31_dhcp_server_reply_offer_formatting() {
+        let mut out = [0u8; 512];
+        let len = build_dhcp_server_reply(
+            [0x08, 0x00, 0x27, 0x11, 0x22, 0x33],
+            [192, 168, 56, 105],
+            [192, 168, 56, 1],
+            [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC],
+            [255, 255, 255, 0],
+            [192, 168, 56, 1],
+            [192, 168, 56, 1],
+            86400,
+            0x12345678,
+            false, // Offer
+            &mut out,
+        ).unwrap();
+
+        let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
+        let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        let (udp, dhcp_bytes) = parse_udp_header(udp_bytes).unwrap();
+
+        assert_eq!(udp.src_port, 67);
+        assert_eq!(udp.dst_port, 68);
+
+        let dhcp = parse_dhcp_message(dhcp_bytes).unwrap();
+        assert_eq!(dhcp.op, DHCP_OP_BOOTREPLY);
+        assert_eq!(dhcp.msg_type, Some(DHCP_OFFER));
+        assert_eq!(dhcp.yiaddr, [192, 168, 56, 105]);
+        assert_eq!(dhcp.server_ip, Some([192, 168, 56, 1]));
+        assert_eq!(dhcp.router_ip, Some([192, 168, 56, 1]));
+        assert_eq!(dhcp.subnet_mask, Some([255, 255, 255, 0]));
+        assert_eq!(dhcp.lease_time, Some(86400));
+    }
+
+    #[test]
+    fn test_32_dhcp_server_reply_ack_formatting() {
+        let mut out = [0u8; 512];
+        let len = build_dhcp_server_reply(
+            [0x08, 0x00, 0x27, 0x11, 0x22, 0x33],
+            [192, 168, 56, 105],
+            [192, 168, 56, 1],
+            [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC],
+            [255, 255, 255, 0],
+            [192, 168, 56, 1],
+            [192, 168, 56, 1],
+            86400,
+            0x12345678,
+            true, // ACK
+            &mut out,
+        ).unwrap();
+
+        let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
+        let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        let (_udp, dhcp_bytes) = parse_udp_header(udp_bytes).unwrap();
+        let dhcp = parse_dhcp_message(dhcp_bytes).unwrap();
+        assert_eq!(dhcp.msg_type, Some(DHCP_ACK));
+    }
 }
+

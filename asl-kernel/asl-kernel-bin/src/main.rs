@@ -244,6 +244,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut _tcp_server = asl_router_tcpstub::TcpHttpServerStub::new(8080);
     SERIAL.write_str("[R18] TCP ENGINE: smoltcp (facade active :80)\n");
 
+    // [R20]: DHCP SERVER POOL (RFC 2131 — LAN eth1 192.168.56.100-150 only)
+    let mut _dhcp_pool = asl_router_netstack::DhcpServerPool::<51>::new([192, 168, 56, 1], our_mac);
+    SERIAL.write_str("[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)\n");
+
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
     // [R12]: NET POLL LOOP & SERIAL CLI
