@@ -1,9 +1,0 @@
-[package]
-name = "opcr-switching"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-
-[dependencies]
-opcr-core = { path = "../../opcr-kernel/opcr-core" }

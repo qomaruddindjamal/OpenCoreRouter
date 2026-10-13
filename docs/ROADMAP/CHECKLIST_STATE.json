@@ -31,7 +31,7 @@
   },
   {
     "gate_id": "OPCR-01",
-    "name": "OpenCR Workspace 15 Crates Scaffolding & Zero Root Clutter",
+    "name": "ASL Core Kernel & Router Workspace Scaffolding",
     "status": "PASS-LOCKED",
     "verified_date": "2026-10-14"
   },
@@ -49,13 +49,13 @@
   },
   {
     "gate_id": "OPCR-04",
-    "name": "Fastpath Lock-Free Descriptor Ring (ALIGN-01 & DMA Constraints)",
+    "name": "Fastpath Lock-Free Descriptor Ring (asl-router-fastpath)",
     "status": "PASS-LOCKED",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-05",
-    "name": "TCAM IPv4 5-Tuple Matcher & Test Vectors",
+    "name": "TCAM IPv4 5-Tuple Matcher (asl-router-tcam)",
     "status": "PASS-LOCKED",
     "verified_date": "2026-10-14"
   },
@@ -67,14 +67,32 @@
   },
   {
     "gate_id": "OPCR-07",
-    "name": "Expanded Workspace Test Coverage (>= 40 Tests PASS)",
+    "name": "Expanded Workspace Test Coverage (45/45 Tests PASS)",
     "status": "PASS-LOCKED",
     "verified_date": "2026-10-14"
   },
   {
     "gate_id": "OPCR-08",
-    "name": "Mitranet Read-Only Telemetry Inventory Snapshot",
+    "name": "Gateway Read-Only Telemetry Inventory Snapshot",
     "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-09",
+    "name": "Foundation Naming ENFORCED (ASL Core Kernel v1.0.0 Immutable)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-10",
+    "name": "Public-Repo Security Redaction ENFORCED (RFC 5737 Compliance)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-BIN-01",
+    "name": "Standalone ELF Executable Linking without Std (Linker script required)",
+    "status": "LOCKED-OPEN",
     "verified_date": "2026-10-14"
   }
 ]

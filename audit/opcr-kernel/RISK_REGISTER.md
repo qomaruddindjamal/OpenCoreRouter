@@ -12,8 +12,8 @@
 
 | Legacy ASL ID | Judul Temuan | Status Migrasi OPCR | Strategi Mitigasi / Implementasi |
 | :--- | :--- | :--- | :--- |
-| **ALIGN-01** | Unaligned memory access triggers CPU bus faults | **CLOSED-BY-DESIGN** | Ditegakkan compile-time assert `align(64)` pada `DescriptorRing`, serta `align(16)` pada `RxDesc16` dan `align(32)` pada `RxDesc32` (`opcr-fastpath::ring`). |
-| **DMA-ADDR-01** | DMA physical address truncation on >4GB RAM | **CLOSED-BY-DESIGN** | API `opcr-fastpath` menggunakan abstraksi `DmaAddr` dengan metode `is_zone_dma32()`. Diperkenalkan trait `IommuMapper`. |
+| **ALIGN-01** | Unaligned memory access triggers CPU bus faults | **CLOSED-BY-DESIGN** | Ditegakkan compile-time assert `align(64)` pada `DescriptorRing`, serta `align(16)` pada `RxDesc16` dan `align(32)` pada `RxDesc32` (`asl-router-fastpath::ring`). |
+| **DMA-ADDR-01** | DMA physical address truncation on >4GB RAM | **CLOSED-BY-DESIGN** | API `asl-router-fastpath` menggunakan abstraksi `DmaAddr` dengan metode `is_zone_dma32()`. Diperkenalkan trait `IommuMapper`. |
 | **DMA-CACHE-01** | DMA Cache incoherency on non-coherent arches | **MITIGATED** | Fungsi barrier `dma_cache_clean_inval()` diintegrasikan ke API HAL fastpath, memicu memory barrier pada x86 dan instruksi cache clean pada target non-koheren. |
 | **ATOMIC-SPARC-01**| Missing native 64-bit atomic ops on SPARC V8 | **OPEN** | Dicatat sebagai batasan arsitektur Tier 2/4. SPARC V8 akan menggunakan spinlock-emulated 64-bit tick pada Phase 05. |
 

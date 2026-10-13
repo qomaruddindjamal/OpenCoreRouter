@@ -1,0 +1,9 @@
+[package]
+name = "asl-router-tcam"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-kernel-core = { path = "../../asl-kernel/asl-kernel-core" }

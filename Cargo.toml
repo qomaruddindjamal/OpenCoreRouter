@@ -1,25 +1,25 @@
 [workspace]
 resolver = "2"
 members = [
-    "opcr-kernel/opcr-core",
-    "opcr-kernel/opcr-hal",
-    "opcr-kernel/opcr-sched",
-    "opcr-kernel/opcr-memory",
-    "opcr-kernel/opcr-afdx-ipc",
-    "opcr-kernel/opcr-bootloader",
-    "opcr-kernel/opcr-kernel-bin",
-    "opcr-modules/fastpath",
-    "opcr-modules/tcam",
-    "opcr-modules/gpon-ont",
-    "opcr-modules/olt-carrier",
-    "opcr-modules/qos",
-    "opcr-modules/switching",
-    "opcr-modules/security-vault",
-    "opcr-modules/undi-npu",
+    "asl-kernel/asl-kernel-core",
+    "asl-kernel/asl-hal",
+    "asl-kernel/asl-sched",
+    "asl-kernel/asl-memory",
+    "asl-kernel/asl-afdx-ipc",
+    "asl-kernel/asl-bootloader",
+    "asl-kernel/asl-kernel-bin",
+    "router/asl-router-fastpath",
+    "router/asl-router-tcam",
+    "router/asl-router-gpon-ont",
+    "router/asl-router-olt-carrier",
+    "router/asl-router-qos",
+    "router/asl-router-switching",
+    "router/asl-router-security-vault",
+    "router/asl-router-undi-npu",
 ]
 
 [workspace.package]
-version = "1.0.3"
+version = "0.1.0"
 edition = "2021"
 authors = ["Open Core Router Contributors"]
 license = "MIT OR Apache-2.0"

@@ -3,99 +3,99 @@
 version = 4
 
 [[package]]
-name = "opcr-afdx-ipc"
-version = "1.0.3"
+name = "asl-afdx-ipc"
+version = "0.1.0"
 
 [[package]]
-name = "opcr-bootloader"
-version = "1.0.3"
+name = "asl-bootloader"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-core"
-version = "1.0.3"
+name = "asl-hal"
+version = "0.1.0"
 
 [[package]]
-name = "opcr-fastpath"
-version = "1.0.3"
+name = "asl-kernel-bin"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-afdx-ipc",
+ "asl-bootloader",
+ "asl-hal",
+ "asl-kernel-core",
+ "asl-memory",
+ "asl-sched",
 ]
 
 [[package]]
-name = "opcr-gpon-ont"
-version = "1.0.3"
+name = "asl-kernel-core"
+version = "0.1.0"
+
+[[package]]
+name = "asl-memory"
+version = "0.1.0"
+
+[[package]]
+name = "asl-router-fastpath"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-hal"
-version = "1.0.3"
-
-[[package]]
-name = "opcr-kernel-bin"
-version = "1.0.3"
+name = "asl-router-gpon-ont"
+version = "0.1.0"
 dependencies = [
- "opcr-afdx-ipc",
- "opcr-bootloader",
- "opcr-core",
- "opcr-hal",
- "opcr-memory",
- "opcr-sched",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-memory"
-version = "1.0.3"
-
-[[package]]
-name = "opcr-olt-carrier"
-version = "1.0.3"
+name = "asl-router-olt-carrier"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-qos"
-version = "1.0.3"
+name = "asl-router-qos"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-sched"
-version = "1.0.3"
+name = "asl-router-security-vault"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-security-vault"
-version = "1.0.3"
+name = "asl-router-switching"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-switching"
-version = "1.0.3"
+name = "asl-router-tcam"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-tcam"
-version = "1.0.3"
+name = "asl-router-undi-npu"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]
 
 [[package]]
-name = "opcr-undi-npu"
-version = "1.0.3"
+name = "asl-sched"
+version = "0.1.0"
 dependencies = [
- "opcr-core",
+ "asl-kernel-core",
 ]

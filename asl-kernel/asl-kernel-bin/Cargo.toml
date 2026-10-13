@@ -1,0 +1,14 @@
+[package]
+name = "asl-kernel-bin"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-kernel-core = { path = "../asl-kernel-core" }
+asl-hal = { path = "../asl-hal" }
+asl-sched = { path = "../asl-sched" }
+asl-memory = { path = "../asl-memory" }
+asl-afdx-ipc = { path = "../asl-afdx-ipc" }
+asl-bootloader = { path = "../asl-bootloader" }

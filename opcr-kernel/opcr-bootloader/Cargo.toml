@@ -1,9 +1,0 @@
-[package]
-name = "opcr-bootloader"
-version.workspace = true
-edition.workspace = true
-authors.workspace = true
-license.workspace = true
-
-[dependencies]
-opcr-core = { path = "../opcr-core" }
