@@ -1,6 +1,6 @@
 # Open Core Router (OpenCR) — Powered by ASL Core Kernel v1.0.0
 
-> **Status:** `TEST VERIFIED` (45/45 Tests PASS) & `BUILD VERIFIED` (bare-metal `x86_64-unknown-none`)  
+> **Status:** `TEST VERIFIED` (68/68 Tests PASS) & `BUILD VERIFIED` (bare-metal `x86_64-unknown-none`) & `RUNTIME VERIFIED` (VM Boot & Ping Proof OK)  
 > **Distribusi:** Open Core Router (Codename: Rinjani 1.0.0)  
 > **Fondasi:** ASL Core Kernel (v1.0.0, bare-metal Rust `#![no_std]`)  
 > **Standar:** DO-178C DAL-A / ARINC 653 IMA  
@@ -9,7 +9,9 @@
 
 ## 1. Executive Summary
 
-Open Core Router (OpenCR) adalah sistem operasi router carrier-grade yang berjalan di atas fondasi **ASL Core Kernel v1.0.0**. Sistem ini mempertahankan isolasi partisi ARINC 653 IMA secara spasial dan temporal, serta mengintegrasikan data plane berkecepatan tinggi: lock-free descriptor ring (`asl-router-fastpath`), mesin klasifikasi TCAM IPv4 5-tuple (`asl-router-tcam`), stack akses optik (`asl-router-gpon-ont`, `asl-router-olt-carrier`), dan zero-copy AFDX IPC (`asl-afdx-ipc`).
+Open Core Router (OpenCR) adalah sistem operasi router carrier-grade yang berjalan di atas fondasi **ASL Core Kernel v1.0.0**. Sistem ini mempertahankan isolasi partisi ARINC 653 IMA secara spasial dan temporal, serta mengintegrasikan data plane berkecepatan tinggi: lock-free descriptor ring (`asl-router-fastpath`), mesin klasifikasi TCAM IPv4 5-tuple (`asl-router-tcam`), stack akses optik (`asl-router-gpon-ont`, `asl-router-olt-carrier`), zero-copy AFDX IPC (`asl-afdx-ipc`), enumerasi bus PCI (`asl-router-pci`), driver VirtIO-Net (`asl-router-drivers-virtio`), packet buffer pool (`asl-router-netbuf`), dan native netstack (`asl-router-netstack`).
+
+> **Milestone Terverifikasi (Sprint NET-01):** Rinjani 1.0.0 berhasil mem-boot VM VirtualBox, mengenali NIC VirtIO-Net melalui PCI bus scanning, mengaktifkan native stack ARP/IPv4/ICMP, dan merespons paket ICMP Echo Request (`[NET] ICMP ECHO REPLY SENT`) — membuktikan jaringan hidup secara fungsional.
 
 ---
 

@@ -30,7 +30,7 @@ mod tests {
     fn test_tcam_vector_1_exact_match() {
         let mut engine: TcamEngine<16> = TcamEngine::new();
         let mut key = RuleKey5T::any();
-        key.src_ip = make_ipv4(10, 10, 66, 228);
+        key.src_ip = make_ipv4(192, 0, 2, 228);
         key.src_mask = 0xFFFF_FFFF;
         key.dst_ip = make_ipv4(8, 8, 8, 8);
         key.dst_mask = 0xFFFF_FFFF;
@@ -46,7 +46,7 @@ mod tests {
         }).unwrap();
 
         let pkt_match = Packet5T {
-            src_ip: make_ipv4(10, 10, 66, 228),
+            src_ip: make_ipv4(192, 0, 2, 228),
             dst_ip: make_ipv4(8, 8, 8, 8),
             src_port: 50400,
             dst_port: 53,
@@ -59,7 +59,7 @@ mod tests {
     fn test_tcam_vector_2_subnet_match() {
         let mut engine: TcamEngine<16> = TcamEngine::new();
         let mut key = RuleKey5T::any();
-        key.src_ip = make_ipv4(10, 10, 1, 0);
+        key.src_ip = make_ipv4(192, 0, 2, 0);
         key.src_mask = cidr_mask(24); // 255.255.255.0
 
         engine.add_rule(TcamRule {
@@ -69,7 +69,7 @@ mod tests {
         }).unwrap();
 
         let pkt_in_subnet = Packet5T {
-            src_ip: make_ipv4(10, 10, 1, 45),
+            src_ip: make_ipv4(192, 0, 2, 45),
             dst_ip: make_ipv4(1, 1, 1, 1),
             src_port: 1024,
             dst_port: 80,
@@ -113,9 +113,9 @@ mod tests {
             priority: 200,
         }).unwrap();
 
-        // Rule prioritas tinggi: Deny IP spesifik 10.10.66.50
+        // Rule prioritas tinggi: Deny IP spesifik 192.0.2.50
         let mut key_narrow = RuleKey5T::any();
-        key_narrow.src_ip = make_ipv4(10, 10, 66, 50);
+        key_narrow.src_ip = make_ipv4(192, 0, 2, 50);
         key_narrow.src_mask = 0xFFFF_FFFF;
         engine.add_rule(TcamRule {
             key: key_narrow,
@@ -124,7 +124,7 @@ mod tests {
         }).unwrap();
 
         let pkt_blocked = Packet5T {
-            src_ip: make_ipv4(10, 10, 66, 50),
+            src_ip: make_ipv4(192, 0, 2, 50),
             dst_ip: make_ipv4(8, 8, 8, 8),
             src_port: 1024,
             dst_port: 80,

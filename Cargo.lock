@@ -26,7 +26,11 @@ dependencies = [
  "asl-hal",
  "asl-kernel-core",
  "asl-memory",
+ "asl-router-drivers-virtio",
  "asl-router-fastpath",
+ "asl-router-netbuf",
+ "asl-router-netstack",
+ "asl-router-pci",
  "asl-router-tcam",
  "asl-sched",
 ]
@@ -38,6 +42,15 @@ version = "0.1.0"
 [[package]]
 name = "asl-memory"
 version = "0.1.0"
+
+[[package]]
+name = "asl-router-drivers-virtio"
+version = "0.1.0"
+dependencies = [
+ "asl-router-fastpath",
+ "asl-router-netbuf",
+ "asl-router-pci",
+]
 
 [[package]]
 name = "asl-router-fastpath"
@@ -54,10 +67,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "asl-router-netbuf"
+version = "0.1.0"
+dependencies = [
+ "asl-router-fastpath",
+]
+
+[[package]]
+name = "asl-router-netstack"
+version = "0.1.0"
+dependencies = [
+ "asl-router-fastpath",
+ "asl-router-netbuf",
+]
+
+[[package]]
 name = "asl-router-olt-carrier"
 version = "0.1.0"
 dependencies = [
  "asl-kernel-core",
+]
+
+[[package]]
+name = "asl-router-pci"
+version = "0.1.0"
+dependencies = [
+ "asl-hal",
 ]
 
 [[package]]

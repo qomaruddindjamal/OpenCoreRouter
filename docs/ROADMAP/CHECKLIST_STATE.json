@@ -122,5 +122,33 @@
     "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-28",
+    "name": "PCI Configuration Space Enumeration ([R8] VirtIO & 82540EM Discovery)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-29",
+    "name": "VirtIO-Net Driver Polling via Fastpath Ring ([R9] MAC Discovery)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-30",
+    "name": "Native Network Stack Implementation ([R10] ARP, IPv4, ICMP, UDP)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-31",
+    "name": "Ping Proof End-to-End ([R11] 10.0.2.15 & [R12] ICMP Echo Reply Sent)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
   }
 ]

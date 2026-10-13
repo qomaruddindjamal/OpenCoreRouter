@@ -1,0 +1,10 @@
+[package]
+name = "asl-router-netstack"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-fastpath = { path = "../asl-router-fastpath" }
+asl-router-netbuf = { path = "../asl-router-netbuf" }

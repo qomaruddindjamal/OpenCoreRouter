@@ -28,3 +28,5 @@
 | `OPCR-SEC-01` | Kebocoran kredensial audit probe eksternal | HIGH | CLOSED-BY-DESIGN | Penegakan zero-secrets policy dan isolasi kredensial hanya pada sesi interaktif. |
 | `OPCR-VM-01` | Ketiadaan toolchain limine di Windows native | LOW | CLOSED-BY-TOOLING | Teratasi penuh via `tools/provision-limine.ps1` dan `scripts/build-iso.ps1` (xorriso + Limine v8.4.1 bios-install). |
 | `OPCR-BIN-01`| Bare-metal ELF output linking missing linker script | HIGH | CLOSED-BY-DESIGN | Teratasi via higher-half `linker.ld`, entrypoint `_start`, 512KB stack, dan verifikasi header ELF `7F 45 4C 46`. |
+| `OPCI-NET-01`| Fragment handling minimal (drop fragmented IPv4) | MEDIUM | MITIGATED | Frame terfragmentasi di-drop secara jujur pada parser; reassembly dijadwalkan pada Sprint NET-02. |
+| `OPCI-NET-02`| Polling mode CPU-bound execution (100% core load) | LOW | ACCEPTED-FOR-SPRINT | Polling loop dipilih untuk bukti awal fungsional; interrupt APIC / MSI-X dijadwalkan pada NET-02. |

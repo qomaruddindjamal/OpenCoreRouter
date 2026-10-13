@@ -16,6 +16,10 @@ members = [
     "router/asl-router-switching",
     "router/asl-router-security-vault",
     "router/asl-router-undi-npu",
+    "router/asl-router-pci",
+    "router/asl-router-netbuf",
+    "router/asl-router-netstack",
+    "router/asl-router-drivers-virtio",
 ]
 
 [workspace.package]

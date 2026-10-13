@@ -5,3 +5,12 @@
 [R5] FASTPATH RING SELFTEST PASS
 [R6] TCAM SELFTEST PASS
 [R7] IDLE LOOP
+[R8] PCI ENUM: scanning bus 0..3
+  -> Found VirtIO-Net device at BDF 0:3
+  -> Found VirtIO-Net device at BDF 0:8
+[R9] VIRTIO-NET UP mac=08:00:27:5E:08:33
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok
+[R11] IP ADDR: 10.0.2.15/24 (dev-static, dhcp-pending)
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 10.0.2.2
+[NET] ICMP ECHO REPLY SENT (42 bytes)

@@ -14,6 +14,10 @@ asl-afdx-ipc = { path = "../asl-afdx-ipc" }
 asl-bootloader = { path = "../asl-bootloader" }
 asl-router-fastpath = { path = "../../router/asl-router-fastpath" }
 asl-router-tcam = { path = "../../router/asl-router-tcam" }
+asl-router-pci = { path = "../../router/asl-router-pci" }
+asl-router-drivers-virtio = { path = "../../router/asl-router-drivers-virtio" }
+asl-router-netbuf = { path = "../../router/asl-router-netbuf" }
+asl-router-netstack = { path = "../../router/asl-router-netstack" }
 
 [lib]
 crate-type = ["rlib"]
