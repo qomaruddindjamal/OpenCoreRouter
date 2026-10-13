@@ -6,7 +6,7 @@
 #![no_std]
 
 pub const KERNEL_VERSION: &str = "v1.0.0";
-pub const DISTRO_CODENAME: &str = "RINJANI 1.0.3";
+pub const DISTRO_CODENAME: &str = "RINJANI 1.0.0";
 
 pub fn kernel_init(boot_info: &asl_bootloader::BootInfo) -> Result<asl_kernel_core::KernelExecutive, &'static str> {
     if !boot_info.validate() {
@@ -22,7 +22,7 @@ pub fn kernel_init(boot_info: &asl_bootloader::BootInfo) -> Result<asl_kernel_co
 
 pub fn kernel_boot_banner() -> (&'static str, &'static str) {
     (
-        "[R1] RINJANI 1.0.3 — Open Core Router",
+        "[R1] RINJANI 1.0.0 — Open Core Router",
         "[R2] Powered by ASL Core Kernel v1.0.0",
     )
 }
@@ -47,7 +47,7 @@ mod tests {
     #[test]
     fn test_kernel_handover_marker() {
         let (r1, r2) = kernel_boot_banner();
-        assert_eq!(r1, "[R1] RINJANI 1.0.3 — Open Core Router");
+        assert_eq!(r1, "[R1] RINJANI 1.0.0 — Open Core Router");
         assert_eq!(r2, "[R2] Powered by ASL Core Kernel v1.0.0");
     }
 }

@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-tcam
+//! Open Core Router (OpenCR) — asl-router-tcam
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 

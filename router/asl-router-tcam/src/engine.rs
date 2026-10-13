@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-tcam::engine
+//! Open Core Router (OpenCR) — asl-router-tcam::engine
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! IPv4 5-Tuple Ternary Content Addressable Memory Engine

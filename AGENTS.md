@@ -1,19 +1,24 @@
-# AGENTS.md — Open Core Router / Code OS Rinjani 1.0.3
+# AGENTS.md — Open Core Router / Code OS Rinjani 1.0.0
 
 ## 1. Identitas & Misi
 - **Project:** Open Core Router (OpenCR) — Powered by ASL Core Kernel v1.0.0
-- **Code OS:** Rinjani 1.0.3
+- **Code OS:** Rinjani 1.0.0
 - **Kernel Base:** ASL Core Kernel (bare-metal Rust `#![no_std]`, v1.0.0)
 - **Standar:** DO-178C DAL-A / ARINC 653 IMA
 - **Asisten AI:** Kanoman AI
 
 ## 2. NAMING & FOUNDATION POLICY (IMMUTABLE)
 1. **Fondasi Abadi:** Nama "ASL Core Kernel" adalah fondasi mutlak (immutable). Dilarang mengganti atau me-rename fondasi ini.
-2. **Versi Terverifikasi:** Versi resmi kernel adalah **v1.0.0** (git tag `v1.0.0` commit `8ff19c3f` & `RELEASE_NOTES.md`). Dilarang mengarang versi lain. Versi crate internal `0.1.0` adalah independen.
+2. **Versi Terverifikasi:** Versi resmi kernel adalah **v1.0.0** (git tag `v1.0.0` commit `8ff19c3f` & `RELEASE_NOTES.md`). Dilarang mengarang versi lain. Versi resmi distro adalah **Rinjani 1.0.0** (terkunci direktif owner; histori 1.0.3 dipensiunkan). Versi crate internal `0.1.0` adalah independen.
 3. **Prefix Crate:** Crate fondasi wajib ber-prefix `asl-` di `asl-kernel/`; crate router wajib ber-prefix `asl-router-` di `router/`. Branding OpenCR/Rinjani hanya untuk produk distribusi.
-4. **Boot Banner:** Wajib memuat dua baris: `[R1] RINJANI 1.0.3 — Open Core Router` dan `[R2] Powered by ASL Core Kernel v1.0.0`.
+4. **Boot Banner:** Wajib memuat dua baris: `[R1] RINJANI 1.0.0 — Open Core Router` dan `[R2] Powered by ASL Core Kernel v1.0.0`.
 
-## 3. Aturan Operasional Wajib
+## 3. PLATFORM DOCTRINE — ASL CORE IS NOT LINUX (IMMUTABLE)
+1. **Microkernel Murni:** ASL Core Kernel adalah bare-metal Rust `#![no_std]` avionik tanpa Linux kernel, glibc, musl, busybox, systemd, syscall Linux (epoll, netlink), `/proc`, atau `/sys`.
+2. **Native Stacks & Drivers:** Semua driver hardware dan network stack (ARP, IPv4, ICMP, UDP, VXLAN, GRE, WG) ditulis secara native untuk mencapai paritas fungsi carrier-grade, bukan hasil porting userland/kernel Linux.
+3. **Isolasi Kode:** Desain atau RFC Linux boleh dipelajari sebagai referensi, tetapi kode sumber Linux dilarang keras disalin atau diimpor ke dalam repositori.
+
+## 4. Aturan Operasional Wajib
 1. **Root Project Wajib Bersih:** Root hanya memuat file resmi: `README.md`, `AGENTS.md`, `GEMINI.md`, `Cargo.toml`, `.gitignore`, dan subdirektori resmi. Dilarang meninggalkan file scratch atau file liar.
 2. **Semua Dokumen Masuk `docs/`:** Dokumentasi teknis wajib disimpan di `docs/CANONICAL/`, `docs/RND/`, `docs/ROADMAP/`, atau `docs/RELEASE/`.
 3. **Semua Skrip Masuk `tools/`:** Skrip verifikasi dan otomatisasi masuk ke `tools/` (ter-ignore di git).

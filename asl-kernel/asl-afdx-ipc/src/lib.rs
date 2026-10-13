@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-afdx-ipc
+//! Open Core Router (OpenCR) — asl-afdx-ipc
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Avionics Full-Duplex Switched Ethernet IPC — SPSC Ring Buffer Zero-Copy

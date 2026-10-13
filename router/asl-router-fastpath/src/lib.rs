@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-fastpath
+//! Open Core Router (OpenCR) — asl-router-fastpath
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 

@@ -26,6 +26,8 @@ dependencies = [
  "asl-hal",
  "asl-kernel-core",
  "asl-memory",
+ "asl-router-fastpath",
+ "asl-router-tcam",
  "asl-sched",
 ]
 

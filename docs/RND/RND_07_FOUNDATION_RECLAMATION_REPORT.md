@@ -1,3 +1,5 @@
+> CATATAN VERSI: Sejak keputusan owner, versi distro = Rinjani 1.0.0. Dokumen ini historis (memakai 1.0.3).
+
 # R&D Report 07: ASL Core Kernel Foundation Reclamation & Security Hardening
 
 > **Document ID:** RND-OPCR-07  

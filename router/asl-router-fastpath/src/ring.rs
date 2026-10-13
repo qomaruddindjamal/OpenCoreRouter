@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-fastpath::ring
+//! Open Core Router (OpenCR) — asl-router-fastpath::ring
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Lock-Free SPSC Descriptor Ring (Intel 82599 / i40e architecture)

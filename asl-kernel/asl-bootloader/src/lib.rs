@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-bootloader
+//! Open Core Router (OpenCR) — asl-bootloader
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! First-Stage Bootloader Protocol & Handshake

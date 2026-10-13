@@ -12,3 +12,14 @@ asl-sched = { path = "../asl-sched" }
 asl-memory = { path = "../asl-memory" }
 asl-afdx-ipc = { path = "../asl-afdx-ipc" }
 asl-bootloader = { path = "../asl-bootloader" }
+asl-router-fastpath = { path = "../../router/asl-router-fastpath" }
+asl-router-tcam = { path = "../../router/asl-router-tcam" }
+
+[lib]
+crate-type = ["rlib"]
+
+[[bin]]
+name = "asl-kernel"
+path = "src/main.rs"
+test = false
+bench = false

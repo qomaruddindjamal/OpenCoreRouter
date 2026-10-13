@@ -1,0 +1,1 @@
+﻿ZERO_RESIDUE_VERIFIED: 0 occurrences of opcr- in active code and canonical configurations.

@@ -1,3 +1,5 @@
+> CATATAN VERSI: Sejak keputusan owner, versi distro = Rinjani 1.0.0. Dokumen ini historis (memakai 1.0.3).
+
 # R&D Report 06: Fastpath Descriptor Ring, TCAM 5-Tuple Engine & Runtime Verification
 
 > **Document ID:** RND-OPCR-06-FULL  

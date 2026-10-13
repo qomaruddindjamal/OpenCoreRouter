@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-sched
+//! Open Core Router (OpenCR) — asl-sched
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Fixed-Priority Preemptive & Cyclic Scheduler

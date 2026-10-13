@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-hal
+//! Open Core Router (OpenCR) — asl-hal
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Hardware Abstraction Layer (CPU/MMU/IRQ/DMA/MMIO)

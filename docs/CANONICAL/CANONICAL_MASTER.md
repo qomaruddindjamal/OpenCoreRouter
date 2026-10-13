@@ -1,6 +1,6 @@
 # CANONICAL MASTER — Open Core Router (OpenCR)
 
-> **Produk Distribusi:** Open Core Router (Codename: Rinjani 1.0.3)  
+> **Produk Distribusi:** Open Core Router (Codename: Rinjani 1.0.0)  
 > **Fondasi Inti:** ASL Core Kernel v1.0.0 (`#![no_std]` Rust)  
 > **Standar Keselamatan:** DO-178C DAL-A / ARINC 653 IMA  
 

@@ -1,4 +1,4 @@
-﻿//! Open Core Router (OpenCR) - opcr-olt-carrier
+//! Open Core Router (OpenCR) - asl-router-olt-carrier
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 

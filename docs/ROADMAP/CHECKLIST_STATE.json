@@ -91,8 +91,36 @@
   },
   {
     "gate_id": "OPCR-BIN-01",
-    "name": "Standalone ELF Executable Linking without Std (Linker script required)",
-    "status": "LOCKED-OPEN",
+    "name": "Standalone ELF Executable Linking without Std (Higher-Half Limine Linker Script)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-15",
+    "name": "Version Lock ENFORCED (ASL Core Kernel v1.0.0 & Rinjani 1.0.0)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-16",
+    "name": "ELF Bootable Verification (Magic 7F 45 4C 46 & _start Entrypoint)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-17",
+    "name": "ISO Pipeline Tooling (xorriso + Limine v8.x bios-install)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-18",
+    "name": "VM Boot Runtime Verification (VirtualBox Serial Log [R1]..[R7] & Uptime >= 60s)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   }
 ]

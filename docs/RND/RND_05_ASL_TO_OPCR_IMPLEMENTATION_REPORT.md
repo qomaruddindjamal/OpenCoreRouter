@@ -1,3 +1,5 @@
+> CATATAN VERSI: Sejak keputusan owner, versi distro = Rinjani 1.0.0. Dokumen ini historis (memakai 1.0.3).
+
 # R&D Report 05: ASL Core Kernel to Open Core Router (Rinjani 1.0.3)
 
 > **Document ID:** RND-OPCR-05  

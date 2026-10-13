@@ -1,7 +1,7 @@
 # Open Core Router (OpenCR) — Powered by ASL Core Kernel v1.0.0
 
 > **Status:** `TEST VERIFIED` (45/45 Tests PASS) & `BUILD VERIFIED` (bare-metal `x86_64-unknown-none`)  
-> **Distribusi:** Open Core Router (Codename: Rinjani 1.0.3)  
+> **Distribusi:** Open Core Router (Codename: Rinjani 1.0.0)  
 > **Fondasi:** ASL Core Kernel (v1.0.0, bare-metal Rust `#![no_std]`)  
 > **Standar:** DO-178C DAL-A / ARINC 653 IMA  
 
@@ -13,7 +13,16 @@ Open Core Router (OpenCR) adalah sistem operasi router carrier-grade yang berjal
 
 ---
 
-## 2. Struktur Repositori Bersih (Foundation Reclamation)
+## 2. Platform Doctrine — ASL Core is Not Linux
+
+ASL Core Kernel adalah bare-metal microkernel avionik (`#![no_std]`), **bukan distribusi Linux**:
+- **Zero Linux Artifacts:** Tanpa kernel Linux, glibc, musl, busybox, systemd, syscall Linux (epoll, netlink), `/proc`, atau `/sys`.
+- **Pure Native Implementation:** Driver jaringan dan network protocol stacks (ARP, IPv4, ICMP, UDP, VXLAN, WireGuard) ditulis secara native di atas HAL dan scheduler ASL Core.
+- **Strict Code Separation:** Referensi arsitektur dan RFC standar dipelajari, namun tidak ada kode GPL/Linux yang disalin.
+
+---
+
+## 3. Struktur Repositori Bersih (Foundation Reclamation)
 
 ```
 C:\OpenCR
@@ -30,7 +39,7 @@ C:\OpenCR
 │   ├── asl-afdx-ipc               # SPSC lock-free zero-copy ring buffer
 │   ├── asl-bootloader             # Boot info validation handshake
 │   └── asl-kernel-bin             # Kernel top-level integration binary
-├── router/                        # Crate Produk Router (Open Core Router / Rinjani 1.0.3)
+├── router/                        # Crate Produk Router (Open Core Router / Rinjani 1.0.0)
 │   ├── asl-router-fastpath        # Intel 82599/i40e descriptor ring (ALIGN/DMA safe)
 │   ├── asl-router-tcam            # IPv4 5-tuple engine (default-deny)
 │   ├── asl-router-gpon-ont        # Optical Network Terminal OMCI state machine
@@ -40,16 +49,16 @@ C:\OpenCR
 │   ├── asl-router-security-vault  # Constant-time crypto & key isolation
 │   └── asl-router-undi-npu        # Neural network & coprocessor offload
 ├── docs/                          # CANONICAL, RND, ROADMAP, RELEASE
-├── audit/opcr-kernel/             # Risk register & audit findings
+├── audit/kernel/                  # Risk register & audit findings
 ├── Analysis/                      # Reports, quarantine, firmware rom
 └── tools/                         # Skrip otomasi (git-ignored)
 ```
 
 ---
 
-## 3. Banner Boot Resmi
+## 4. Banner Boot Resmi
 
 ```text
-[R1] RINJANI 1.0.3 — Open Core Router
+[R1] RINJANI 1.0.0 — Open Core Router
 [R2] Powered by ASL Core Kernel v1.0.0
 ```

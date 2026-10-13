@@ -1,4 +1,4 @@
-//! Open Core Router (OpenCR) — opcr-memory
+//! Open Core Router (OpenCR) — asl-memory
 //! Version: RINJANI_1_0_3
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Static Page-Table Slicing & Buddy Memory Allocator

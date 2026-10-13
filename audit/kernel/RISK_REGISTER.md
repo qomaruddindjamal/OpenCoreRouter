@@ -1,7 +1,7 @@
 # OPCR Risk Register & Legacy ASL Blockers Migration
 
 > **Document ID:** RISK-OPCR-01  
-> **Release Target:** Code OS Rinjani 1.0.3  
+> **Release Target:** Code OS Rinjani 1.0.0  
 > **Date:** 2026-10-14  
 > **Status:** `ACTIVE GOVERNANCE`  
 > **Author:** Anti Gravity (Senior AI Architect, Systems Auditor & Lead Mentor)  
@@ -19,11 +19,12 @@
 
 ---
 
-## 2. Temuan Risiko Baru OpenCR (Rinjani 1.0.3)
+## 2. Temuan Risiko Baru OpenCR (Rinjani 1.0.0)
 
 | OPCR Risk ID | Deskripsi Risiko | Severity | Status | Mitigasi |
 | :--- | :--- | :--- | :--- | :--- |
 | `OPCR-MEM-01` | Static page allocation capacity limit (256 pages) | MEDIUM | MITIGATED | Alokasi per zona terisolasi; alokator multi-zona dijadwalkan pada Phase 05. |
 | `OPCR-IPC-01` | SPSC queue concurrency limit | MEDIUM | MITIGATED | Single-Producer Single-Consumer lock-free ring channel; hardware lock untuk multi-core ingress. |
 | `OPCR-SEC-01` | Kebocoran kredensial audit probe eksternal | HIGH | CLOSED-BY-DESIGN | Penegakan zero-secrets policy dan isolasi kredensial hanya pada sesi interaktif. |
-| `OPCR-VM-01` | Ketiadaan toolchain limine di Windows native | LOW | OPEN | Full build bare-metal `cargo build` sukses (exit code 0); ISO Limine diblokir ketiadaan binary `limine.exe`. |
+| `OPCR-VM-01` | Ketiadaan toolchain limine di Windows native | LOW | CLOSED-BY-TOOLING | Teratasi penuh via `tools/provision-limine.ps1` dan `scripts/build-iso.ps1` (xorriso + Limine v8.4.1 bios-install). |
+| `OPCR-BIN-01`| Bare-metal ELF output linking missing linker script | HIGH | CLOSED-BY-DESIGN | Teratasi via higher-half `linker.ld`, entrypoint `_start`, 512KB stack, dan verifikasi header ELF `7F 45 4C 46`. |
