@@ -1,64 +1,72 @@
-/* OpenCR Rinjani 1.0.0 UI Components (Cards, Grids, Badges) */
+/* ==========================================================================
+   Mitranet Carrier Components & Status Grids
+   ========================================================================== */
+
 .card {
-    background-color: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
+    background-color: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
     padding: 20px;
     margin-bottom: 20px;
 }
 
 .card h2 {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
+    font-weight: 600;
+    color: #ffffff;
     margin-bottom: 16px;
-    border-bottom: 1px solid var(--border-color);
-    padding-bottom: 8px;
+    border-bottom: 1px solid var(--pf-panel-border);
+    padding-bottom: 10px;
 }
 
 .stat-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
     gap: 16px;
 }
 
 .stat-box {
-    background: #0d1117;
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    padding: 12px 16px;
+    background: #14171c;
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
+    padding: 14px 16px;
     display: flex;
     flex-direction: column;
 }
 
 .stat-box .label {
-    font-size: 0.75rem;
-    color: var(--text-secondary);
+    font-size: 0.72rem;
+    color: var(--pf-text-title);
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.6px;
+    font-weight: 600;
 }
 
 .stat-box .val {
-    font-size: 1.1rem;
+    font-size: 1.05rem;
     font-weight: 600;
-    margin-top: 4px;
-    font-family: var(--font-mono);
+    margin-top: 6px;
+    font-family: var(--pf-font-mono);
+    color: #ffffff;
 }
 
 .stat-box .highlight {
-    color: var(--accent-orange);
+    color: var(--pf-accent-cyan);
 }
 
 .system-badge {
     display: flex;
     align-items: center;
-    gap: 8px;
-    font-family: var(--font-mono);
+    gap: 10px;
+    font-family: var(--pf-font-mono);
     font-size: 0.85rem;
+    color: var(--pf-text-sub);
 }
 
 .status-indicator.live {
     width: 8px;
     height: 8px;
     border-radius: 50%;
-    background-color: var(--accent-green);
-    box-shadow: 0 0 8px var(--accent-green);
+    background-color: #28a745;
+    box-shadow: 0 0 8px #28a745;
 }

@@ -73,7 +73,14 @@ pub const VENDOR_HTMX: StaticAsset = StaticAsset {
     content: include_bytes!("../assets/vendor/htmx.js"),
 };
 
-pub const ALL_ASSETS: [&StaticAsset; 8] = [
+pub const LOGO_SVG: StaticAsset = StaticAsset {
+    path: "/images/logo.svg",
+    content_type: "image/svg+xml; charset=utf-8",
+    etag: "mitranet-logo-svg",
+    content: include_bytes!("../assets/images/logo.svg"),
+};
+
+pub const ALL_ASSETS: [&StaticAsset; 9] = [
     &SHELL_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
@@ -82,4 +89,6 @@ pub const ALL_ASSETS: [&StaticAsset; 8] = [
     &JS_COMMON_HTMX,
     &JS_STATUS,
     &VENDOR_HTMX,
+    &LOGO_SVG,
 ];
+

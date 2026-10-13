@@ -1,15 +1,26 @@
-/* OpenCR Rinjani 1.0.0 Base Typography & CSS Reset */
+/* ==========================================================================
+   OpenCR Rinjani 1.0.0 Base Tokens & Typography (Mitranet Carrier Theme)
+   ========================================================================== */
+
 :root {
-    --bg-main: #0d1117;
-    --bg-card: #161b22;
-    --border-color: #30363d;
-    --text-primary: #c9d1d9;
-    --text-secondary: #8b949e;
-    --accent-blue: #58a6ff;
-    --accent-green: #238636;
-    --accent-orange: #f0883e;
-    --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --pf-bg-main: #0f1115;
+    --pf-header-bg: #1e222b;
+    --pf-header-border: #282d37;
+    --pf-sidebar-bg: #181b20;
+    --pf-sidebar-border: #252a35;
+    --pf-panel-bg: #1e222b;
+    --pf-panel-border: #2d3341;
+    --pf-accent-cyan: #00bcd4;
+    --pf-accent-hover: #00e5ff;
+    --pf-accent-blue: #337ab7;
+    --pf-text-menu: #a4adbd;
+    --pf-text-sub: #b4bccb;
+    --pf-text-title: #6e788b;
+    --pf-text-primary: #e6edf3;
+    --pf-sidebar-w: 230px;
+    --pf-header-h: 56px;
+    --pf-font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --pf-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 * {
@@ -19,9 +30,9 @@
 }
 
 body {
-    background-color: var(--bg-main);
-    color: var(--text-primary);
-    font-family: var(--font-stack);
+    background-color: var(--pf-bg-main);
+    color: var(--pf-text-primary);
+    font-family: var(--pf-font-stack);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
 }

@@ -1,34 +1,49 @@
-/* OpenCR Rinjani 1.0.0 App Shell & Layout Structure */
+/* ==========================================================================
+   Mitranet-Style Drop-Right Layout & Carrier Header
+   ========================================================================== */
+
 .app-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    padding: 12px 24px;
-    background-color: var(--bg-card);
-    border-bottom: 1px solid var(--border-color);
+    height: var(--pf-header-h);
+    padding: 0 24px;
+    background-color: var(--pf-header-bg);
+    border-bottom: 1px solid var(--pf-header-border);
 }
 
-.brand h1 {
-    font-size: 1.15rem;
+.brand {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+}
+
+.brand .logo-img {
+    height: 32px;
+    width: auto;
+}
+
+.brand-text h1 {
+    font-size: 1.05rem;
     font-weight: 700;
-    letter-spacing: 0.5px;
     color: #ffffff;
+    letter-spacing: 0.5px;
 }
 
-.brand .sub {
-    font-size: 0.8rem;
-    color: var(--text-secondary);
+.brand-text .sub {
+    font-size: 0.75rem;
+    color: var(--pf-accent-cyan);
 }
 
 .app-layout {
     display: flex;
-    min-height: calc(100vh - 65px);
+    min-height: calc(100vh - var(--pf-header-h));
 }
 
 .sidebar {
-    width: 220px;
-    background-color: var(--bg-card);
-    border-right: 1px solid var(--border-color);
+    width: var(--pf-sidebar-w);
+    background-color: var(--pf-sidebar-bg);
+    border-right: 1px solid var(--pf-sidebar-border);
     padding: 16px 0;
 }
 
@@ -38,20 +53,22 @@
 
 .nav-item {
     display: block;
-    padding: 10px 24px;
-    color: var(--text-primary);
+    padding: 11px 24px;
+    color: var(--pf-text-menu);
     text-decoration: none;
-    font-size: 0.9rem;
-    transition: background 0.15s ease;
+    font-size: 0.88rem;
+    font-weight: 500;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
 .nav-item:hover, .nav-item.active {
-    background-color: #21262d;
-    color: var(--accent-blue);
-    border-left: 3px solid var(--accent-blue);
+    background-color: #20242b;
+    color: var(--pf-accent-hover);
+    border-left: 3px solid var(--pf-accent-cyan);
 }
 
 .content-area {
     flex: 1;
     padding: 24px;
+    background-color: var(--pf-bg-main);
 }

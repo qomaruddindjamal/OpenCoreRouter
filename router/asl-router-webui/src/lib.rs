@@ -36,7 +36,7 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 8);
+        assert_eq!(registry::ALL_ASSETS.len(), 9);
         assert_eq!(registry::SHELL_HTML.content_type, "text/html; charset=utf-8");
         assert!(registry::SHELL_HTML.content.len() > 0);
     }
@@ -63,7 +63,7 @@ mod tests {
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
 
         assert!(resp.contains("Content-Type: text/css"));
-        assert!(resp.contains("--bg-main"));
+        assert!(resp.contains("--pf-bg-main"));
     }
 
     #[test]
@@ -76,5 +76,17 @@ mod tests {
 
         assert!(resp.contains("Content-Type: application/javascript"));
         assert!(resp.contains("htmx = factory()"));
+    }
+
+    #[test]
+    fn test_06_dispatch_logo_svg() {
+        let req = HttpRequest::parse(b"GET /images/logo.svg HTTP/1.1\r\n\r\n").unwrap();
+        let mut buf = [0u8; 4096];
+        let res = dispatch_static(&req, &mut buf).expect("Must find logo asset");
+        let len = res.unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+
+        assert!(resp.contains("Content-Type: image/svg+xml"));
+        assert!(resp.contains("MitraNet Logo"));
     }
 }

@@ -1,0 +1,14 @@
+﻿<svg id="logo" role="img" aria-labelledby="mitranet-logo" x="0px" y="0px" viewBox="0 0 282.8 84.2">
+	<title id="mitranet-logo-svg">MitraNet Logo</title>
+	<defs>
+		<linearGradient id="rinjaniGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+			<stop offset="0%" stop-color="#00bcd4"/>
+			<stop offset="100%" stop-color="#00e5ff"/>
+		</linearGradient>
+	</defs>
+	<!-- Stylized Rinjani peak / shield icon on the left -->
+	<polygon points="12,65 42,15 72,65 52,65 42,45 32,65" fill="url(#rinjaniGrad)"/>
+	<polygon points="42,28 50,44 34,44" fill="#ffffff" opacity="0.9"/>
+	<!-- Wordmark: MITRANET -->
+	<text x="85" y="58" font-family="'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#ffffff" letter-spacing="1.5">MITRA<tspan fill="#00bcd4">NET</tspan></text>
+</svg>
