@@ -70,6 +70,18 @@ impl KernelExecutive {
         }
     }
 
+    pub fn count_partitions(&self) -> usize {
+        let mut count = 0;
+        let mut i = 0;
+        while i < self.active_partitions.len() {
+            if self.active_partitions[i].is_some() {
+                count += 1;
+            }
+            i += 1;
+        }
+        count
+    }
+
     pub fn version_info(&self) -> &'static str {
         OS_MARKER
     }
@@ -90,5 +102,25 @@ mod tests {
         assert_eq!(retrieved.partition_id, 1);
         assert_eq!(retrieved.period_us, 10_000);
         assert_eq!(exec.version_info(), "RINJANI_1_0_3");
+    }
+
+    #[test]
+    fn test_kernel_executive_capacity_limit() {
+        let mut exec = KernelExecutive::new();
+        for i in 0..16 {
+            let p = PartitionDescriptor::new(i as u32, 5000, 1000);
+            assert!(exec.register_partition(p).is_ok());
+        }
+        let overflow = PartitionDescriptor::new(99, 5000, 1000);
+        assert!(exec.register_partition(overflow).is_err());
+        assert_eq!(exec.count_partitions(), 16);
+    }
+
+    #[test]
+    fn test_partition_descriptor_states() {
+        let mut p = PartitionDescriptor::new(5, 20_000, 5_000);
+        assert_eq!(p.state, PartitionState::Idle);
+        p.state = PartitionState::Running;
+        assert_eq!(p.state, PartitionState::Running);
     }
 }

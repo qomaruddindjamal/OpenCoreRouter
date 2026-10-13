@@ -1,0 +1,22 @@
+﻿cargo :     Checking opcr-core v1.0.3 (C:\OpenCR\opcr-kernel\opcr-core)
+At line:1 char:110
++ ... oding utf8; cargo check --target x86_64-unknown-none --workspace 2>&1 ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checking op...rnel\opcr-core):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Checking opcr-memory v1.0.3 (C:\OpenCR\opcr-kernel\opcr-memory)
+    Checking opcr-hal v1.0.3 (C:\OpenCR\opcr-kernel\opcr-hal)
+    Checking opcr-afdx-ipc v1.0.3 (C:\OpenCR\opcr-kernel\opcr-afdx-ipc)
+    Checking opcr-bootloader v1.0.3 (C:\OpenCR\opcr-kernel\opcr-bootloader)
+    Checking opcr-sched v1.0.3 (C:\OpenCR\opcr-kernel\opcr-sched)
+    Checking opcr-tcam v1.0.3 (C:\OpenCR\opcr-modules\tcam)
+    Checking opcr-fastpath v1.0.3 (C:\OpenCR\opcr-modules\fastpath)
+    Checking opcr-olt-carrier v1.0.3 (C:\OpenCR\opcr-modules\olt-carrier)
+    Checking opcr-security-vault v1.0.3 (C:\OpenCR\opcr-modules\security-vault)
+    Checking opcr-switching v1.0.3 (C:\OpenCR\opcr-modules\switching)
+    Checking opcr-undi-npu v1.0.3 (C:\OpenCR\opcr-modules\undi-npu)
+    Checking opcr-gpon-ont v1.0.3 (C:\OpenCR\opcr-modules\gpon-ont)
+    Checking opcr-kernel-bin v1.0.3 (C:\OpenCR\opcr-kernel\opcr-kernel-bin)
+    Checking opcr-qos v1.0.3 (C:\OpenCR\opcr-modules\qos)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.34s

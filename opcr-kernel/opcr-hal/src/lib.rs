@@ -77,4 +77,18 @@ mod tests {
         assert!(cpu.interrupts_enabled);
         cpu.memory_barrier();
     }
+
+    #[test]
+    fn test_hal_marker_info() {
+        assert_eq!(OS_MARKER, "RINJANI_1_0_3");
+    }
+
+    #[test]
+    fn test_mmio_register_memory_semantics() {
+        let mut backing_data: u32 = 0xAA55AA55;
+        let mmio: MmioRegister<u32> = MmioRegister::new(&mut backing_data as *mut u32 as usize);
+        assert_eq!(mmio.read_volatile(), 0xAA55AA55);
+        mmio.write_volatile(0x12345678);
+        assert_eq!(mmio.read_volatile(), 0x12345678);
+    }
 }

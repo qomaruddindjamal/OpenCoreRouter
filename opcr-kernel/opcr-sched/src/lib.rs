@@ -69,6 +69,23 @@ impl PreemptiveScheduler {
         }
         highest
     }
+
+    pub fn consume_budget(&mut self, task_id: u32, elapsed_us: u32) {
+        let mut i = 0;
+        while i < self.tasks.len() {
+            if let Some(ref mut t) = self.tasks[i] {
+                if t.task_id == task_id {
+                    if t.remaining_budget_us > elapsed_us {
+                        t.remaining_budget_us -= elapsed_us;
+                    } else {
+                        t.remaining_budget_us = 0;
+                    }
+                    return;
+                }
+            }
+            i += 1;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -85,5 +102,30 @@ mod tests {
         let chosen = sched.pick_next_task().expect("Should pick a task");
         assert_eq!(chosen.task_id, 102);
         assert_eq!(chosen.priority, 50);
+    }
+
+    #[test]
+    fn test_scheduler_budget_exhaustion() {
+        let mut sched = PreemptiveScheduler::new();
+        sched.add_task(TaskControlBlock::new(201, 100, 200)).unwrap();
+        sched.add_task(TaskControlBlock::new(202, 50, 500)).unwrap();
+
+        // 201 terpilih awal
+        assert_eq!(sched.pick_next_task().unwrap().task_id, 201);
+
+        // Habiskan budget 201
+        sched.consume_budget(201, 250);
+
+        // Sekarang 202 harus terpilih karena 201 habis budget
+        assert_eq!(sched.pick_next_task().unwrap().task_id, 202);
+    }
+
+    #[test]
+    fn test_scheduler_capacity_limit() {
+        let mut sched = PreemptiveScheduler::new();
+        for i in 0..32 {
+            assert!(sched.add_task(TaskControlBlock::new(i, 10, 100)).is_ok());
+        }
+        assert!(sched.add_task(TaskControlBlock::new(99, 10, 100)).is_err());
     }
 }

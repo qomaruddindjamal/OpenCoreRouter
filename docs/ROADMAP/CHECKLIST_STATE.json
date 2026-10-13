@@ -1,0 +1,80 @@
+[
+  {
+    "gate_id": "GATE-01",
+    "name": "ASL Core Kernel IMA Spatial Partitioning",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-10"
+  },
+  {
+    "gate_id": "GATE-02",
+    "name": "ASL Core Kernel Temporal Scheduling (ARINC 653)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-10"
+  },
+  {
+    "gate_id": "GATE-03",
+    "name": "Zero Dynamic Allocation in Fastpath",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-10"
+  },
+  {
+    "gate_id": "GATE-04",
+    "name": "AFDX Zero-Copy IPC Channels",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-10"
+  },
+  {
+    "gate_id": "GATE-05",
+    "name": "Triple Modular Redundancy (TMR) Bitwise Voting",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-10"
+  },
+  {
+    "gate_id": "OPCR-01",
+    "name": "OpenCR Workspace 15 Crates Scaffolding & Zero Root Clutter",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-02",
+    "name": "Core Crates Initial Verification Suite (15 Tests)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-03",
+    "name": "Bare-Metal x86_64-unknown-none Compilation",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-04",
+    "name": "Fastpath Lock-Free Descriptor Ring (ALIGN-01 & DMA Constraints)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-05",
+    "name": "TCAM IPv4 5-Tuple Matcher & Test Vectors",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-06",
+    "name": "Runtime Verification (Full Build Pass, Limine ISO/VM Blocker Documented)",
+    "status": "LOCKED-OPEN",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-07",
+    "name": "Expanded Workspace Test Coverage (>= 40 Tests PASS)",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-08",
+    "name": "Mitranet Read-Only Telemetry Inventory Snapshot",
+    "status": "PASS-LOCKED",
+    "verified_date": "2026-10-14"
+  }
+]

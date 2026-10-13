@@ -48,4 +48,15 @@ mod tests {
         };
         assert!(!invalid_boot.validate());
     }
+
+    #[test]
+    fn test_boot_magic_constant() {
+        assert_eq!(BOOT_MAGIC, 0x52494E4A);
+    }
+
+    #[test]
+    fn test_boot_info_zero_size_fails() {
+        let zero_size = BootInfo::new(0x1000_0000, 0, 2);
+        assert!(!zero_size.validate());
+    }
 }

@@ -68,6 +68,14 @@ impl SpscRingBuffer {
         self.tail = (self.tail + 1) % RING_CAPACITY;
         Some(frame)
     }
+
+    pub fn available_slots(&self) -> usize {
+        if self.head >= self.tail {
+            (RING_CAPACITY - 1) - (self.head - self.tail)
+        } else {
+            self.tail - self.head - 1
+        }
+    }
 }
 
 #[cfg(test)]
@@ -93,5 +101,28 @@ mod tests {
         assert_eq!(deq.sequence_num, 1);
         assert_eq!(&deq.payload[0..4], &[0xDE, 0xAD, 0xBE, 0xEF]);
         assert!(ring.is_empty());
+    }
+
+    #[test]
+    fn test_spsc_ring_buffer_full_saturation() {
+        let mut ring = SpscRingBuffer::new();
+        for i in 0..(RING_CAPACITY - 1) {
+            let mut f = AfdxFrame::empty();
+            f.virtual_link_id = i as u16;
+            assert!(ring.enqueue(f).is_ok());
+        }
+        assert!(ring.is_full());
+        assert_eq!(ring.available_slots(), 0);
+        let mut overflow = AfdxFrame::empty();
+        overflow.virtual_link_id = 999;
+        assert!(ring.enqueue(overflow).is_err());
+    }
+
+    #[test]
+    fn test_afdx_frame_empty_defaults() {
+        let f = AfdxFrame::empty();
+        assert_eq!(f.virtual_link_id, 0);
+        assert_eq!(f.sequence_num, 0);
+        assert_eq!(f.payload_len, 0);
     }
 }

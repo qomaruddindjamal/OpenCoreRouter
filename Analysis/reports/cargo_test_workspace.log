@@ -1,0 +1,241 @@
+﻿cargo :     Finished `test` profile [unoptimized + debuginfo] target(s) in 0.04s
+At line:1 char:1
++ cargo test --workspace 2>&1 | Out-File -FilePath "Analysis\reports\ca ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Finished `t...get(s) in 0.04s:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+     Running unittests src\lib.rs (target\debug\deps\opcr_afdx_ipc-28d587371afe991b.exe)
+
+running 3 tests
+test tests::test_afdx_frame_empty_defaults ... ok
+test tests::test_spsc_ring_buffer_fifo ... ok
+test tests::test_spsc_ring_buffer_full_saturation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_bootloader-e827708d934d0057.exe)
+
+running 3 tests
+test tests::test_boot_info_validation ... ok
+test tests::test_boot_info_zero_size_fails ... ok
+test tests::test_boot_magic_constant ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_core-a557bd7d1a45fb38.exe)
+
+running 3 tests
+test tests::test_kernel_executive_capacity_limit ... ok
+test tests::test_kernel_executive_registration ... ok
+test tests::test_partition_descriptor_states ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_fastpath-1d93ddf501237e76.exe)
+
+running 6 tests
+test tests::test_dma_addr_01_zone_safety ... ok
+test tests::test_align_01_cacheline_alignment ... ok
+test tests::test_dma_cache_clean_inval_call ... ok
+test tests::test_ring_saturation_full ... ok
+test tests::test_ring_push_pop_fifo ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_gpon_ont-fc2aece240c0ea65.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_hal-998d784a2ee5477c.exe)
+
+running 3 tests
+test tests::test_cpu_contract ... ok
+test tests::test_mmio_register_memory_semantics ... ok
+test tests::test_hal_marker_info ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_kernel_bin-909eff1fc30cc8d2.exe)
+
+running 3 tests
+test tests::test_kernel_handover_marker ... ok
+test tests::test_kernel_init_flow ... ok
+test tests::test_kernel_init_invalid_boot_fails ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_memory-ddc9ab1796ee5964.exe)
+
+running 3 tests
+test tests::test_free_page_count_tracking ... ok
+test tests::test_static_page_allocator ... ok
+test tests::test_unaligned_or_invalid_free ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_olt_carrier-9d56130bff870d67.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_name ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_qos-d4eb263b163ea80e.exe)
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_sched-78d83104efdcd7b1.exe)
+
+running 3 tests
+test tests::test_scheduler_budget_exhaustion ... ok
+test tests::test_preemptive_scheduling ... ok
+test tests::test_scheduler_capacity_limit ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_security_vault-6c89ba60e17610fd.exe)
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_switching-93b0cb45335f016a.exe)
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_tcam-c53739873904757d.exe)
+
+running 9 tests
+test tests::test_tcam_vector_2_subnet_match ... ok
+test tests::test_tcam_vector_3_wildcard_match ... ok
+test tests::test_module_marker ... ok
+test tests::test_tcam_vector_5_default_deny ... ok
+test tests::test_tcam_vector_1_exact_match ... ok
+test tests::test_tcam_vector_4_priority_conflict_resolution ... ok
+test tests::test_tcam_vector_6_port_range_boundary ... ok
+test tests::test_tcam_vector_7_protocol_mismatch ... ok
+test tests::test_tcam_vector_8_table_overflow_error ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\opcr_undi_npu-a0cd3c15a8947ab5.exe)
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_afdx_ipc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_bootloader
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_fastpath
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_gpon_ont
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_hal
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_kernel_bin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_memory
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_olt_carrier
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_qos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_sched
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_security_vault
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_switching
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_tcam
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests opcr_undi_npu
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
