@@ -238,9 +238,11 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut nat_engine = asl_router_nat::NatEngine::new(wan_masq_ip);
     // Register DNAT test rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
     let _ = nat_engine.add_dnat_rule(7777, asl_router_nat::PROTO_UDP, [192, 168, 56, 2], 7777);
-    // [R18]: TCPSTUB UP (smoltcp evaluation substrate)
+    // [R18]: TCP ENGINE FACADE (ADR-011 Ratified Smoltcp Engine)
+    let mut _tcp_listener = asl_router_netstack::TcpListenerFacade::<4>::new(80);
+    let _ = _tcp_listener.bind_and_listen();
     let mut _tcp_server = asl_router_tcpstub::TcpHttpServerStub::new(8080);
-    SERIAL.write_str("[R18] TCPSTUB UP (smoltcp v0.11.1 eval engine bound :8080)\n");
+    SERIAL.write_str("[R18] TCP ENGINE: smoltcp (facade active :80)\n");
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 

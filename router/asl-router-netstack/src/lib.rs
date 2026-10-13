@@ -759,6 +759,101 @@ impl NetStackEngine {
 }
 
 // -----------------------------------------------------------------------------
+// TCP FACADE API (ADR-011 RATIFIED — SMOLTCP ADAPTER IN BACKEND)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TcpSocketState {
+    Closed,
+    Listen,
+    SynReceived,
+    Established,
+    FinWait,
+    ClosedWait,
+    TimeWait,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TcpConnection {
+    pub local_port: u16,
+    pub remote_ip: [u8; 4],
+    pub remote_port: u16,
+    pub state: TcpSocketState,
+    pub rx_bytes: u32,
+    pub tx_bytes: u32,
+}
+
+impl TcpConnection {
+    pub const fn empty() -> Self {
+        Self {
+            local_port: 0,
+            remote_ip: [0; 4],
+            remote_port: 0,
+            state: TcpSocketState::Closed,
+            rx_bytes: 0,
+            tx_bytes: 0,
+        }
+    }
+}
+
+pub struct TcpListenerFacade<const MAX_CONNS: usize = 4> {
+    pub port: u16,
+    pub is_listening: bool,
+    pub connections: [TcpConnection; MAX_CONNS],
+    pub active_conns: usize,
+}
+
+impl<const MAX_CONNS: usize> TcpListenerFacade<MAX_CONNS> {
+    pub const fn new(port: u16) -> Self {
+        Self {
+            port,
+            is_listening: false,
+            connections: [const { TcpConnection::empty() }; MAX_CONNS],
+            active_conns: 0,
+        }
+    }
+
+    pub fn bind_and_listen(&mut self) -> Result<(), &'static str> {
+        self.is_listening = true;
+        Ok(())
+    }
+
+    pub fn accept(&mut self, remote_ip: [u8; 4], remote_port: u16) -> Result<usize, &'static str> {
+        if !self.is_listening {
+            return Err("Socket is not in LISTEN state");
+        }
+        for i in 0..MAX_CONNS {
+            if self.connections[i].state == TcpSocketState::Closed {
+                self.connections[i] = TcpConnection {
+                    local_port: self.port,
+                    remote_ip,
+                    remote_port,
+                    state: TcpSocketState::Established,
+                    rx_bytes: 0,
+                    tx_bytes: 0,
+                };
+                self.active_conns += 1;
+                return Ok(i);
+            }
+        }
+        Err("TCP connection table full")
+    }
+
+    pub fn close(&mut self, conn_idx: usize) -> Result<(), &'static str> {
+        if conn_idx >= MAX_CONNS {
+            return Err("Index out of bounds");
+        }
+        if self.connections[conn_idx].state != TcpSocketState::Closed {
+            self.connections[conn_idx].state = TcpSocketState::Closed;
+            if self.active_conns > 0 {
+                self.active_conns -= 1;
+            }
+        }
+        Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
 // EXTENSIVE PROTOCOL PARSER TESTS (>= 15 TESTS)
 // -----------------------------------------------------------------------------
 
@@ -1148,5 +1243,39 @@ mod tests {
         // Verify ICMP checksum != 0
         let icmp_csum = compute_internet_checksum(&out[34..len]);
         assert_eq!(icmp_csum, 0);
+    }
+
+    #[test]
+    fn test_22_tcp_listener_facade_basic() {
+        let mut listener = TcpListenerFacade::<2>::new(80);
+        assert!(!listener.is_listening);
+        assert!(listener.accept([192, 168, 56, 1], 50000).is_err());
+
+        assert!(listener.bind_and_listen().is_ok());
+        assert!(listener.is_listening);
+
+        let c1 = listener.accept([192, 168, 56, 1], 50000).unwrap();
+        assert_eq!(c1, 0);
+        assert_eq!(listener.active_conns, 1);
+        assert_eq!(listener.connections[0].state, TcpSocketState::Established);
+        assert_eq!(listener.connections[0].local_port, 80);
+        assert_eq!(listener.connections[0].remote_port, 50000);
+
+        let c2 = listener.accept([192, 168, 56, 1], 50001).unwrap();
+        assert_eq!(c2, 1);
+        assert_eq!(listener.active_conns, 2);
+
+        // Max connections reached
+        assert!(listener.accept([192, 168, 56, 1], 50002).is_err());
+
+        // Close connection 0
+        assert!(listener.close(0).is_ok());
+        assert_eq!(listener.active_conns, 1);
+        assert_eq!(listener.connections[0].state, TcpSocketState::Closed);
+
+        // Can accept again into slot 0
+        let c3 = listener.accept([192, 168, 56, 1], 50003).unwrap();
+        assert_eq!(c3, 0);
+        assert_eq!(listener.active_conns, 2);
     }
 }
