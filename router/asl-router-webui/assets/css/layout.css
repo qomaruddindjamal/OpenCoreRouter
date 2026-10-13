@@ -1,0 +1,57 @@
+/* OpenCR Rinjani 1.0.0 App Shell & Layout Structure */
+.app-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 12px 24px;
+    background-color: var(--bg-card);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.brand h1 {
+    font-size: 1.15rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    color: #ffffff;
+}
+
+.brand .sub {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.app-layout {
+    display: flex;
+    min-height: calc(100vh - 65px);
+}
+
+.sidebar {
+    width: 220px;
+    background-color: var(--bg-card);
+    border-right: 1px solid var(--border-color);
+    padding: 16px 0;
+}
+
+.nav-list {
+    list-style: none;
+}
+
+.nav-item {
+    display: block;
+    padding: 10px 24px;
+    color: var(--text-primary);
+    text-decoration: none;
+    font-size: 0.9rem;
+    transition: background 0.15s ease;
+}
+
+.nav-item:hover, .nav-item.active {
+    background-color: #21262d;
+    color: var(--accent-blue);
+    border-left: 3px solid var(--accent-blue);
+}
+
+.content-area {
+    flex: 1;
+    padding: 24px;
+}

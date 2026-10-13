@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RINJANI 1.0.0 — Open Core Router Web Console</title>
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/layout.css">
+    <link rel="stylesheet" href="/css/components.css">
+    <script src="/vendor/htmx.js"></script>
+    <script src="/js/common/opcr.js"></script>
+    <script src="/js/common/htmx-helpers.js"></script>
+</head>
+<body>
+    <header class="app-header">
+        <div class="brand">
+            <h1>RINJANI 1.0.0</h1>
+            <span class="sub">Open Core Router / ASL Core Kernel v1.0.0</span>
+        </div>
+        <div class="system-badge">
+            <span class="status-indicator live"></span>
+            <span id="hostname-display">rinjani</span>
+        </div>
+    </header>
+
+    <div class="app-layout">
+        <nav class="sidebar">
+            <ul class="nav-list">
+                <li><a href="/status" class="nav-item active" hx-get="/api/v1/system" hx-target="#main-panel" hx-swap="innerHTML">Dashboard</a></li>
+                <li><a href="/interfaces" class="nav-item" hx-get="/api/v1/interfaces" hx-target="#main-panel" hx-swap="innerHTML">Interfaces</a></li>
+                <li><a href="/firewall" class="nav-item" hx-get="/api/v1/firewall/rules" hx-target="#main-panel" hx-swap="innerHTML">Firewall</a></li>
+                <li><a href="/services" class="nav-item" hx-get="/api/v1/services" hx-target="#main-panel" hx-swap="innerHTML">Services</a></li>
+            </ul>
+        </nav>
+
+        <main id="main-panel" class="content-area">
+            <div class="card">
+                <h2>System Overview</h2>
+                <div class="stat-grid">
+                    <div class="stat-box">
+                        <span class="label">Kernel Base</span>
+                        <span class="val">ASL Core Kernel v1.0.0</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="label">Distribution</span>
+                        <span class="val">Rinjani 1.0.0</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="label">Management Port</span>
+                        <span class="val">eth1 (192.168.56.2:80)</span>
+                    </div>
+                    <div class="stat-box">
+                        <span class="label">Security Policy</span>
+                        <span class="val highlight">Default-Deny</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script src="/js/status.js"></script>
+</body>
+</html>

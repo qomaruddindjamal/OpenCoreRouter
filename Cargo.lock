@@ -48,6 +48,17 @@ name = "asl-memory"
 version = "0.1.0"
 
 [[package]]
+name = "asl-router-api"
+version = "0.1.0"
+dependencies = [
+ "asl-router-hwinv",
+ "asl-router-lpm",
+ "asl-router-nat",
+ "asl-router-tcam",
+ "asl-router-webcore",
+]
+
+[[package]]
 name = "asl-router-drivers-virtio"
 version = "0.1.0"
 dependencies = [
@@ -157,6 +168,18 @@ name = "asl-router-undi-npu"
 version = "0.1.0"
 dependencies = [
  "asl-kernel-core",
+]
+
+[[package]]
+name = "asl-router-webcore"
+version = "0.1.0"
+
+[[package]]
+name = "asl-router-webui"
+version = "0.1.0"
+dependencies = [
+ "asl-router-api",
+ "asl-router-webcore",
 ]
 
 [[package]]

@@ -1,0 +1,10 @@
+[package]
+name = "asl-router-webui"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-webcore = { path = "../asl-router-webcore" }
+asl-router-api = { path = "../asl-router-api" }

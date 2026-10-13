@@ -1,0 +1,13 @@
+[package]
+name = "asl-router-api"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-webcore = { path = "../asl-router-webcore" }
+asl-router-lpm = { path = "../asl-router-lpm" }
+asl-router-nat = { path = "../asl-router-nat" }
+asl-router-tcam = { path = "../asl-router-tcam" }
+asl-router-hwinv = { path = "../asl-router-hwinv" }

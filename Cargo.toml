@@ -24,6 +24,9 @@ members = [
     "router/asl-router-lpm",
     "router/asl-router-nat",
     "router/asl-router-tcpstub",
+    "router/asl-router-webcore",
+    "router/asl-router-api",
+    "router/asl-router-webui",
 ]
 
 [workspace.package]
