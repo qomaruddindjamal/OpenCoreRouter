@@ -64,3 +64,12 @@ C:\OpenCR
 [R1] RINJANI 1.0.0 — Open Core Router
 [R2] Powered by ASL Core Kernel v1.0.0
 ```
+
+---
+
+## 5. Lisensi & Hak Cipta (Licensing & Governance)
+
+- **Source Code:** Berlisensi [GNU General Public License v3.0 or later (GPL-3.0-or-later)](file:///C:/OpenCR/LICENSE).
+- **Dokumentasi:** Berlisensi [Creative Commons Attribution 4.0 International (CC-BY-4.0)](https://creativecommons.org/licenses/by/4.0/).
+- **Third-Party Dependencies:** Rincian dependensi dan lisensi pihak ketiga terdokumentasi di [`LICENSE-THIRD-PARTY.md`](file:///C:/OpenCR/LICENSE-THIRD-PARTY.md).
+- **Pemberitahuan Hak Cipta & Merek:** Lihat [`NOTICE`](file:///C:/OpenCR/NOTICE). Nama "Open Core Router", "OpenCR", "Rinjani", dan "ASL Core Kernel" adalah hak cipta/merek dagang qomaruddindjamal. Fork dan redistribusi wajib menggunakan nama produk yang berbeda kecuali dengan izin tertulis.
