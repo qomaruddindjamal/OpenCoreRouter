@@ -1,10 +1,10 @@
 # ADR-011: TCP STACK ARCHITECTURAL STRATEGY FOR OPEN CORE ROUTER
 
-> **Status:** PROPOSED (Menunggu Ratifikasi Resmi Project Lead / Owner)  
+> **Status:** RATIFIED (Diratifikasi Resmi oleh Project Lead / Owner)  
 > **Tanggal:** 2026-10-14  
 > **Wilayah:** Control Plane, HTTP REST API, WebUI, and Transport Layer Networking  
-> **Otoritas:** DECISION_REGISTER.md (ADR-001..010) & docs/RND/eval01_criteria.md  
-> **Gerbang Mutu:** OPCR-53 (TCP Strategy Ratification)  
+> **Otoritas:** DECISION_REGISTER.md (ADR-001..011) & docs/RND/eval01_criteria.md  
+> **Gerbang Mutu:** OPCR-53 (PASS-LOCKED)  
 
 ---
 

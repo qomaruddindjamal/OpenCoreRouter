@@ -230,8 +230,8 @@
   },
   {
     "gate_id": "OPCR-53",
-    "name": "TCP Architectural Strategy Ratification (ADR-011 Proposed)",
-    "status": "LOCKED-OPEN",
+    "name": "TCP Architectural Strategy Ratification (ADR-011 Ratified)",
+    "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
