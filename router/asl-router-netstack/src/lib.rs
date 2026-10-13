@@ -243,6 +243,310 @@ pub fn parse_icmp_header(payload: &[u8]) -> Result<(IcmpHeader, &[u8]), &'static
 }
 
 // -----------------------------------------------------------------------------
+// UDP & DHCP PROTOCOL DEFINITIONS (RFC 768 & RFC 2131)
+// -----------------------------------------------------------------------------
+
+pub const UDP_PORT_DHCP_SERVER: u16 = 67;
+pub const UDP_PORT_DHCP_CLIENT: u16 = 68;
+
+pub const DHCP_OP_BOOTREQUEST: u8 = 1;
+pub const DHCP_OP_BOOTREPLY: u8 = 2;
+
+pub const DHCP_DISCOVER: u8 = 1;
+pub const DHCP_OFFER: u8 = 2;
+pub const DHCP_REQUEST: u8 = 3;
+pub const DHCP_DECLINE: u8 = 4;
+pub const DHCP_ACK: u8 = 5;
+pub const DHCP_NAK: u8 = 6;
+pub const DHCP_RELEASE: u8 = 7;
+pub const DHCP_INFORM: u8 = 8;
+
+pub const DHCP_MAGIC_COOKIE: [u8; 4] = [99, 130, 83, 99];
+
+
+pub fn parse_udp_header(payload: &[u8]) -> Result<(UdpHeader, &[u8]), &'static str> {
+    if payload.len() < 8 {
+        return Err("UDP packet too short (<8B)");
+    }
+    let src_port = u16::from_be_bytes([payload[0], payload[1]]);
+    let dst_port = u16::from_be_bytes([payload[2], payload[3]]);
+    let length = u16::from_be_bytes([payload[4], payload[5]]);
+    let checksum = u16::from_be_bytes([payload[6], payload[7]]);
+
+    let available = payload.len();
+    let body_end = if (length as usize) >= 8 && (length as usize) <= available {
+        length as usize
+    } else {
+        available
+    };
+
+    Ok((
+        UdpHeader { src_port, dst_port, length, checksum },
+        &payload[8..body_end],
+    ))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DhcpMessage {
+    pub op: u8,
+    pub htype: u8,
+    pub hlen: u8,
+    pub hops: u8,
+    pub xid: u32,
+    pub secs: u16,
+    pub flags: u16,
+    pub ciaddr: [u8; 4],
+    pub yiaddr: [u8; 4],
+    pub siaddr: [u8; 4],
+    pub giaddr: [u8; 4],
+    pub chaddr: [u8; 16],
+    pub msg_type: Option<u8>,
+    pub server_ip: Option<[u8; 4]>,
+    pub router_ip: Option<[u8; 4]>,
+    pub subnet_mask: Option<[u8; 4]>,
+    pub lease_time: Option<u32>,
+}
+
+pub fn parse_dhcp_message(payload: &[u8]) -> Result<DhcpMessage, &'static str> {
+    if payload.len() < 240 {
+        return Err("DHCP message too short (<240B)");
+    }
+    let op = payload[0];
+    let htype = payload[1];
+    let hlen = payload[2];
+    let hops = payload[3];
+    let xid = u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]);
+    let secs = u16::from_be_bytes([payload[8], payload[9]]);
+    let flags = u16::from_be_bytes([payload[10], payload[11]]);
+
+    let mut ciaddr = [0u8; 4];
+    ciaddr.copy_from_slice(&payload[12..16]);
+    let mut yiaddr = [0u8; 4];
+    yiaddr.copy_from_slice(&payload[16..20]);
+    let mut siaddr = [0u8; 4];
+    siaddr.copy_from_slice(&payload[20..24]);
+    let mut giaddr = [0u8; 4];
+    giaddr.copy_from_slice(&payload[24..28]);
+
+    let mut chaddr = [0u8; 16];
+    chaddr.copy_from_slice(&payload[28..44]);
+
+    // Check magic cookie at offset 236
+    let has_magic = payload[236..240] == DHCP_MAGIC_COOKIE;
+    let mut msg_type: Option<u8> = None;
+    let mut server_ip: Option<[u8; 4]> = None;
+    let mut router_ip: Option<[u8; 4]> = None;
+    let mut subnet_mask: Option<[u8; 4]> = None;
+    let mut lease_time: Option<u32> = None;
+
+    if has_magic && payload.len() > 240 {
+        let mut idx = 240;
+        while idx < payload.len() {
+            let opt = payload[idx];
+            if opt == 255 {
+                break; // End option
+            }
+            if opt == 0 {
+                idx += 1; // Pad
+                continue;
+            }
+            if idx + 1 >= payload.len() {
+                break;
+            }
+            let len = payload[idx + 1] as usize;
+            let val_start = idx + 2;
+            let val_end = val_start + len;
+            if val_end > payload.len() {
+                break;
+            }
+            match opt {
+                53 if len >= 1 => {
+                    msg_type = Some(payload[val_start]);
+                }
+                54 if len >= 4 => {
+                    let mut sip = [0u8; 4];
+                    sip.copy_from_slice(&payload[val_start..val_start + 4]);
+                    server_ip = Some(sip);
+                }
+                3 if len >= 4 => {
+                    let mut rip = [0u8; 4];
+                    rip.copy_from_slice(&payload[val_start..val_start + 4]);
+                    router_ip = Some(rip);
+                }
+                1 if len >= 4 => {
+                    let mut sm = [0u8; 4];
+                    sm.copy_from_slice(&payload[val_start..val_start + 4]);
+                    subnet_mask = Some(sm);
+                }
+                51 if len >= 4 => {
+                    let lt = u32::from_be_bytes([
+                        payload[val_start],
+                        payload[val_start + 1],
+                        payload[val_start + 2],
+                        payload[val_start + 3],
+                    ]);
+                    lease_time = Some(lt);
+                }
+                _ => {}
+            }
+            idx = val_end;
+        }
+    }
+
+    Ok(DhcpMessage {
+        op,
+        htype,
+        hlen,
+        hops,
+        xid,
+        secs,
+        flags,
+        ciaddr,
+        yiaddr,
+        siaddr,
+        giaddr,
+        chaddr,
+        msg_type,
+        server_ip,
+        router_ip,
+        subnet_mask,
+        lease_time,
+    })
+}
+
+pub fn build_dhcp_discover(
+    client_mac: [u8; 6],
+    xid: u32,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let dhcp_len = 240 + 4; // 240 header + 3 opt53 + 1 end = 244 bytes
+    let udp_len = 8 + dhcp_len;
+    let ip_len = 20 + udp_len;
+    let total_len = 14 + ip_len;
+
+    if out.len() < total_len {
+        return Err("Output buffer too small for DHCP Discover");
+    }
+
+    // 1. Ethernet Header (Broadcast)
+    out[0..6].copy_from_slice(&[0xFF; 6]);
+    out[6..12].copy_from_slice(&client_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header (0.0.0.0 -> 255.255.255.255)
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x0000u16.to_be_bytes());
+    out[22] = 64; // TTL
+    out[23] = IP_PROTO_UDP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&[0, 0, 0, 0]);
+    out[30..34].copy_from_slice(&[255, 255, 255, 255]);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. UDP Header (68 -> 67)
+    out[34..36].copy_from_slice(&UDP_PORT_DHCP_CLIENT.to_be_bytes());
+    out[36..38].copy_from_slice(&UDP_PORT_DHCP_SERVER.to_be_bytes());
+    out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+    out[40..42].copy_from_slice(&[0, 0]); // UDP checksum optional in IPv4
+
+    // 4. DHCP Payload
+    let dhcp_start = 42;
+    for b in &mut out[dhcp_start..dhcp_start + dhcp_len] {
+        *b = 0;
+    }
+    out[dhcp_start] = DHCP_OP_BOOTREQUEST;
+    out[dhcp_start + 1] = 1; // 10Mb Ethernet
+    out[dhcp_start + 2] = 6; // MAC length
+    out[dhcp_start + 3] = 0; // Hops
+    out[dhcp_start + 4..dhcp_start + 8].copy_from_slice(&xid.to_be_bytes());
+    out[dhcp_start + 10..dhcp_start + 12].copy_from_slice(&0x8000u16.to_be_bytes()); // Broadcast flag
+    out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
+    out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+    // Options: 53 (Message Type = 1 Discover) + 255 (End)
+    out[dhcp_start + 240] = 53;
+    out[dhcp_start + 241] = 1;
+    out[dhcp_start + 242] = DHCP_DISCOVER;
+    out[dhcp_start + 243] = 255;
+
+    Ok(total_len)
+}
+
+pub fn build_dhcp_request(
+    client_mac: [u8; 6],
+    requested_ip: [u8; 4],
+    server_ip: [u8; 4],
+    xid: u32,
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let dhcp_len = 240 + 10; // 240 header + 3 opt53 + 6 opt50 + 6 opt54 + 1 end
+    let udp_len = 8 + dhcp_len;
+    let ip_len = 20 + udp_len;
+    let total_len = 14 + ip_len;
+
+    if out.len() < total_len {
+        return Err("Output buffer too small for DHCP Request");
+    }
+
+    // 1. Ethernet Header
+    out[0..6].copy_from_slice(&[0xFF; 6]);
+    out[6..12].copy_from_slice(&client_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x0000u16.to_be_bytes());
+    out[22] = 64;
+    out[23] = IP_PROTO_UDP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&[0, 0, 0, 0]);
+    out[30..34].copy_from_slice(&[255, 255, 255, 255]);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. UDP Header
+    out[34..36].copy_from_slice(&UDP_PORT_DHCP_CLIENT.to_be_bytes());
+    out[36..38].copy_from_slice(&UDP_PORT_DHCP_SERVER.to_be_bytes());
+    out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+    out[40..42].copy_from_slice(&[0, 0]);
+
+    // 4. DHCP Payload
+    let dhcp_start = 42;
+    for b in &mut out[dhcp_start..dhcp_start + dhcp_len] {
+        *b = 0;
+    }
+    out[dhcp_start] = DHCP_OP_BOOTREQUEST;
+    out[dhcp_start + 1] = 1;
+    out[dhcp_start + 2] = 6;
+    out[dhcp_start + 3] = 0;
+    out[dhcp_start + 4..dhcp_start + 8].copy_from_slice(&xid.to_be_bytes());
+    out[dhcp_start + 10..dhcp_start + 12].copy_from_slice(&0x8000u16.to_be_bytes());
+    out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
+    out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+    // Options: 53 (Request) + 50 (Requested IP) + 255 (End)
+    out[dhcp_start + 240] = 53;
+    out[dhcp_start + 241] = 1;
+    out[dhcp_start + 242] = DHCP_REQUEST;
+    out[dhcp_start + 243] = 50; // Requested IP address
+    out[dhcp_start + 244] = 4;
+    out[dhcp_start + 245..dhcp_start + 249].copy_from_slice(&requested_ip);
+    out[dhcp_start + 249] = 255;
+
+    let _ = server_ip;
+    Ok(total_len)
+}
+
+// -----------------------------------------------------------------------------
 // PACKET BUILDERS
 // -----------------------------------------------------------------------------
 
@@ -623,5 +927,114 @@ mod tests {
         let mut tx_buf = [0u8; 128];
         let resp = engine.process_packet(&pkt, &mut tx_buf).unwrap();
         assert!(resp.is_none());
+    }
+
+    #[test]
+    fn test_16_parse_udp_header_valid() {
+        let mut udp_raw = [0u8; 16];
+        udp_raw[0..2].copy_from_slice(&68u16.to_be_bytes());
+        udp_raw[2..4].copy_from_slice(&67u16.to_be_bytes());
+        udp_raw[4..6].copy_from_slice(&16u16.to_be_bytes());
+        udp_raw[6..8].copy_from_slice(&0u16.to_be_bytes());
+        udp_raw[8..16].copy_from_slice(&[1, 2, 3, 4, 5, 6, 7, 8]);
+
+        let (hdr, payload) = parse_udp_header(&udp_raw).unwrap();
+        assert_eq!(hdr.src_port, 68);
+        assert_eq!(hdr.dst_port, 67);
+        assert_eq!(hdr.length, 16);
+        assert_eq!(payload.len(), 8);
+    }
+
+    #[test]
+    fn test_17_parse_udp_short_fails() {
+        let udp_raw = [0u8; 6];
+        assert!(parse_udp_header(&udp_raw).is_err());
+    }
+
+    #[test]
+    fn test_18_build_and_parse_dhcp_discover() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let mut buf = [0u8; 512];
+        let len = build_dhcp_discover(mac, 0x12345678, &mut buf).unwrap();
+        assert!(len >= 286);
+
+        // Verify Ethernet
+        let (eth, ip_bytes) = parse_ethernet_header(&buf[..len]).unwrap();
+        assert_eq!(eth.dst_mac, [0xFF; 6]);
+        assert_eq!(eth.src_mac, mac);
+
+        // Verify IPv4
+        let (ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        assert_eq!(ip.protocol, IP_PROTO_UDP);
+        assert_eq!(ip.src_ip, [0, 0, 0, 0]);
+        assert_eq!(ip.dst_ip, [255, 255, 255, 255]);
+
+        // Verify UDP
+        let (udp, dhcp_bytes) = parse_udp_header(udp_bytes).unwrap();
+        assert_eq!(udp.src_port, 68);
+        assert_eq!(udp.dst_port, 67);
+
+        // Verify DHCP
+        let dhcp = parse_dhcp_message(dhcp_bytes).unwrap();
+        assert_eq!(dhcp.op, DHCP_OP_BOOTREQUEST);
+        assert_eq!(dhcp.xid, 0x12345678);
+        assert_eq!(dhcp.msg_type, Some(DHCP_DISCOVER));
+    }
+
+    #[test]
+    fn test_19_build_and_parse_dhcp_request() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let req_ip = [10, 0, 2, 15];
+        let srv_ip = [10, 0, 2, 2];
+        let mut buf = [0u8; 512];
+        let len = build_dhcp_request(mac, req_ip, srv_ip, 0x87654321, &mut buf).unwrap();
+
+        let (_eth, ip_bytes) = parse_ethernet_header(&buf[..len]).unwrap();
+        let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
+        let (_udp, dhcp_bytes) = parse_udp_header(udp_bytes).unwrap();
+        let dhcp = parse_dhcp_message(dhcp_bytes).unwrap();
+
+        assert_eq!(dhcp.op, DHCP_OP_BOOTREQUEST);
+        assert_eq!(dhcp.xid, 0x87654321);
+        assert_eq!(dhcp.msg_type, Some(DHCP_REQUEST));
+    }
+
+    #[test]
+    fn test_20_parse_dhcp_offer_message() {
+        let mut msg = [0u8; 300];
+        msg[0] = DHCP_OP_BOOTREPLY;
+        msg[1] = 1; // Ethernet
+        msg[2] = 6;
+        msg[4..8].copy_from_slice(&0xAABBCCDDu32.to_be_bytes()); // XID
+        msg[16..20].copy_from_slice(&[10, 0, 2, 15]); // yiaddr
+        msg[20..24].copy_from_slice(&[10, 0, 2, 2]); // siaddr
+        msg[236..240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+        // Option 53: Offer
+        msg[240] = 53;
+        msg[241] = 1;
+        msg[242] = DHCP_OFFER;
+        // Option 54: Server ID
+        msg[243] = 54;
+        msg[244] = 4;
+        msg[245..249].copy_from_slice(&[10, 0, 2, 2]);
+        // Option 1: Subnet mask
+        msg[249] = 1;
+        msg[250] = 4;
+        msg[251..255].copy_from_slice(&[255, 255, 255, 0]);
+        // Option 3: Router
+        msg[255] = 3;
+        msg[256] = 4;
+        msg[257..261].copy_from_slice(&[10, 0, 2, 2]);
+        // Option 255: End
+        msg[261] = 255;
+
+        let parsed = parse_dhcp_message(&msg).unwrap();
+        assert_eq!(parsed.op, DHCP_OP_BOOTREPLY);
+        assert_eq!(parsed.yiaddr, [10, 0, 2, 15]);
+        assert_eq!(parsed.msg_type, Some(DHCP_OFFER));
+        assert_eq!(parsed.server_ip, Some([10, 0, 2, 2]));
+        assert_eq!(parsed.subnet_mask, Some([255, 255, 255, 0]));
+        assert_eq!(parsed.router_ip, Some([10, 0, 2, 2]));
     }
 }

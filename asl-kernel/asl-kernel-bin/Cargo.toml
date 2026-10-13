@@ -18,6 +18,7 @@ asl-router-pci = { path = "../../router/asl-router-pci" }
 asl-router-drivers-virtio = { path = "../../router/asl-router-drivers-virtio" }
 asl-router-netbuf = { path = "../../router/asl-router-netbuf" }
 asl-router-netstack = { path = "../../router/asl-router-netstack" }
+asl-router-hwinv = { path = "../../router/asl-router-hwinv" }
 
 [lib]
 crate-type = ["rlib"]

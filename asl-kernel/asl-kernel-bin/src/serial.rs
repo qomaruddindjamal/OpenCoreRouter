@@ -84,4 +84,26 @@ impl SerialPort {
             self.write_byte(b);
         }
     }
+
+    pub fn has_data(&self) -> bool {
+        #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+        unsafe {
+            (inb(COM1_PORT + 5) & 0x01) != 0
+        }
+        #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+        false
+    }
+
+    pub fn read_byte(&self) -> Option<u8> {
+        if self.has_data() {
+            #[cfg(all(target_arch = "x86_64", target_os = "none"))]
+            unsafe {
+                Some(inb(COM1_PORT))
+            }
+            #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
+            None
+        } else {
+            None
+        }
+    }
 }

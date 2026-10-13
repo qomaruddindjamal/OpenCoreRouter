@@ -66,20 +66,20 @@ impl PciDevice {
 
 #[inline(always)]
 unsafe fn pci_outd(port: u16, val: u32) {
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
     core::arch::asm!(
         "out dx, eax",
         in("dx") port,
         in("eax") val,
         options(nomem, nostack, preserves_flags)
     );
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
     let _ = (port, val);
 }
 
 #[inline(always)]
 unsafe fn pci_ind(port: u16) -> u32 {
-    #[cfg(target_arch = "x86_64")]
+    #[cfg(all(target_arch = "x86_64", target_os = "none"))]
     {
         let ret: u32;
         core::arch::asm!(
@@ -90,10 +90,10 @@ unsafe fn pci_ind(port: u16) -> u32 {
         );
         ret
     }
-    #[cfg(not(target_arch = "x86_64"))]
+    #[cfg(not(all(target_arch = "x86_64", target_os = "none")))]
     {
         let _ = port;
-        0
+        0xFFFF_FFFF
     }
 }
 

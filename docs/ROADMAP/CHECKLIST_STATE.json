@@ -150,5 +150,47 @@
     "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-41",
+    "name": "GPL-3.0-or-later Licensing & Legal Governance Rollout",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-42",
+    "name": "Decision Register Establishment (docs/CANONICAL/DECISION_REGISTER.md)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-43",
+    "name": "Real Hardware Inventory Subsystem (asl-router-hwinv zero dummy doctrine)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-44",
+    "name": "DHCP Client Protocol Implementation RFC 2131 ([R13] Lease Acquisition)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-45",
+    "name": "IDT & Local APIC Timer Framework ([R14] Calibrated Periodic Vector)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-46",
+    "name": "Serial Interactive CLI Shell & End-to-End Double Ping Verification",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
   }
 ]

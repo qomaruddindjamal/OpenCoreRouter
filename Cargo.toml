@@ -20,6 +20,7 @@ members = [
     "router/asl-router-netbuf",
     "router/asl-router-netstack",
     "router/asl-router-drivers-virtio",
+    "router/asl-router-hwinv",
 ]
 
 [workspace.package]

@@ -28,6 +28,7 @@ dependencies = [
  "asl-memory",
  "asl-router-drivers-virtio",
  "asl-router-fastpath",
+ "asl-router-hwinv",
  "asl-router-netbuf",
  "asl-router-netstack",
  "asl-router-pci",
@@ -64,6 +65,13 @@ name = "asl-router-gpon-ont"
 version = "0.1.0"
 dependencies = [
  "asl-kernel-core",
+]
+
+[[package]]
+name = "asl-router-hwinv"
+version = "0.1.0"
+dependencies = [
+ "asl-router-pci",
 ]
 
 [[package]]
