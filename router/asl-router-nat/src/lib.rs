@@ -201,6 +201,21 @@ impl NatEngine {
                     new_src_port: entry.trans_src_port,
                 };
             }
+            // 1b. Cek apakah ini reverse path dari koneksi DNAT aktif (trans_dst -> orig_src)
+            if entry.state != ConntrackState::Unused
+                && entry.protocol == protocol
+                && entry.trans_dst_ip == src_ip
+                && entry.orig_src_ip == dst_ip
+                && entry.trans_dst_port == src_port
+                && entry.orig_src_port == dst_port
+            {
+                entry.packets_rev = entry.packets_rev.wrapping_add(1);
+                entry.expiry_tick = self.current_tick + Self::timeout_for_proto(protocol);
+                return NatAction::TranslateSnat {
+                    new_src_ip: self.wan_ip,
+                    new_src_port: entry.orig_dst_port,
+                };
+            }
         }
 
         // 2. Buat sesi SNAT baru jika belum ada
@@ -459,5 +474,53 @@ mod tests {
         assert_eq!(nat.wan_ip, [10, 0, 0, 1]);
         nat.set_wan_ip([192, 168, 57, 99]);
         assert_eq!(nat.wan_ip, [192, 168, 57, 99]);
+    }
+
+    #[test]
+    fn test_09_dnat_udp_bidirectional_flow() {
+        let wan_ip = [192, 168, 57, 10];
+        let mut nat = NatEngine::new(wan_ip);
+        // Rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
+        assert!(nat.add_dnat_rule(7777, PROTO_UDP, [192, 168, 56, 2], 7777).is_ok());
+
+        // Host WAN (192.168.57.1:54321) sends UDP packet to WAN:7777
+        let ingress_act = nat.process_ingress([192, 168, 57, 1], wan_ip, 54321, 7777, PROTO_UDP);
+        match ingress_act {
+            NatAction::TranslateDnat { new_dst_ip, new_dst_port } => {
+                assert_eq!(new_dst_ip, [192, 168, 56, 2]);
+                assert_eq!(new_dst_port, 7777);
+            }
+            _ => panic!("Expected DNAT Translation for incoming WAN packet"),
+        }
+        assert_eq!(nat.active_sessions, 1);
+
+        // Klien LAN (192.168.56.2:7777) sends UDP reply back to Host WAN (192.168.57.1:54321)
+        let egress_act = nat.process_egress([192, 168, 56, 2], [192, 168, 57, 1], 7777, 54321, PROTO_UDP);
+        match egress_act {
+            NatAction::TranslateSnat { new_src_ip, new_src_port } => {
+                assert_eq!(new_src_ip, wan_ip);
+                assert_eq!(new_src_port, 7777); // Translated back to original advertised WAN port
+            }
+            _ => panic!("Expected Reverse SNAT Translation for client reply"),
+        }
+    }
+
+    #[test]
+    fn test_10_multiple_parallel_connections_no_overflow() {
+        let wan_ip = [192, 168, 57, 10];
+        let mut nat = NatEngine::new(wan_ip);
+        // Simulate 10 parallel connections from LAN clients
+        for i in 0..10 {
+            let act = nat.process_egress(
+                [192, 168, 56, 2],
+                [192, 168, 57, 1],
+                (10000 + i) as u16,
+                80,
+                PROTO_TCP,
+            );
+            assert!(matches!(act, NatAction::TranslateSnat { .. }));
+        }
+        assert_eq!(nat.active_sessions, 10);
+        assert_eq!(nat.table_full_drops, 0);
     }
 }

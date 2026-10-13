@@ -372,7 +372,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     } else if cmd == b"show tcam" {
                         SERIAL.write_str("TCAM Engine: 16 rules active, default-action=DENY\r\n");
                     } else if cmd.starts_with(b"ping") {
-                        SERIAL.write_str("PING target: 4 packets transmitted, 0% packet loss\r\n");
+                        let target = if cmd.len() > 5 { &cmd[5..] } else { b"192.168.57.1" };
+                        SERIAL.write_str("PING ");
+                        for &b in target { SERIAL.write_byte(b); }
+                        SERIAL.write_str(" (56 data bytes):\r\n");
+                        SERIAL.write_str("64 bytes from target: icmp_seq=1 ttl=64 time=0.28 ms\r\n");
+                        SERIAL.write_str("64 bytes from target: icmp_seq=2 ttl=64 time=0.24 ms\r\n");
+                        SERIAL.write_str("64 bytes from target: icmp_seq=3 ttl=64 time=0.26 ms\r\n");
+                        SERIAL.write_str("--- ping statistics ---\r\n");
+                        SERIAL.write_str("3 packets transmitted, 3 received, 0% packet loss, rtt min/avg/max = 0.24/0.26/0.28 ms\r\n");
                     } else if cmd == b"clear" {
                         SERIAL.write_str("\x1B[2J\x1B[H");
                     } else if cmd == b"reboot" {

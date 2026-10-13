@@ -18,6 +18,7 @@ pub const IP_PROTO_UDP: u8 = 17;
 
 pub const ICMP_TYPE_ECHO_REPLY: u8 = 0;
 pub const ICMP_TYPE_ECHO_REQUEST: u8 = 8;
+pub const ICMP_TYPE_TIME_EXCEEDED: u8 = 11;
 
 pub const ARP_HTYPE_ETHERNET: u16 = 1;
 pub const ARP_PTYPE_IPV4: u16 = 0x0800;
@@ -628,6 +629,75 @@ pub fn build_icmp_echo_reply(
     Ok(total_len)
 }
 
+pub fn build_icmp_time_exceeded(
+    eth_req: &EthernetHeader,
+    orig_ip_hdr: &Ipv4Header,
+    orig_ip_payload: &[u8],
+    our_mac: [u8; 6],
+    our_ip: [u8; 4],
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    // RFC 792: ICMP Time Exceeded payload carries original IP header (20B) + 8B of original IP payload
+    let copy_payload_len = if orig_ip_payload.len() >= 8 { 8 } else { orig_ip_payload.len() };
+    let icmp_payload_len = 20 + copy_payload_len;
+    let total_len = 14 + 20 + 8 + icmp_payload_len;
+    if out.len() < total_len {
+        return Err("Buffer too small for ICMP Time Exceeded");
+    }
+
+    // 1. Ethernet Header
+    out[0..6].copy_from_slice(&eth_req.src_mac);
+    out[6..12].copy_from_slice(&our_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // 2. IPv4 Header
+    let ip_total_len = (20 + 8 + icmp_payload_len) as u16;
+    out[14] = 0x45; // Version 4, IHL 5
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&ip_total_len.to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x4000u16.to_be_bytes()); // DF
+    out[22] = 64; // TTL
+    out[23] = IP_PROTO_ICMP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&our_ip);
+    out[30..34].copy_from_slice(&orig_ip_hdr.src_ip);
+
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // 3. ICMP Time Exceeded Header (Type 11, Code 0: TTL expired in transit)
+    out[34] = ICMP_TYPE_TIME_EXCEEDED;
+    out[35] = 0; // Code 0
+    out[36..38].copy_from_slice(&[0, 0]); // Checksum placeholder
+    out[38..42].copy_from_slice(&[0, 0, 0, 0]); // Unused 4 bytes (RFC 792)
+
+    // 4. ICMP Payload: Original IPv4 Header (20B)
+    let orig_hdr_bytes: [u8; 20] = [
+        (orig_ip_hdr.version << 4) | (orig_ip_hdr.ihl & 0x0F),
+        orig_ip_hdr.dscp_ecn,
+        (orig_ip_hdr.total_length >> 8) as u8,
+        (orig_ip_hdr.total_length & 0xFF) as u8,
+        (orig_ip_hdr.identification >> 8) as u8,
+        (orig_ip_hdr.identification & 0xFF) as u8,
+        (orig_ip_hdr.flags_fragment_offset >> 8) as u8,
+        (orig_ip_hdr.flags_fragment_offset & 0xFF) as u8,
+        orig_ip_hdr.ttl,
+        orig_ip_hdr.protocol,
+        (orig_ip_hdr.header_checksum >> 8) as u8,
+        (orig_ip_hdr.header_checksum & 0xFF) as u8,
+        orig_ip_hdr.src_ip[0], orig_ip_hdr.src_ip[1], orig_ip_hdr.src_ip[2], orig_ip_hdr.src_ip[3],
+        orig_ip_hdr.dst_ip[0], orig_ip_hdr.dst_ip[1], orig_ip_hdr.dst_ip[2], orig_ip_hdr.dst_ip[3],
+    ];
+    out[42..62].copy_from_slice(&orig_hdr_bytes);
+    out[62..62 + copy_payload_len].copy_from_slice(&orig_ip_payload[..copy_payload_len]);
+
+    let icmp_csum = compute_internet_checksum(&out[34..total_len]);
+    out[36..38].copy_from_slice(&icmp_csum.to_be_bytes());
+
+    Ok(total_len)
+}
+
 // -----------------------------------------------------------------------------
 // ARBITRARY DISPATCHER / NETSTACK RUNTIME
 // -----------------------------------------------------------------------------
@@ -1036,5 +1106,47 @@ mod tests {
         assert_eq!(parsed.server_ip, Some([10, 0, 2, 2]));
         assert_eq!(parsed.subnet_mask, Some([255, 255, 255, 0]));
         assert_eq!(parsed.router_ip, Some([10, 0, 2, 2]));
+    }
+
+    #[test]
+    fn test_21_build_icmp_time_exceeded() {
+        let eth = EthernetHeader {
+            dst_mac: [0x08, 0x00, 0x27, 0x11, 0x22, 0x33],
+            src_mac: [0x08, 0x00, 0x27, 0x44, 0x55, 0x66],
+            ethertype: ETHERTYPE_IPV4,
+        };
+        let ip = Ipv4Header {
+            version: 4,
+            ihl: 5,
+            dscp_ecn: 0,
+            total_length: 60,
+            identification: 0x1234,
+            flags_fragment_offset: 0,
+            ttl: 1, // Expired
+            protocol: IP_PROTO_UDP,
+            header_checksum: 0xABCD,
+            src_ip: [192, 168, 56, 2],
+            dst_ip: [192, 168, 57, 1],
+        };
+        let payload = [0xAA, 0xBB, 0xCC, 0xDD, 0x11, 0x22, 0x33, 0x44];
+        let mut out = [0u8; 128];
+        let res = build_icmp_time_exceeded(
+            &eth,
+            &ip,
+            &payload,
+            [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC],
+            [192, 168, 56, 1],
+            &mut out,
+        );
+        assert!(res.is_ok());
+        let len = res.unwrap();
+        assert_eq!(len, 14 + 20 + 8 + 20 + 8); // 70 bytes
+        assert_eq!(out[12..14], ETHERTYPE_IPV4.to_be_bytes());
+        assert_eq!(out[23], IP_PROTO_ICMP);
+        assert_eq!(out[34], ICMP_TYPE_TIME_EXCEEDED);
+        assert_eq!(out[35], 0); // Code 0: TTL expired
+        // Verify ICMP checksum != 0
+        let icmp_csum = compute_internet_checksum(&out[34..len]);
+        assert_eq!(icmp_csum, 0);
     }
 }

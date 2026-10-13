@@ -20,7 +20,8 @@
 | [`RND_08_VM_BOOT_AND_BAREMETAL_STRATEGY.md`](file:///c:/OpenCR/docs/RND/RND_08_VM_BOOT_AND_BAREMETAL_STRATEGY.md) | Strategi Booting Hybrid ISO Limine & VirtualBox | `DOCUMENTED` | Sprint Boot Rinjani |
 | [`RND_09_PCI_VIRTIO_NETSTACK_NET01.md`](file:///c:/OpenCR/docs/RND/RND_09_PCI_VIRTIO_NETSTACK_NET01.md) | PCI Scanning, VirtIO-Net Driver & ICMP Ping Proof | `DOCUMENTED` | Sprint NET-01 |
 | [`RND_10_GOVERNANCE_NET02_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_10_GOVERNANCE_NET02_REPORT.md) | Lisensi GPL-3.0, Decision Register, HWINV, DHCP & CLI | `VERIFIED` | Sprint GOV-NET02 |
-| [`RND_11_ROUTE01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_11_ROUTE01_REPORT.md) | Static Routing, LPM Trie, NAT/Conntrack & Forwarding | `IN PROGRESS` | Sprint ROUTE-01 |
+| [`RND_11_ROUTE01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_11_ROUTE01_REPORT.md) | Static Routing, LPM Trie, NAT/Conntrack & Forwarding | `VERIFIED` | Sprint ROUTE-01 |
+| [`RND_12_FWD01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_12_FWD01_REPORT.md) | Real Multi-Interface Forwarding Proof, NAT & Benchmark | `VERIFIED` | Sprint FWD-01 |
 
 ---
 

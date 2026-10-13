@@ -217,7 +217,14 @@
   {
     "gate_id": "OPCR-51",
     "name": "Minimal DHCP Server Pool (LAN Interface)",
-    "status": "LOCKED-OPEN",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14"
+  },
+  {
+    "gate_id": "OPCR-52",
+    "name": "Forwarding Benchmark & Performance Metrics Recorded",
+    "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   }

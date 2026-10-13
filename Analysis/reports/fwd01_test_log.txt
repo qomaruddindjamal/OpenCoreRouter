@@ -1,0 +1,329 @@
+﻿
+running 3 tests
+test tests::test_afdx_frame_empty_defaults ... ok
+test tests::test_spsc_ring_buffer_fifo ... ok
+test tests::test_spsc_ring_buffer_full_saturation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_boot_info_validation ... ok
+test tests::test_boot_info_zero_size_fails ... ok
+test tests::test_boot_magic_constant ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 5 tests
+test tests::test_apic_timer_calibration_struct ... ok
+test tests::test_cpu_contract ... ok
+test tests::test_idt_entry_set_handler ... ok
+test tests::test_hal_marker_info ... ok
+test tests::test_mmio_register_memory_semantics ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_kernel_init_flow ... ok
+test tests::test_kernel_init_invalid_boot_fails ... ok
+test tests::test_kernel_handover_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_kernel_executive_capacity_limit ... ok
+test tests::test_kernel_executive_registration ... ok
+test tests::test_partition_descriptor_states ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_static_page_allocator ... ok
+test tests::test_unaligned_or_invalid_free ... ok
+test tests::test_free_page_count_tracking ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 2 tests
+test tests::test_e1000_device_creation ... ok
+test tests::test_virtio_status_constants ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 6 tests
+test tests::test_align_01_cacheline_alignment ... ok
+test tests::test_dma_addr_01_zone_safety ... ok
+test tests::test_ring_saturation_full ... ok
+test tests::test_ring_push_pop_fifo ... ok
+test tests::test_dma_cache_clean_inval_call ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_operational ... ok
+test tests::test_module_name ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 4 tests
+test tests::test_cpu_inventory_probe ... ok
+test tests::test_hardware_device_entry_conversion ... ok
+test tests::test_hardware_inventory_empty_init ... ok
+test tests::test_inventory_scan_capacity ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 10 tests
+test tests::test_01_exact_and_default_match ... ok
+test tests::test_02_longest_prefix_wins ... ok
+test tests::test_04_route_remove ... ok
+test tests::test_06_routing_engine_integration ... ok
+test tests::test_05_table_overflow_error ... ok
+test tests::test_03_route_update_existing ... ok
+test tests::test_07_prefix_to_mask_boundaries ... ok
+test tests::test_08_metric_priority_on_tie ... ok
+test tests::test_09_forward_multihop_gateway ... ok
+test tests::test_10_drop_unreachable_when_no_default_route ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 10 tests
+test tests::test_02_dnat_port_forward ... ok
+test tests::test_03_icmp_tracking ... ok
+test tests::test_01_snat_forward_and_reverse_path ... ok
+test tests::test_06_unmatched_ingress_untouched ... ok
+test tests::test_04_timeout_eviction ... ok
+test tests::test_07_ephemeral_port_allocation_wrap ... ok
+test tests::test_09_dnat_udp_bidirectional_flow ... ok
+test tests::test_08_set_wan_ip_dynamic ... ok
+test tests::test_05_conntrack_table_full_drop ... ok
+test tests::test_10_multiple_parallel_connections_no_overflow ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_buffer_pool_acquire_and_release ... ok
+test tests::test_buffer_pool_double_free_guard ... ok
+test tests::test_buffer_pool_exhaustion ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 21 tests
+test tests::test_01_checksum_simple ... ok
+test tests::test_06_build_arp_reply ... ok
+test tests::test_03_parse_ethernet_too_short ... ok
+test tests::test_04_parse_arp_request_valid ... ok
+test tests::test_05_parse_arp_short_fails ... ok
+test tests::test_02_parse_ethernet_header_valid ... ok
+test tests::test_07_parse_ipv4_valid ... ok
+test tests::test_08_parse_ipv4_checksum_corrupted ... ok
+test tests::test_09_parse_ipv4_fragment_dropped ... ok
+test tests::test_10_parse_icmp_echo_request_valid ... ok
+test tests::test_11_parse_icmp_bad_checksum ... ok
+test tests::test_12_build_icmp_echo_reply ... ok
+test tests::test_13_netstack_engine_arp_cycle ... ok
+test tests::test_14_netstack_engine_ignore_foreign_ip ... ok
+test tests::test_15_netstack_engine_unknown_ethertype_ignored ... ok
+test tests::test_16_parse_udp_header_valid ... ok
+test tests::test_17_parse_udp_short_fails ... ok
+test tests::test_18_build_and_parse_dhcp_discover ... ok
+test tests::test_19_build_and_parse_dhcp_request ... ok
+test tests::test_20_parse_dhcp_offer_message ... ok
+test tests::test_21_build_icmp_time_exceeded ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_pci_bar_variants ... ok
+test tests::test_pci_device_helpers ... ok
+test tests::test_pci_empty_device_is_invalid ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_name ... ok
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 9 tests
+test tests::test_tcam_vector_1_exact_match ... ok
+test tests::test_tcam_vector_2_subnet_match ... ok
+test tests::test_tcam_vector_3_wildcard_match ... ok
+test tests::test_module_marker ... ok
+test tests::test_tcam_vector_4_priority_conflict_resolution ... ok
+test tests::test_tcam_vector_5_default_deny ... ok
+test tests::test_tcam_vector_6_port_range_boundary ... ok
+test tests::test_tcam_vector_7_protocol_mismatch ... ok
+test tests::test_tcam_vector_8_table_overflow_error ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 3 tests
+test tests::test_scheduler_budget_exhaustion ... ok
+test tests::test_preemptive_scheduling ... ok
+test tests::test_scheduler_capacity_limit ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

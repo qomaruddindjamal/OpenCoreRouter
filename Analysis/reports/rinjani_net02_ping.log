@@ -1,0 +1,24 @@
+[R1] RINJANI 1.0.0 — Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R9] VIRTIO-NET UP mac=08:00:27:5E:08:33
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11] IP ADDR: 10.0.2.15/24 (dev-static)
+[R13] DHCP LEASE: discover sent, lease=10.0.2.15 (dev-static verified)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R16] NAT CONNTRACK UP (SNAT masq=192.168.57.10, DNAT :7777->192.168.56.2:7777)
+[R12] NET POLL LOOP
+rinjani-cli> 
+[NET] INGRESS ICMP ECHO REQUEST from 10.0.2.2
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.168.57.1 | Translated to 192.168.57.10 (id=40000)
+rinjani-cli> 

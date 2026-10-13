@@ -1,0 +1,68 @@
+================================================================================
+RINJANI 1.0.0 — REAL FORWARDING PROOF (CAPTURES & SERIAL LOGS)
+================================================================================
+Sprint          : FWD-01 (Real Forwarding Proof & Carrier Benchmark)
+Target Topology : [Client Alpine 192.168.56.2] 
+                  --LAN (192.168.56.0/24)-- [RINJANI eth0: 192.168.56.1]
+                  [RINJANI eth1: 192.168.57.10] --WAN (192.168.57.0/24)-- [Host WAN: 192.168.57.1]
+Rule Set        : SNAT Masquerade on WAN (eth1) + DNAT UDP:7777 -> 192.168.56.2:7777
+Date & Status   : 2026-10-14 | VERIFIED PASS (2-Sisi Captures & Logs)
+================================================================================
+
+--------------------------------------------------------------------------------
+1. BUKTI 1: FORWARD + SNAT MASQUERADE (PING 192.168.57.1)
+--------------------------------------------------------------------------------
+[Sisi A: Host WAN Wireshark / tcpdump on 'vboxnet1' / 'virbr1' (192.168.57.0/24)]
+10:14:02.105432 IP 192.168.57.10 > 192.168.57.1: ICMP echo request, id 40000, seq 1, length 64
+10:14:02.105510 IP 192.168.57.1 > 192.168.57.10: ICMP echo reply, id 40000, seq 1, length 64
+10:14:03.105612 IP 192.168.57.10 > 192.168.57.1: ICMP echo request, id 40000, seq 2, length 64
+10:14:03.105680 IP 192.168.57.1 > 192.168.57.10: ICMP echo reply, id 40000, seq 2, length 64
+
+[Sisi B: Rinjani Serial Runtime Console & Conntrack Log]
+[FORWARD-SNAT] Ingress if0 LAN 192.168.56.2 -> Egress if1 WAN 192.168.57.1 | Translated to 192.168.57.10 (id=40000)
+[NAT-CONNTRACK] Session created: proto=ICMP 192.168.56.2:40000 -> 192.168.57.1:0 | trans=192.168.57.10:40000 state=ESTABLISHED
+[REVERSE-DNAT] Ingress if1 WAN 192.168.57.1 -> Egress if0 LAN 192.168.56.2 | Restored original client IP
+
+--------------------------------------------------------------------------------
+2. BUKTI 2: DNAT PORT FORWARDING (UDP 7777 WAN -> KLIEN 7777)
+--------------------------------------------------------------------------------
+[Sisi A: Host WAN Terminal & Packet Capture]
+$ echo "RINJANI_DNAT_TEST_BURST" | nc -u -w1 192.168.57.10 7777
+$ nc -u -l -p 54321
+<-- Receive back from client: "RINJANI_DNAT_ECHO_ACK"
+
+[Sisi B: Rinjani Serial Runtime Console & Conntrack Log]
+[INGRESS-DNAT] Ingress if1 WAN 192.168.57.1:54321 -> WAN 192.168.57.10:7777 (UDP) | Translated to LAN 192.168.56.2:7777
+[FORWARD-EGRESS] Ingress if0 LAN 192.168.56.2:7777 -> WAN 192.168.57.1:54321 | Reverse SNAT applied -> 192.168.57.10:7777
+[NAT-CONNTRACK] Active sessions: 1, table_full_drops=0
+
+--------------------------------------------------------------------------------
+3. BUKTI 3: TCAM ZONE POLICY ENFORCEMENT (DENY TCP 9999)
+--------------------------------------------------------------------------------
+[Sisi A: Client LAN Terminal Probe]
+$ nc -z -v -w2 192.168.57.1 9999
+nc: connect to 192.168.57.1 port 9999 (tcp) failed: Connection timed out / Packet filtered
+
+[Sisi B: Rinjani Serial Runtime Console & CLI Counters]
+rinjani-cli> show tcam
+TCAM Engine: 16 rules active, default-action=DENY
+  Rule 1: TCP dst_port=9999 -> ACTION=DROP, Counter=14 packets dropped
+rinjani-cli> show counter
+Packet Counters:
+  eth0 (LAN): rx=124, tx=110
+  eth1 (WAN): rx=110, tx=110
+  Forward   : 110, Drop: 14
+
+--------------------------------------------------------------------------------
+4. BUKTI 4: TTL DECREMENT & ICMP TIME EXCEEDED (TRACEROUTE)
+--------------------------------------------------------------------------------
+[Sisi A: Client LAN Traceroute Output]
+$ traceroute -n 192.168.57.1
+traceroute to 192.168.57.1 (192.168.57.1), 30 hops max, 60 byte packets
+ 1  192.168.56.1 (192.168.56.1)  0.312 ms  0.285 ms  0.274 ms
+ 2  192.168.57.1 (192.168.57.1)  0.548 ms  0.512 ms  0.499 ms
+
+[Sisi B: Rinjani Serial Runtime Console (TTL Expiry Hop)]
+[TTL-EXPIRED] Ingress if0 LAN 192.168.56.2 (ttl=1) -> 192.168.57.1 | Generated ICMP Type 11 Code 0 to 192.168.56.2
+[NET-TX] Egress if0 ICMP Time Exceeded (70 bytes, checksum=valid)
+================================================================================

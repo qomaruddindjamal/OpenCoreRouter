@@ -283,4 +283,26 @@ mod tests {
 
         assert_eq!(lpm.lookup([10, 10, 1, 1]), Some(NextHop::Interface(3)));
     }
+
+    #[test]
+    fn test_09_forward_multihop_gateway() {
+        let mut re = RoutingEngine::new();
+        // Route default ke Gateway 192.168.57.1 di interface WAN (2)
+        assert!(re.add_static_route([0, 0, 0, 0], 0, [192, 168, 57, 1], 2, 100).is_ok());
+        // Route langsung ke LAN (1)
+        assert!(re.add_connected_route([192, 168, 56, 0], 24, 1).is_ok());
+
+        assert_eq!(
+            re.route_packet([8, 8, 8, 8]),
+            NextHop::Gateway { interface: 2, next_hop_ip: [192, 168, 57, 1] }
+        );
+        assert_eq!(re.route_packet([192, 168, 56, 50]), NextHop::Interface(1));
+    }
+
+    #[test]
+    fn test_10_drop_unreachable_when_no_default_route() {
+        let mut re = RoutingEngine::new();
+        assert!(re.add_connected_route([10, 0, 0, 0], 8, 1).is_ok());
+        assert_eq!(re.route_packet([192, 168, 1, 1]), NextHop::Drop);
+    }
 }
