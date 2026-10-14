@@ -28,6 +28,7 @@ members = [
     "router/asl-router-api",
     "router/asl-router-webui",
     "router/asl-router-drivers-virtio-blk",
+    "router/asl-router-gpt",
 ]
 
 [workspace.package]
