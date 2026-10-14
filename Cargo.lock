@@ -138,6 +138,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "asl-router-persistence"
+version = "0.1.0"
+dependencies = [
+ "asl-router-drivers-virtio-blk",
+ "asl-router-gpt",
+]
+
+[[package]]
 name = "asl-router-qos"
 version = "0.1.0"
 dependencies = [

@@ -1,0 +1,10 @@
+[package]
+name = "asl-router-persistence"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-gpt = { path = "../asl-router-gpt" }
+asl-router-drivers-virtio-blk = { path = "../asl-router-drivers-virtio-blk" }

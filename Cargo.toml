@@ -29,6 +29,7 @@ members = [
     "router/asl-router-webui",
     "router/asl-router-drivers-virtio-blk",
     "router/asl-router-gpt",
+    "router/asl-router-persistence",
 ]
 
 [workspace.package]
