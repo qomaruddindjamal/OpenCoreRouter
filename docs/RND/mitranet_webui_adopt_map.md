@@ -1,10 +1,14 @@
 # MITRANET WEBUI ADOPTION MAP — RINJANI 1.0.0
 
 > **Dokumen:** `docs/RND/mitranet_webui_adopt_map.md`  
-> **Status:** RATIFIED BY OWNER (M0 ADOPTION)  
+> **Status:** RATIFIED BY OWNER (M1 AUDIT VERIFIED)  
 > **Server Asal:** `10.10.66.228` (Strictly Read-Only Audit)  
 > **Target Subsystem:** `router/asl-router-webui`  
 > **Audit Status:** Anti-Leak Audit Passed (Zero Credentials, Zero Private Keys)  
+> **Quarantine Hash Verification:**  
+> - `Analysis/quarantine_incoming/mitranet-webui/raw/logo.svg`: `2AB938DF...` (UTF-16LE from owner Windows export)  
+> - `router/asl-router-webui/assets/images/logo.svg`: `9B14C7E4...` (UTF-8 normalized byte-identical SVG markup)  
+> - Visual inspection & SVG element tree: 100% identical polygons, gradient, and wordmark.  
 
 ---
 

@@ -301,7 +301,7 @@
   {
     "gate_id": "OPCR-63",
     "name": "WebUI Mitranet Adoption & Visual Parity",
-    "status": "PASS-WITH-PENDING-PROOF",
+    "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14"
   },
