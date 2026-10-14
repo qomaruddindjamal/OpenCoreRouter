@@ -594,6 +594,164 @@ pub fn build_dhcp_request_with_hostname(
 }
 
 // -----------------------------------------------------------------------------
+// DHCP CLIENT STATE MACHINE (RFC 2131 — OPCR-72 STRICT NO-FALLBACK MODE)
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DhcpClientState {
+    Init,
+    Selecting { xid: u32, elapsed_ticks: u32, retries: u8 },
+    Requesting { xid: u32, offered_ip: [u8; 4], server_ip: [u8; 4], elapsed_ticks: u32, retries: u8 },
+    Bound { ip: [u8; 4], netmask: [u8; 4], gateway: [u8; 4], lease_time: u32 },
+    HaltedNoOffer,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DhcpClientConfig {
+    pub strict_net: bool,
+    pub timeout_ticks: u32,
+    pub max_retries: u8,
+}
+
+impl Default for DhcpClientConfig {
+    fn default() -> Self {
+        Self {
+            strict_net: true,
+            timeout_ticks: 1500, // 15 seconds at 100 ticks/sec
+            max_retries: 4,
+        }
+    }
+}
+
+pub struct DhcpClientEngine {
+    pub state: DhcpClientState,
+    pub config: DhcpClientConfig,
+    pub client_mac: [u8; 6],
+    pub current_xid: u32,
+}
+
+impl DhcpClientEngine {
+    pub const fn new(client_mac: [u8; 6], config: DhcpClientConfig) -> Self {
+        Self {
+            state: DhcpClientState::Init,
+            config,
+            client_mac,
+            current_xid: 0x52494E4A, // "RINJ"
+        }
+    }
+
+    pub fn start_discover(&mut self, xid: u32) -> DhcpClientState {
+        self.current_xid = xid;
+        self.state = DhcpClientState::Selecting {
+            xid,
+            elapsed_ticks: 0,
+            retries: 0,
+        };
+        self.state
+    }
+
+    pub fn on_tick(&mut self, delta_ticks: u32) -> DhcpClientState {
+        match self.state {
+            DhcpClientState::Selecting { xid, elapsed_ticks, retries } => {
+                let new_elapsed = elapsed_ticks.saturating_add(delta_ticks);
+                if new_elapsed >= self.config.timeout_ticks {
+                    if self.config.strict_net {
+                        self.state = DhcpClientState::HaltedNoOffer;
+                    } else {
+                        // Dev mode non-strict
+                        self.state = DhcpClientState::HaltedNoOffer;
+                    }
+                } else {
+                    self.state = DhcpClientState::Selecting {
+                        xid,
+                        elapsed_ticks: new_elapsed,
+                        retries,
+                    };
+                }
+            }
+            DhcpClientState::Requesting { xid, offered_ip, server_ip, elapsed_ticks, retries } => {
+                let new_elapsed = elapsed_ticks.saturating_add(delta_ticks);
+                if new_elapsed >= self.config.timeout_ticks {
+                    self.state = DhcpClientState::HaltedNoOffer;
+                } else {
+                    self.state = DhcpClientState::Requesting {
+                        xid,
+                        offered_ip,
+                        server_ip,
+                        elapsed_ticks: new_elapsed,
+                        retries,
+                    };
+                }
+            }
+            _ => {}
+        }
+        self.state
+    }
+
+    pub fn handle_incoming_packet(&mut self, packet: &[u8]) -> Result<Option<DhcpClientState>, &'static str> {
+        let (_eth, ip_bytes) = parse_ethernet_header(packet)?;
+        let (ip, udp_bytes) = parse_ipv4_header(ip_bytes)?;
+        if ip.protocol != IP_PROTO_UDP {
+            return Ok(None);
+        }
+        let (udp, dhcp_bytes) = parse_udp_header(udp_bytes)?;
+        if udp.dst_port != UDP_PORT_DHCP_CLIENT {
+            return Ok(None);
+        }
+        let dhcp = parse_dhcp_message(dhcp_bytes)?;
+
+        match self.state {
+            DhcpClientState::Selecting { xid, .. } => {
+                if dhcp.xid == xid && dhcp.msg_type == Some(DHCP_OFFER) {
+                    let offered_ip = dhcp.yiaddr;
+                    let server_ip = dhcp.server_ip.unwrap_or(ip.src_ip);
+                    self.state = DhcpClientState::Requesting {
+                        xid,
+                        offered_ip,
+                        server_ip,
+                        elapsed_ticks: 0,
+                        retries: 0,
+                    };
+                    return Ok(Some(self.state));
+                }
+            }
+            DhcpClientState::Requesting { xid, offered_ip, .. } => {
+                if dhcp.xid == xid && dhcp.msg_type == Some(DHCP_ACK) {
+                    let netmask = dhcp.subnet_mask.unwrap_or([255, 255, 255, 0]);
+                    let gateway = dhcp.router_ip.unwrap_or([offered_ip[0], offered_ip[1], offered_ip[2], 1]);
+                    let lease_time = dhcp.lease_time.unwrap_or(86400);
+                    self.state = DhcpClientState::Bound {
+                        ip: offered_ip,
+                        netmask,
+                        gateway,
+                        lease_time,
+                    };
+                    return Ok(Some(self.state));
+                } else if dhcp.xid == xid && dhcp.msg_type == Some(DHCP_NAK) {
+                    if self.config.strict_net {
+                        self.state = DhcpClientState::HaltedNoOffer;
+                    } else {
+                        self.state = DhcpClientState::Init;
+                    }
+                    return Ok(Some(self.state));
+                }
+            }
+            _ => {}
+        }
+
+        Ok(None)
+    }
+
+    pub fn is_halted(&self) -> bool {
+        matches!(self.state, DhcpClientState::HaltedNoOffer)
+    }
+
+    pub fn is_bound(&self) -> bool {
+        matches!(self.state, DhcpClientState::Bound { .. })
+    }
+}
+
+// -----------------------------------------------------------------------------
 // DHCP SERVER ENGINE (RFC 2131 — BIND ETH1 ONLY)
 // -----------------------------------------------------------------------------
 
@@ -2317,6 +2475,153 @@ mod tests {
         assert_eq!(u16::from_be_bytes([dns_bytes[0], dns_bytes[1]]), 0x4321);
         assert_eq!(u16::from_be_bytes([dns_bytes[2], dns_bytes[3]]), 0x8180);
         assert_eq!(&dns_bytes[dns_bytes.len() - 4..], &[192, 168, 56, 1]);
+    }
+
+    #[test]
+    fn test_41_dhcp_client_strict_mode_timeout_halts() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let config = DhcpClientConfig {
+            strict_net: true,
+            timeout_ticks: 1500, // 15 seconds
+            max_retries: 4,
+        };
+        let mut client = DhcpClientEngine::new(mac, config);
+        client.start_discover(0x52494E4A);
+
+        // Advance 1400 ticks (14 seconds) - still selecting
+        client.on_tick(1400);
+        assert!(!client.is_halted());
+        assert!(!client.is_bound());
+
+        // Advance another 100 ticks (reaches 1500 ticks) - strictly halts
+        client.on_tick(100);
+        assert!(client.is_halted());
+        assert_eq!(client.state, DhcpClientState::HaltedNoOffer);
+    }
+
+    #[test]
+    fn test_42_dhcp_client_dora_state_progression() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let srv_mac = [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC];
+        let config = DhcpClientConfig::default();
+        let mut client = DhcpClientEngine::new(mac, config);
+        let xid = 0x11223344;
+        client.start_discover(xid);
+
+        // Build simulated OFFER packet
+        let mut offer_buf = [0u8; 512];
+        let offer_len = build_dhcp_server_reply(
+            mac,
+            [192, 0, 2, 100],
+            [192, 0, 2, 254],
+            srv_mac,
+            [255, 255, 255, 0],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            86400,
+            xid,
+            false, // OFFER
+            &mut offer_buf,
+        ).unwrap();
+
+        let state = client.handle_incoming_packet(&offer_buf[..offer_len]).unwrap();
+        assert!(state.is_some());
+        assert_eq!(
+            client.state,
+            DhcpClientState::Requesting {
+                xid,
+                offered_ip: [192, 0, 2, 100],
+                server_ip: [192, 0, 2, 254],
+                elapsed_ticks: 0,
+                retries: 0,
+            }
+        );
+
+        // Build simulated ACK packet
+        let mut ack_buf = [0u8; 512];
+        let ack_len = build_dhcp_server_reply(
+            mac,
+            [192, 0, 2, 100],
+            [192, 0, 2, 254],
+            srv_mac,
+            [255, 255, 255, 0],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            86400,
+            xid,
+            true, // ACK
+            &mut ack_buf,
+        ).unwrap();
+
+        let state_ack = client.handle_incoming_packet(&ack_buf[..ack_len]).unwrap();
+        assert!(state_ack.is_some());
+        assert!(client.is_bound());
+        assert!(!client.is_halted());
+        if let DhcpClientState::Bound { ip, gateway, .. } = client.state {
+            assert_eq!(ip, [192, 0, 2, 100]);
+            assert_eq!(gateway, [192, 0, 2, 254]);
+        } else {
+            panic!("Client should be in Bound state");
+        }
+    }
+
+    #[test]
+    fn test_43_dhcp_client_nak_triggers_halt_in_strict_mode() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let srv_mac = [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC];
+        let config = DhcpClientConfig { strict_net: true, ..Default::default() };
+        let mut client = DhcpClientEngine::new(mac, config);
+        let xid = 0x99887766;
+        client.start_discover(xid);
+
+        // Advance to Requesting
+        client.state = DhcpClientState::Requesting {
+            xid,
+            offered_ip: [192, 0, 2, 100],
+            server_ip: [192, 0, 2, 254],
+            elapsed_ticks: 0,
+            retries: 0,
+        };
+
+        // Build simulated NAK packet manually (DHCP Reply with Option 53 = 6)
+        let mut nak_buf = [0u8; 512];
+        let nak_len = build_dhcp_server_reply(
+            mac,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            srv_mac,
+            [255, 255, 255, 0],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            0,
+            xid,
+            false,
+            &mut nak_buf,
+        ).unwrap();
+        // Overwrite Option 53 with DHCP_NAK (6)
+        // Offset of Opt53 in DHCP Server Reply: 14 eth + 20 ip + 8 udp + 240 dhcp + 2 (opt53 type & len) = 284
+        nak_buf[284] = DHCP_NAK;
+
+        client.handle_incoming_packet(&nak_buf[..nak_len]).unwrap();
+        assert!(client.is_halted());
+        assert_eq!(client.state, DhcpClientState::HaltedNoOffer);
+    }
+
+    #[test]
+    fn test_44_dhcp_client_requesting_timeout_halts() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let config = DhcpClientConfig { strict_net: true, timeout_ticks: 500, max_retries: 3 };
+        let mut client = DhcpClientEngine::new(mac, config);
+        client.state = DhcpClientState::Requesting {
+            xid: 0x1234,
+            offered_ip: [192, 0, 2, 100],
+            server_ip: [192, 0, 2, 254],
+            elapsed_ticks: 0,
+            retries: 0,
+        };
+
+        client.on_tick(500);
+        assert!(client.is_halted());
     }
 }
 

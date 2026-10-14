@@ -29,8 +29,13 @@ asl-router-persistence = { path = "../../router/asl-router-persistence" }
 [lib]
 crate-type = ["rlib"]
 
+[features]
+default = []
+qemu-dev = []
+
 [[bin]]
 name = "asl-kernel"
 path = "src/main.rs"
 test = false
 bench = false
+

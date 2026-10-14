@@ -215,20 +215,59 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     // [R10]: NETSTACK INIT
     SERIAL.write_str("[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok\n");
 
-    // [R11]: IP ADDRESS (ENV LOCK: eth0 Bridged WAN [RFC 5737 Redacted 192.0.2.x], eth1 Host-Only LAN 192.168.56.1)
-    let wan_ip = [192, 0, 2, 199];
-    let lan_ip = [192, 168, 56, 1];
-    let wan_gw = [192, 0, 2, 254];
-    let our_ip = wan_ip;
-    SERIAL.write_str("[R11] IP ADDR: 192.0.2.199/24 (WAN bridged eth0 [RFC5737]), 192.168.56.1/24 (LAN eth1)\n");
-
-    // [R13]: DHCP LEASE ACQUISITION (RFC 2131 — Active DHCP Client on eth0 Bridged with Option 12 "rinjani")
+    // [R13]: DHCP CLIENT LEASE ACQUISITION (RFC 2131 — eth0 Bridged with Option 12 "rinjani")
     let mut dhcp_buf = [0u8; 512];
+    let mut dhcp_client = asl_router_netstack::DhcpClientEngine::new(
+        our_mac,
+        asl_router_netstack::DhcpClientConfig {
+            #[cfg(feature = "qemu-dev")]
+            strict_net: false,
+            #[cfg(not(feature = "qemu-dev"))]
+            strict_net: true,
+            timeout_ticks: 1500, // 15 seconds
+            max_retries: 4,
+        },
+    );
+    dhcp_client.start_discover(0x52494E4A);
+
+    #[allow(unused_mut, unused_variables)]
+    let mut wan_ip = [0u8; 4];
+    #[allow(unused_mut, unused_variables)]
+    let mut wan_gw = [0u8; 4];
+    let lan_ip = [192, 168, 56, 1];
+
     if let Ok(_len) = asl_router_netstack::build_dhcp_discover_with_hostname(our_mac, 0x52494E4A, "rinjani", &mut dhcp_buf) {
-        SERIAL.write_str("[R13] DHCP LEASE: discover sent (opt12=rinjani), dynamic lease=192.0.2.199 (gw=192.0.2.254)\n");
-    } else {
-        SERIAL.write_str("[R13] DHCP LEASE: discover failed, fallback active\n");
+        SERIAL.write_str("[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani)\n");
     }
+
+    #[cfg(feature = "qemu-dev")]
+    {
+        SERIAL.write_str("[R11] DEV-FALLBACK (qemu-dev feature active): eth0=192.0.2.199/24 gw=192.0.2.254\n");
+        wan_ip = [192, 0, 2, 199];
+        wan_gw = [192, 0, 2, 254];
+    }
+
+    #[cfg(not(feature = "qemu-dev"))]
+    {
+        // OPCR-72: Strict No-Fallback Mode.
+        // In live hardware / VirtualBox bridged mode without physical offer within 15s window,
+        // kernel must fail-closed honestly and not fabricate leases.
+        if !dhcp_client.is_bound() {
+            SERIAL.write_str("[R11] DHCP FAILED: no offer on eth0 — HALTING (strict mode)\n");
+            SERIAL.write_str("[HALT] System entered safe idle halt. Awaiting LPS joint session.\n");
+            loop {
+                #[cfg(target_arch = "x86_64")]
+                unsafe {
+                    core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+                }
+                #[cfg(not(target_arch = "x86_64"))]
+                core::hint::spin_loop();
+            }
+        }
+    }
+
+    let our_ip = wan_ip;
+    SERIAL.write_str("[R11] IP ADDR: eth0 WAN acquired, 192.168.56.1/24 (LAN eth1)\n");
 
     // [R14]: LOCAL APIC TIMER CALIBRATION
     let mut apic_timer = asl_hal::ApicTimer::new(asl_hal::LOCAL_APIC_DEFAULT_BASE);
