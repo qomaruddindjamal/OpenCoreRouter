@@ -173,6 +173,14 @@ impl VirtioNetDevice {
         }
         Ok(())
     }
+
+    pub fn is_tx_path_armed(&self) -> bool {
+        self.io_base != 0
+    }
+
+    pub fn tx_pending_count(&self) -> usize {
+        self.tx_ring.count()
+    }
 }
 
 // -----------------------------------------------------------------------------
@@ -243,5 +251,55 @@ mod tests {
         let e1000 = E1000Device::new(&pci).unwrap();
         assert_eq!(e1000.io_base, 0xD000);
         assert_eq!(e1000.mem_base, 0xF0000000);
+    }
+
+    #[test]
+    fn test_virtio_tx_path_armed_and_pending_state() {
+        let dummy = RxDesc16 {
+            buffer_addr: 0,
+            length: 0,
+            checksum: 0,
+            status: 0,
+            errors: 0,
+            vlan_tag: 0,
+        };
+        let dev = VirtioNetDevice {
+            io_base: 0xC000,
+            mac_address: [0x52, 0x54, 0x00, 0x12, 0x34, 0x56],
+            rx_ring: DescriptorRing::new(dummy),
+            tx_ring: DescriptorRing::new(dummy),
+        };
+
+        assert!(dev.is_tx_path_armed());
+        assert_eq!(dev.tx_pending_count(), 0);
+    }
+
+    #[test]
+    fn test_virtio_tx_ring_push_advances_pending_count() {
+        let dummy = RxDesc16 {
+            buffer_addr: 0,
+            length: 0,
+            checksum: 0,
+            status: 0,
+            errors: 0,
+            vlan_tag: 0,
+        };
+        let mut dev = VirtioNetDevice {
+            io_base: 0, // Mock port 0 to prevent port I/O execution
+            mac_address: [0x52, 0x54, 0x00, 0x12, 0x34, 0x56],
+            rx_ring: DescriptorRing::new(dummy),
+            tx_ring: DescriptorRing::new(dummy),
+        };
+
+        let dummy_desc = RxDesc16 {
+            buffer_addr: 0x1000,
+            length: 64,
+            checksum: 0,
+            status: 1,
+            errors: 0,
+            vlan_tag: 0,
+        };
+        assert!(dev.tx_ring.push(dummy_desc).is_ok());
+        assert_eq!(dev.tx_pending_count(), 1);
     }
 }

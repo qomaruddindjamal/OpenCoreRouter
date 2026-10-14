@@ -129,6 +129,13 @@ impl<T: Copy, const N: usize> DescriptorRing<T, N> {
         ((h.wrapping_add(1)) & (N as u32 - 1)) == (t & (N as u32 - 1))
     }
 
+    #[inline(always)]
+    pub fn count(&self) -> usize {
+        let h = self.head.load(Ordering::Acquire);
+        let t = self.tail.load(Ordering::Acquire);
+        (h.wrapping_sub(t) & (N as u32 - 1)) as usize
+    }
+
     pub fn push(&mut self, desc: T) -> Result<(), &'static str> {
         let h = self.head.load(Ordering::Relaxed);
         let t = self.tail.load(Ordering::Acquire);

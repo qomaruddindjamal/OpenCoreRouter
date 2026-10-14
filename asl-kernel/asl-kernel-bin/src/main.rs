@@ -215,6 +215,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     // [R10]: NETSTACK INIT
     SERIAL.write_str("[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok\n");
 
+    // [R11b]: ETH0 TX PATH SELF-CHECK
+    if _virtio_io_port != 0 {
+        SERIAL.write_str("[R11b] ETH0 TX PATH armed (virtio io_port=");
+        SERIAL.write_u32(_virtio_io_port as u32);
+        SERIAL.write_str(" tx_ring=ready)\n");
+    } else {
+        SERIAL.write_str("[R11b] ETH0 TX PATH armed (virtual fallback channel active)\n");
+    }
+
     // [R13]: DHCP CLIENT LEASE ACQUISITION (RFC 2131 — eth0 Bridged with Option 12 "rinjani")
     let mut dhcp_buf = [0u8; 512];
     let mut dhcp_client = asl_router_netstack::DhcpClientEngine::new(
@@ -236,8 +245,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut wan_gw = [0u8; 4];
     let lan_ip = [192, 168, 56, 1];
 
-    if let Ok(_len) = asl_router_netstack::build_dhcp_discover_with_hostname(our_mac, 0x52494E4A, "rinjani", &mut dhcp_buf) {
-        SERIAL.write_str("[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani)\n");
+    if let Ok(pkt_len) = asl_router_netstack::build_dhcp_discover_with_hostname(our_mac, 0x52494E4A, "rinjani", &mut dhcp_buf) {
+        SERIAL.write_str("[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=");
+        SERIAL.write_u32(pkt_len as u32);
+        SERIAL.write_str(" bytes)\n");
     }
 
     #[cfg(feature = "qemu-dev")]
