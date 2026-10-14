@@ -2,7 +2,7 @@
 
 > **Dokumen:** `docs/RND/mitranet_webui_adopt_map.md`  
 > **Status:** RATIFIED BY OWNER (M1 AUDIT VERIFIED)  
-> **Server Asal:** `10.10.66.228` (Strictly Read-Only Audit)  
+> **Server Asal:** `192.0.2.228` (Strictly Read-Only Audit [RFC 5737 Redacted])  
 > **Target Subsystem:** `router/asl-router-webui`  
 > **Audit Status:** Anti-Leak Audit Passed (Zero Credentials, Zero Private Keys)  
 > **Quarantine Hash Verification:**  
@@ -14,7 +14,7 @@
 
 ## 1. Identifikasi Aset & Desain Asal Mitranet
 
-Server `10.10.66.228` mengoperasikan WebUI carrier-grade berbasis:
+Server `192.0.2.228` (RFC 5737) mengoperasikan WebUI carrier-grade berbasis:
 - **Logo Resmi:** Stylized Rinjani peak / shield icon (`url(#rinjaniGrad)` cyan `#00bcd4` to `#00e5ff`) + Wordmark `MITRANET`.
 - **Layout Signature:** Drop-right mikroTik-style sidebar navigation (`sidebar-layout.css`) dengan dark header `#1e222b` dan sidebar `#181b20`.
 - **Design Tokens:**

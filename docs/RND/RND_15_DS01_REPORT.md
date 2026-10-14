@@ -28,7 +28,7 @@ Sprint DS-01 telah berhasil menuntaskan seluruh paket rekayasa terintegrasi:
    - `OPCR-64`: Runtime Proof Completion -> `PASS-LOCKED`
    - `OPCR-61`: Telnet Daemon -> `REGISTERED-NOT-ATTEMPTED` (Jujur dipertahankan).
 2. **Adopsi WebUI Mitranet (M0) & Audit Anti-Leak:**
-   - Server audit Mitranet `10.10.66.228` diakses secara **strictly read-only** melalui `plink` SSH.
+   - Server audit Mitranet `192.0.2.228` (RFC 5737) diakses secara **strictly read-only** melalui `plink` SSH.
    - Aset visual asli (`logo.svg` dengan siluet puncak Rinjani cyan `#00bcd4` + wordmark MITRANET) serta token desain drop-right layout MikroTik-style diadaptasi ke `router/asl-router-webui/assets/`.
    - **Audit Anti-Leak Lolos Mutlak:** Nol password, nol private key, nol token rahasia yang masuk repositori. Peta adopsi didokumentasikan di [`docs/RND/mitranet_webui_adopt_map.md`](file:///c:/OpenCR/docs/RND/mitranet_webui_adopt_map.md).
 3. **DHCP Server Pool (RFC 2131, eth1 only):**

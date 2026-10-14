@@ -84,7 +84,7 @@ impl ApiDispatcher {
     }
 
     fn handle_interfaces(&self, out_buf: &mut [u8]) -> Result<usize, &'static str> {
-        let json = b"{\"ok\":true,\"data\":[{\"name\":\"eth0\",\"mode\":\"wan_bridged\",\"ip\":\"10.10.66.199/24\",\"status\":\"up\"},{\"name\":\"eth1\",\"mode\":\"lan_hostonly\",\"ip\":\"192.168.56.1/24\",\"status\":\"up\"}]}";
+        let json = b"{\"ok\":true,\"data\":[{\"name\":\"eth0\",\"mode\":\"wan_bridged\",\"ip\":\"192.0.2.199/24\",\"status\":\"up\"},{\"name\":\"eth1\",\"mode\":\"lan_hostonly\",\"ip\":\"192.168.56.1/24\",\"status\":\"up\"}]}";
         let builder = HttpResponseBuilder::new(out_buf, HttpStatus::Ok)
             .with_content_type("application/json");
         builder.finish_with_body(json)

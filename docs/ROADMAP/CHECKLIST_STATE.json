@@ -217,9 +217,10 @@
   {
     "gate_id": "OPCR-51",
     "name": "Minimal DHCP Server Pool (LAN Interface)",
-    "status": "PASS-LOCKED",
+    "status": "PENDING-VERIFICATION",
     "distro_version": "1.0.0",
-    "verified_date": "2026-10-14"
+    "verified_date": "2026-10-14",
+    "notes": "Downgraded per G6 verdict: awaiting Live Proof Session 2 client DORA verification"
   },
   {
     "gate_id": "OPCR-52",
@@ -301,16 +302,42 @@
   {
     "gate_id": "OPCR-63",
     "name": "WebUI Mitranet Adoption & Visual Parity",
-    "status": "PASS-LOCKED",
+    "status": "PENDING-VERIFICATION",
     "distro_version": "1.0.0",
-    "verified_date": "2026-10-14"
+    "verified_date": "2026-10-14",
+    "notes": "Downgraded per G6 verdict: awaiting Live Proof Session side-by-side screenshot verification"
   },
   {
     "gate_id": "OPCR-64",
     "name": "Runtime Proof Completion (Two-Sided VM & Host Verification)",
+    "status": "PENDING-VERIFICATION",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14",
+    "notes": "Downgraded per G6 verdict: awaiting Live Proof Session end-to-end evidence"
+  },
+  {
+    "gate_id": "OPCR-70",
+    "name": "Live Physical DHCP Client Lease & Bridged IP Verification",
+    "status": "PENDING-VERIFICATION",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14",
+    "notes": "New gate per G6: requires Wireshark capture and physical router lease table proof"
+  },
+  {
+    "gate_id": "OPCR-71",
+    "name": "Live Proof Session (LPS) Joint Verification Protocol",
     "status": "PASS-LOCKED",
     "distro_version": "1.0.0",
-    "verified_date": "2026-10-14"
+    "verified_date": "2026-10-14",
+    "notes": "Doctrine established: live claims strictly require owner-conducted primary proof"
+  },
+  {
+    "gate_id": "OPCR-72",
+    "name": "No-Fallback Strict Mode Engine (Zero-Fictional-IPs)",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-14",
+    "notes": "Kernel halts honestly if DHCP offers timeout on eth0; eliminates dev-static fallback"
   }
 ]
 

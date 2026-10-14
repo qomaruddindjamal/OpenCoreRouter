@@ -17,7 +17,7 @@
 | **ADR-004** | 2026-10-13 | Platform Doctrine | "ASL Core is NOT Linux". Microkernel `#![no_std]`, no glibc, no Linux syscalls, no netlink, native carrier stack. | `RATIFIED` |
 | **ADR-005** | 2026-10-14 | Codebase Licensing | Source code dilisensikan di bawah **GPL-3.0-or-later**. Dokumentasi di bawah **CC-BY-4.0**. | `RATIFIED` |
 | **ADR-006** | 2026-10-14 | Hardware Inventory Doctrine | "Real Hardware Only". Enumerasi nyata PCI & CPUID. Bila device nihil, tampilkan "none detected". Dilarang dummy/mock di kernel bin. | `RATIFIED` |
-| **ADR-007** | 2026-10-14 | External Audit Boundary | Probe telemetri eksternal (Mitranet 10.10.66.228) mutlak **READ-ONLY**. Dilarang mutasi, restart, atau reboot. | `RATIFIED` |
+| **ADR-007** | 2026-10-14 | External Audit Boundary | Probe telemetri eksternal (Mitranet 192.0.2.228 [RFC 5737]) mutlak **READ-ONLY**. Dilarang mutasi, restart, atau reboot. | `RATIFIED` |
 | **ADR-008** | 2026-10-14 | Interrupt vs Polling Strategy | Polling-first sebagai mode default fail-safe. Local APIC timer framework diaktifkan via flag terverifikasi. | `RATIFIED` |
 | **ADR-009** | 2026-10-14 | Language Policy | Kernel/router paket = Rust no_std; Host tools rilis = Rust std; Build script PS diperbolehkan hari ini, migrasi cargo-xtask "sentuh-berarti-ganti"; WebUI htmx+JS, berat WASM; tools/ bebas; bahasa lain = referensi. | `RATIFIED` |
 | **ADR-010** | 2026-10-14 | Open Interoperability Doctrine | Standar terbuka IETF dulu; dialek populer dijembatani dari spek publik (EoIP/MNDP); dilarang RE proprietary (Winbox); prioritas: EoIP+MNDP -> RIP -> OSPF -> BGP; SNMP read-only dulu. | `RATIFIED` |
