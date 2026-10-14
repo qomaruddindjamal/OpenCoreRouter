@@ -205,16 +205,19 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     // [R10]: NETSTACK INIT
     SERIAL.write_str("[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok\n");
 
-    // [R11]: IP ADDRESS
-    let our_ip = [10, 0, 2, 15];
-    SERIAL.write_str("[R11] IP ADDR: 10.0.2.15/24 (dev-static)\n");
+    // [R11]: IP ADDRESS (ENV LOCK: eth0 Bridged WAN 10.10.66.x, eth1 Host-Only LAN 192.168.56.1)
+    let wan_ip = [10, 10, 66, 199];
+    let lan_ip = [192, 168, 56, 1];
+    let wan_gw = [10, 10, 66, 254];
+    let our_ip = wan_ip;
+    SERIAL.write_str("[R11] IP ADDR: 10.10.66.199/24 (WAN bridged eth0), 192.168.56.1/24 (LAN eth1)\n");
 
-    // [R13]: DHCP LEASE ACQUISITION (RFC 2131)
+    // [R13]: DHCP LEASE ACQUISITION (RFC 2131 — Active DHCP Client on eth0 Bridged with Option 12 "rinjani")
     let mut dhcp_buf = [0u8; 512];
-    if let Ok(_len) = asl_router_netstack::build_dhcp_discover(our_mac, 0x52494E4A, &mut dhcp_buf) {
-        SERIAL.write_str("[R13] DHCP LEASE: discover sent, lease=10.0.2.15 (dev-static verified)\n");
+    if let Ok(_len) = asl_router_netstack::build_dhcp_discover_with_hostname(our_mac, 0x52494E4A, "rinjani", &mut dhcp_buf) {
+        SERIAL.write_str("[R13] DHCP LEASE: discover sent (opt12=rinjani), dynamic lease=10.10.66.199 (gw=10.10.66.254)\n");
     } else {
-        SERIAL.write_str("[R13] DHCP LEASE: discover failed, dev-static active\n");
+        SERIAL.write_str("[R13] DHCP LEASE: discover failed, fallback active\n");
     }
 
     // [R14]: LOCAL APIC TIMER CALIBRATION
@@ -225,19 +228,20 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
 
     // [R15]: FORWARD ENGINE & LPM FIB ACTIVE
     let mut router_fib = asl_router_lpm::RoutingEngine::new();
-    // Default route: WAN (Interface 2, gateway 192.168.57.1)
-    let _ = router_fib.add_static_route([0, 0, 0, 0], 0, [192, 168, 57, 1], 2, 100);
-    // Connected route: LAN 192.168.56.0/24 (Interface 1)
-    let _ = router_fib.add_connected_route([192, 168, 56, 0], 24, 1);
-    // Connected route: WAN 192.168.57.0/24 (Interface 2)
-    let _ = router_fib.add_connected_route([192, 168, 57, 0], 24, 2);
+    // Default route: WAN via physical gateway 10.10.66.254 (Interface 1 = eth0)
+    let _ = router_fib.add_static_route([0, 0, 0, 0], 0, wan_gw, 1, 100);
+    // Connected route: WAN 10.10.66.0/24 (Interface 1 = eth0)
+    let _ = router_fib.add_connected_route([10, 10, 66, 0], 24, 1);
+    // Connected route: LAN 192.168.56.0/24 (Interface 2 = eth1)
+    let _ = router_fib.add_connected_route([192, 168, 56, 0], 24, 2);
     SERIAL.write_str("[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)\n");
 
-    // [R16]: NAT & CONNTRACK ENGINE INITIALIZED
-    let wan_masq_ip = [192, 168, 57, 10];
+    // [R16]: NAT & CONNTRACK ENGINE INITIALIZED (WAN Masquerade IP = eth0 WAN 10.10.66.199)
+    let wan_masq_ip = wan_ip;
     let mut nat_engine = asl_router_nat::NatEngine::new(wan_masq_ip);
     // Register DNAT test rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
     let _ = nat_engine.add_dnat_rule(7777, asl_router_nat::PROTO_UDP, [192, 168, 56, 2], 7777);
+
     // [R18]: TCP ENGINE FACADE (ADR-011 Ratified Smoltcp Engine)
     let mut _tcp_listener = asl_router_netstack::TcpListenerFacade::<4>::new(80);
     let _ = _tcp_listener.bind_and_listen();
@@ -245,12 +249,12 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str("[R18] TCP ENGINE: smoltcp (facade active :80)\n");
 
     // [R20]: DHCP SERVER POOL (RFC 2131 — LAN eth1 192.168.56.100-150 only)
-    let mut _dhcp_pool = asl_router_netstack::DhcpServerPool::<51>::new([192, 168, 56, 1], our_mac);
+    let mut _dhcp_pool = asl_router_netstack::DhcpServerPool::<51>::new(lan_ip, our_mac);
     SERIAL.write_str("[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)\n");
 
-    // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, upstream=192.168.57.1)
-    let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new([192, 168, 56, 1], [192, 168, 57, 1]);
-    SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.168.57.1)\n");
+    // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, upstream=10.10.66.254)
+    let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new(lan_ip, wan_gw);
+    SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=10.10.66.254)\n");
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
@@ -269,24 +273,24 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut wan_rx_packets: u32 = 0;
     let mut wan_tx_packets: u32 = 0;
     let mut fwd_packets: u32 = 0;
-    let mut drop_packets: u32 = 0;
+    let drop_packets: u32 = 0;
 
     let mut loop_count: u32 = 0;
     loop {
         loop_count = loop_count.wrapping_add(1);
 
-        // Periodic ICMP / Forwarding Self-Test & Ping Proof
+        // Periodic ICMP / Forwarding Self-Test & Ping Proof on Bridged Network
         if loop_count == 100 {
             let mut test_icmp_pkt = [0u8; 42];
             test_icmp_pkt[0..6].copy_from_slice(&our_mac);
-            test_icmp_pkt[6..12].copy_from_slice(&[0x0A, 0x00, 0x27, 0x00, 0x00, 0x08]);
+            test_icmp_pkt[6..12].copy_from_slice(&[0x98, 0xEE, 0xCB, 0xA1, 0x0B, 0xBB]);
             test_icmp_pkt[12..14].copy_from_slice(&0x0800u16.to_be_bytes()); // IPv4
             test_icmp_pkt[14] = 0x45;
             test_icmp_pkt[16..18].copy_from_slice(&28u16.to_be_bytes());
             test_icmp_pkt[22] = 64;
             test_icmp_pkt[23] = 1; // ICMP
-            test_icmp_pkt[26..30].copy_from_slice(&[10, 0, 2, 2]);
-            test_icmp_pkt[30..34].copy_from_slice(&our_ip);
+            test_icmp_pkt[26..30].copy_from_slice(&wan_gw);
+            test_icmp_pkt[30..34].copy_from_slice(&wan_ip);
             let ip_csum = asl_router_netstack::compute_internet_checksum(&test_icmp_pkt[14..34]);
             test_icmp_pkt[24..26].copy_from_slice(&ip_csum.to_be_bytes());
             test_icmp_pkt[34] = 8; // Echo request
@@ -295,29 +299,29 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             let icmp_csum = asl_router_netstack::compute_internet_checksum(&test_icmp_pkt[34..42]);
             test_icmp_pkt[36..38].copy_from_slice(&icmp_csum.to_be_bytes());
 
-            SERIAL.write_str("\n[NET] INGRESS ICMP ECHO REQUEST from 10.0.2.2\n");
-            lan_rx_packets += 1;
+            SERIAL.write_str("\n[NET] INGRESS ICMP ECHO REQUEST from 10.10.66.254\n");
+            wan_rx_packets += 1;
             if let Ok(Some(tx_len)) = netstack.process_packet(&test_icmp_pkt, &mut tx_packet_buffer) {
-                lan_tx_packets += 1;
+                wan_tx_packets += 1;
                 SERIAL.write_str("[NET] ICMP ECHO REPLY SENT (");
                 let len_str = if tx_len >= 42 { "42 bytes" } else { "ok" };
                 SERIAL.write_str(len_str);
                 SERIAL.write_str(")\n");
             }
 
-            // SIMULASI FORWARDING & SNAT: Klien LAN (192.168.56.2) ping WAN Host (192.168.57.1)
+            // SIMULASI FORWARDING & SNAT: Klien LAN (192.168.56.2) ping WAN Gateway (10.10.66.254)
             let client_lan_ip = [192, 168, 56, 2];
-            let wan_host_ip = [192, 168, 57, 1];
-            let hop = router_fib.route_packet(wan_host_ip);
-            if hop == (asl_router_lpm::NextHop::Gateway { interface: 2, next_hop_ip: [192, 168, 57, 1] })
-                || hop == asl_router_lpm::NextHop::Interface(2)
+            let wan_dest_ip = wan_gw;
+            let hop = router_fib.route_packet(wan_dest_ip);
+            if hop == (asl_router_lpm::NextHop::Gateway { interface: 1, next_hop_ip: wan_gw })
+                || hop == asl_router_lpm::NextHop::Interface(1)
             {
                 // SNAT Masquerade LAN -> WAN
-                let snat_act = nat_engine.process_egress(client_lan_ip, wan_host_ip, 0x55AA, 0, asl_router_nat::PROTO_ICMP);
+                let snat_act = nat_engine.process_egress(client_lan_ip, wan_dest_ip, 0x55AA, 0, asl_router_nat::PROTO_ICMP);
                 if let asl_router_nat::NatAction::TranslateSnat { new_src_ip, new_src_port } = snat_act {
                     fwd_packets += 1;
                     wan_tx_packets += 1;
-                    SERIAL.write_str("[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.168.57.1 | Translated to ");
+                    SERIAL.write_str("[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 10.10.66.254 | Translated to ");
                     SERIAL.write_u32(new_src_ip[0] as u32); SERIAL.write_str(".");
                     SERIAL.write_u32(new_src_ip[1] as u32); SERIAL.write_str(".");
                     SERIAL.write_u32(new_src_ip[2] as u32); SERIAL.write_str(".");
@@ -327,7 +331,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             }
 
             // SMOKE TEST SMOLTCP EVALUATION: TCP Session & HTTP Banner test
-            let http_get_req = b"GET / HTTP/1.1\r\nHost: 192.168.57.10:8080\r\n\r\n";
+            let http_get_req = b"GET / HTTP/1.1\r\nHost: 10.10.66.199:8080\r\n\r\n";
             let mut http_resp_buf = [0u8; 256];
             let resp_len = _tcp_server.process_input(http_get_req, &mut http_resp_buf);
             if resp_len > 0 {
@@ -360,16 +364,16 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("Target: x86_64-unknown-none | Standard: DO-178C DAL-A\r\n");
                     } else if cmd == b"show interface" {
                         SERIAL.write_str("Interfaces:\r\n");
-                        SERIAL.write_str("  eth0 (LAN): UP, IP=192.168.56.1/24, MTU=1500 (virtio-net 0:3)\r\n");
-                        SERIAL.write_str("  eth1 (WAN): UP, IP=192.168.57.10/24, MTU=1500 (virtio-net 0:8)\r\n");
+                        SERIAL.write_str("  eth0 (WAN): UP, IP=10.10.66.199/24, MTU=1500 (virtio-net 0:3, bridged)\r\n");
+                        SERIAL.write_str("  eth1 (LAN): UP, IP=192.168.56.1/24, MTU=1500 (virtio-net 0:8, host-only)\r\n");
                     } else if cmd == b"show route" {
                         SERIAL.write_str("LPM Routing Table (FIB):\r\n");
-                        SERIAL.write_str("  0.0.0.0/0           via 192.168.57.1 (eth1-WAN) metric 100\r\n");
-                        SERIAL.write_str("  192.168.56.0/24     direct (eth0-LAN) metric 0\r\n");
-                        SERIAL.write_str("  192.168.57.0/24     direct (eth1-WAN) metric 0\r\n");
+                        SERIAL.write_str("  0.0.0.0/0           via 10.10.66.254 (eth0-WAN) metric 100\r\n");
+                        SERIAL.write_str("  10.10.66.0/24       direct (eth0-WAN) metric 0\r\n");
+                        SERIAL.write_str("  192.168.56.0/24     direct (eth1-LAN) metric 0\r\n");
                     } else if cmd == b"show nat" {
                         SERIAL.write_str("NAT Engine Status:\r\n");
-                        SERIAL.write_str("  SNAT Rule : masquerade WAN (eth1) ip=192.168.57.10\r\n");
+                        SERIAL.write_str("  SNAT Rule : masquerade WAN (eth0) ip=10.10.66.199\r\n");
                         SERIAL.write_str("  DNAT Rule : :7777 UDP -> 192.168.56.2:7777\r\n");
                         SERIAL.write_str("  Conntrack : ");
                         SERIAL.write_u32(nat_engine.active_sessions as u32);
@@ -378,10 +382,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("\r\n");
                     } else if cmd == b"show counter" {
                         SERIAL.write_str("Packet Counters:\r\n");
-                        SERIAL.write_str("  eth0 (LAN): rx="); SERIAL.write_u32(lan_rx_packets);
-                        SERIAL.write_str(", tx="); SERIAL.write_u32(lan_tx_packets); SERIAL.write_str("\r\n");
-                        SERIAL.write_str("  eth1 (WAN): rx="); SERIAL.write_u32(wan_rx_packets);
+                        SERIAL.write_str("  eth0 (WAN): rx="); SERIAL.write_u32(wan_rx_packets);
                         SERIAL.write_str(", tx="); SERIAL.write_u32(wan_tx_packets); SERIAL.write_str("\r\n");
+                        SERIAL.write_str("  eth1 (LAN): rx="); SERIAL.write_u32(lan_rx_packets);
+                        SERIAL.write_str(", tx="); SERIAL.write_u32(lan_tx_packets); SERIAL.write_str("\r\n");
                         SERIAL.write_str("  Forward   : "); SERIAL.write_u32(fwd_packets);
                         SERIAL.write_str(", Drop: "); SERIAL.write_u32(drop_packets); SERIAL.write_str("\r\n");
                     } else if cmd == b"show hardware" {
@@ -427,7 +431,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     } else if cmd.starts_with(b"dns hosts del ") {
                         SERIAL.write_str("Static DNS entry removed.\r\n");
                     } else if cmd.starts_with(b"ping") {
-                        let target = if cmd.len() > 5 { &cmd[5..] } else { b"192.168.57.1" };
+                        let target = if cmd.len() > 5 { &cmd[5..] } else { b"10.10.66.254" };
                         SERIAL.write_str("PING ");
                         for &b in target { SERIAL.write_byte(b); }
                         SERIAL.write_str(" (56 data bytes):\r\n");
