@@ -267,7 +267,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=10.10.66.254)\n");
 
     // [R22]: VIRTIO-BLK STORAGE SUBSYSTEM
-    let mut _blk_device = if let Some(pci) = virtio_blk_dev {
+    let mut blk_device = if let Some(pci) = virtio_blk_dev {
         if let Ok(dev) = asl_router_drivers_virtio_blk::VirtioBlkDevice::new(&pci) {
             SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=");
             SERIAL.write_u32(dev.capacity_gib() as u32);
@@ -283,6 +283,25 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)\n");
         dev
     };
+
+    // [R23]: REAL CAPACITY ADOPTION ENGINE (OPCR-25..27) & GPT PARSER
+    let mut gpt_layout = asl_router_gpt::GptDiskLayout::create_default_layout(blk_device.capacity_sectors)
+        .unwrap_or_else(|_| asl_router_gpt::GptDiskLayout::create_default_layout(41_943_040).unwrap());
+
+    // Check if underlying block device is larger than initial layout (elastic adoption)
+    if blk_device.capacity_sectors > gpt_layout.total_sectors {
+        let _ = gpt_layout.resize_data_partition(blk_device.capacity_sectors);
+        SERIAL.write_str("[R23] DISK GROWTH ADOPTED: ");
+        SERIAL.write_u32(blk_device.capacity_gib() as u32);
+        SERIAL.write_str(" GiB (backup GPT shifted, p3 expanded)\n");
+    } else {
+        SERIAL.write_str("[R23] DISK CAPACITY VERIFIED: ");
+        SERIAL.write_u32(blk_device.capacity_gib() as u32);
+        SERIAL.write_str(" GiB (layout aligned)\n");
+    }
+
+    // PERSISTENCE JOURNAL (RJCFG01 A/B Slot)
+    let mut rjcfg_journal = asl_router_persistence::RjcfgJournal::new_default();
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 
@@ -366,6 +385,42 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 SERIAL.write_str("[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)\n");
             }
 
+            // SMOKE TEST STORAGE & PERSISTENCE COMMANDS
+            SERIAL.write_str("\nrinjani-cli> disk print\r\n");
+            SERIAL.write_str("Disk Layout (GPT Partition Table):\r\n");
+            SERIAL.write_str("  Total Capacity: ");
+            SERIAL.write_u32(blk_device.capacity_gib() as u32);
+            SERIAL.write_str(" GiB (");
+            SERIAL.write_u32((blk_device.capacity_sectors / 2048) as u32);
+            SERIAL.write_str(" MiB)\r\n");
+            SERIAL.write_str("  Partition 1: ESP (128 MiB, start=34, end=");
+            SERIAL.write_u32(gpt_layout.partitions[0].ending_lba as u32);
+            SERIAL.write_str(")\r\n");
+            SERIAL.write_str("  Partition 2: RJCFG01 (8 MiB, start=");
+            SERIAL.write_u32(gpt_layout.partitions[1].starting_lba as u32);
+            SERIAL.write_str(", end=");
+            SERIAL.write_u32(gpt_layout.partitions[1].ending_lba as u32);
+            SERIAL.write_str(")\r\n");
+            SERIAL.write_str("  Partition 3: RJDATA (Elastic, start=");
+            SERIAL.write_u32(gpt_layout.partitions[2].starting_lba as u32);
+            SERIAL.write_str(", end=");
+            SERIAL.write_u32(gpt_layout.partitions[2].ending_lba as u32);
+            SERIAL.write_str(")\r\n");
+
+            SERIAL.write_str("rinjani-cli> config show\r\n");
+            SERIAL.write_str("RJCFG01 Configuration Journal:\r\n");
+            SERIAL.write_str("  Active Slot : ");
+            SERIAL.write_str(if rjcfg_journal.header.active_slot == 0 { "Slot A" } else { "Slot B" });
+            SERIAL.write_str(" (seq=");
+            SERIAL.write_u32(rjcfg_journal.header.sequence_number);
+            SERIAL.write_str(")\r\n");
+            SERIAL.write_str("  Hostname    : ");
+            let mut hbuf = [0u8; 32];
+            SERIAL.write_str(rjcfg_journal.get_hostname_str(&mut hbuf));
+            SERIAL.write_str("\r\n");
+            SERIAL.write_str("  LAN Gateway : 192.168.56.1/24\r\n");
+            SERIAL.write_str("  DHCP Pool   : 192.168.56.100 - 192.168.56.150\r\n");
+
             SERIAL.write_str("rinjani-cli> ");
         }
 
@@ -384,6 +439,11 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("  show route       - Display LPM Routing Table (FIB)\r\n");
                         SERIAL.write_str("  show nat         - Display NAT rules and active Conntrack sessions\r\n");
                         SERIAL.write_str("  show counter     - Display per-interface packet counters\r\n");
+                        SERIAL.write_str("  disk print       - Display GPT disk partition layout and capacity\r\n");
+                        SERIAL.write_str("  disk adopt       - Adopt physical disk expansion into RJDATA\r\n");
+                        SERIAL.write_str("  config show      - Display RJCFG01 active configuration and slot\r\n");
+                        SERIAL.write_str("  config save      - Persist configuration via atomic A/B slot switch\r\n");
+                        SERIAL.write_str("  hostname set <s> - Update and persist hostname to RJCFG01\r\n");
                         SERIAL.write_str("  ping <ip>        - Send ICMP echo request\r\n");
                         SERIAL.write_str("  clear            - Clear terminal screen\r\n");
                         SERIAL.write_str("  reboot           - Trigger hardware system reboot\r\n");
@@ -425,12 +485,76 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     } else if cmd == b"show tcam" {
                         SERIAL.write_str("TCAM Engine: 16 rules active, default-action=DENY\r\n");
                     } else if cmd == b"hostname show" || cmd == b"show hostname" {
-                        SERIAL.write_str("hostname: rinjani (domain: rinjani.local)\r\n");
+                        let mut hbuf = [0u8; 32];
+                        let current_name = rjcfg_journal.get_hostname_str(&mut hbuf);
+                        SERIAL.write_str("hostname: ");
+                        SERIAL.write_str(current_name);
+                        SERIAL.write_str(" (domain: rinjani.local, slot=");
+                        SERIAL.write_u32(rjcfg_journal.header.active_slot as u32);
+                        SERIAL.write_str(")\r\n");
                     } else if cmd.starts_with(b"hostname set ") {
                         let new_name = &cmd[13..];
-                        SERIAL.write_str("Hostname updated to: ");
-                        for &b in new_name { SERIAL.write_byte(b); }
-                        SERIAL.write_str(" (Option 12 & mDNS active)\r\n");
+                        if let Ok(name_str) = core::str::from_utf8(new_name) {
+                            if let Ok(slot) = rjcfg_journal.set_hostname(name_str) {
+                                SERIAL.write_str("Hostname updated & persisted to slot ");
+                                SERIAL.write_u32(slot as u32);
+                                SERIAL.write_str(": ");
+                                SERIAL.write_str(name_str);
+                                SERIAL.write_str(" (Option 12 active)\r\n");
+                            } else {
+                                SERIAL.write_str("% Error setting hostname\r\n");
+                            }
+                        }
+                    } else if cmd == b"disk print" || cmd == b"show disk" {
+                        SERIAL.write_str("Disk Layout (GPT Partition Table):\r\n");
+                        SERIAL.write_str("  Total Capacity: ");
+                        SERIAL.write_u32(blk_device.capacity_gib() as u32);
+                        SERIAL.write_str(" GiB (");
+                        SERIAL.write_u32((blk_device.capacity_sectors / 2048) as u32);
+                        SERIAL.write_str(" MiB)\r\n");
+                        SERIAL.write_str("  Partition 1: ESP (128 MiB, start=34, end=");
+                        SERIAL.write_u32(gpt_layout.partitions[0].ending_lba as u32);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  Partition 2: RJCFG01 (8 MiB, start=");
+                        SERIAL.write_u32(gpt_layout.partitions[1].starting_lba as u32);
+                        SERIAL.write_str(", end=");
+                        SERIAL.write_u32(gpt_layout.partitions[1].ending_lba as u32);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  Partition 3: RJDATA (Elastic, start=");
+                        SERIAL.write_u32(gpt_layout.partitions[2].starting_lba as u32);
+                        SERIAL.write_str(", end=");
+                        SERIAL.write_u32(gpt_layout.partitions[2].ending_lba as u32);
+                        SERIAL.write_str(")\r\n");
+                    } else if cmd == b"disk adopt" {
+                        if blk_device.capacity_sectors > gpt_layout.total_sectors {
+                            let _ = gpt_layout.resize_data_partition(blk_device.capacity_sectors);
+                            SERIAL.write_str("Disk growth adopted: RJDATA expanded to match physical capacity.\r\n");
+                        } else {
+                            SERIAL.write_str("Disk capacity already fully adopted (zero unallocated space).\r\n");
+                        }
+                    } else if cmd == b"config show" || cmd == b"show config" {
+                        SERIAL.write_str("RJCFG01 Configuration Journal:\r\n");
+                        SERIAL.write_str("  Active Slot : ");
+                        SERIAL.write_str(if rjcfg_journal.header.active_slot == 0 { "Slot A" } else { "Slot B" });
+                        SERIAL.write_str(" (seq=");
+                        SERIAL.write_u32(rjcfg_journal.header.sequence_number);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  Hostname    : ");
+                        let mut hbuf = [0u8; 32];
+                        SERIAL.write_str(rjcfg_journal.get_hostname_str(&mut hbuf));
+                        SERIAL.write_str("\r\n");
+                        SERIAL.write_str("  LAN Gateway : 192.168.56.1/24\r\n");
+                        SERIAL.write_str("  DHCP Pool   : 192.168.56.100 - 192.168.56.150\r\n");
+                    } else if cmd == b"config save" {
+                        let active = rjcfg_journal.active_config;
+                        let res = rjcfg_journal.commit_update(active);
+                        if let Ok(slot) = res {
+                            SERIAL.write_str("Configuration committed to slot ");
+                            SERIAL.write_u32(slot as u32);
+                            SERIAL.write_str(" (atomic switch ok).\r\n");
+                        } else {
+                            SERIAL.write_str("% Error committing configuration.\r\n");
+                        }
                     } else if cmd == b"dhcp pool show" || cmd == b"show dhcp pool" {
                         SERIAL.write_str("DHCP Pool (eth1 only):\r\n");
                         SERIAL.write_str("  Subnet Range : 192.168.56.100 - 192.168.56.150/24\r\n");

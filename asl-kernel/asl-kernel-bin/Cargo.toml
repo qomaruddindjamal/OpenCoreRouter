@@ -23,6 +23,8 @@ asl-router-lpm = { path = "../../router/asl-router-lpm" }
 asl-router-nat = { path = "../../router/asl-router-nat" }
 asl-router-tcpstub = { path = "../../router/asl-router-tcpstub" }
 asl-router-drivers-virtio-blk = { path = "../../router/asl-router-drivers-virtio-blk" }
+asl-router-gpt = { path = "../../router/asl-router-gpt" }
+asl-router-persistence = { path = "../../router/asl-router-persistence" }
 
 [lib]
 crate-type = ["rlib"]
