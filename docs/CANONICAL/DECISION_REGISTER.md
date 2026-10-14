@@ -23,6 +23,7 @@
 | **ADR-010** | 2026-10-14 | Open Interoperability Doctrine | Standar terbuka IETF dulu; dialek populer dijembatani dari spek publik (EoIP/MNDP); dilarang RE proprietary (Winbox); prioritas: EoIP+MNDP -> RIP -> OSPF -> BGP; SNMP read-only dulu. | `RATIFIED` |
 | **ADR-011** | 2026-10-14 | TCP Strategy & Architecture | Hybrid smoltcp engine terisolasi di balik facade `asl-router-netstack`. Fastpath data forwarding tetap zero-copy mandiri. | `RATIFIED` |
 | **ADR-012** | 2026-10-14 | Sprint DS-01 Scope & Mitranet M0 | Ratifikasi owner untuk Sprint DS-01 (DHCP Server eth1 + DNS Proxy + WebUI Mitranet M0 + Pelengkap Bukti Runtime NET-03). Opsi 2 di-rename W2; istilah V0-RCI tetap untuk disk image & Real Capacity (OPCR-25..27). | `RATIFIED` |
+| **ADR-013** | 2026-10-14 | Sprint V0-RCI Scope & Evidence-First Gate Downgrade | Ratifikasi sprint V0-RCI (Disk Image, Persistence A/B, Real Capacity Engine, Real 2-Sided Proofs). Menurunkan status OPCR-51 & OPCR-63 ke PASS-WITH-PENDING-PROOF hingga verifikasi transaksi 2-sisi runtime & bukti visual parity terekam sempurna. | `RATIFIED` |
 
 ---
 
@@ -80,3 +81,11 @@
   4. **Bebas Vendor Lock-in Dua Arah:** Sistem tidak boleh bergantung pada satu vendor maupun mengunci pengguna ke satu vendor.
   5. **Prioritas Implementasi Interoperabilitas:** Urutan prioritas rute dan tunneling: `EoIP + MNDP` -> `RIP (RFC 2453)` -> `OSPFv2 (RFC 2328)` -> `BGP-4 (RFC 4271)`. Protokol manajemen `SNMP` diimplementasikan mode READ-ONLY terlebih dahulu.
 - **Consequences:** Menjamin kepatuhan hukum penuh, keterbukaan sistem, dan adopsi luas di jaringan ISP/carrier.
+
+### ADR-013: Sprint V0-RCI Scope & Evidence-First Gate Downgrade
+- **Context:** Temuan review F1..F4 pada penutupan RND_15: kedisiplinan klaim commit harus akurat, ENV LOCK (Adapter 1 Bridged) wajib dipenuhi di active runtime path, DHCP server eth1 & DNS proxy memerlukan bukti transaksi 2-sisi nyata, dan adopsi Mitranet WebUI M1 memerlukan audit integritas kode serta verifikasi aset.
+- **Decision:**
+  1. Status gate `OPCR-51` (DHCP Server) dan `OPCR-63` (Mitranet Adoption) diturunkan ke `PASS-WITH-PENDING-PROOF` sampai bukti runtime 2-sisi dan visual parity terpenuhi.
+  2. Adapter 1 (eth0) wajib difungsikan sebagai dynamic DHCP Client (Option 12 "rinjani") di lingkungan Bridged fisik owner, menghapus fallback 10.0.2.15/24 dari alur aktif runtime.
+  3. Mengimplementasikan subsistem penyimpanan blok VirtIO-blk (`asl-router-drivers-virtio-blk`), GPT parser/layout (`asl-router-gpt`), RJCFG01 A/B journal config persistence, dan Real Capacity Adoption Engine (`OPCR-25..27`).
+- **Consequences:** Integritas pembuktian 100% transparan, terverifikasi tanpa asumsi atau fabrikasi marker semu.
