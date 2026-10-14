@@ -150,6 +150,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str("\n");
 
     let mut virtio_dev: Option<asl_router_pci::PciDevice> = None;
+    let mut virtio_blk_dev: Option<asl_router_pci::PciDevice> = None;
     let mut e1000_dev: Option<asl_router_pci::PciDevice> = None;
 
     asl_router_pci::PciEnumerator::enumerate(|dev| {
@@ -161,6 +162,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             SERIAL.write_str("\n");
             if virtio_dev.is_none() {
                 virtio_dev = Some(dev);
+            }
+        } else if dev.is_virtio_blk() {
+            SERIAL.write_str("  -> Found VirtIO-Blk at BDF ");
+            SERIAL.write_byte(b'0' + dev.bus);
+            SERIAL.write_str(":");
+            SERIAL.write_byte(b'0' + dev.device);
+            SERIAL.write_str("\n");
+            if virtio_blk_dev.is_none() {
+                virtio_blk_dev = Some(dev);
             }
         } else if dev.is_e1000() {
             SERIAL.write_str("  -> Found Intel e1000 at BDF ");
@@ -255,6 +265,24 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, upstream=10.10.66.254)
     let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new(lan_ip, wan_gw);
     SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=10.10.66.254)\n");
+
+    // [R22]: VIRTIO-BLK STORAGE SUBSYSTEM
+    let mut _blk_device = if let Some(pci) = virtio_blk_dev {
+        if let Ok(dev) = asl_router_drivers_virtio_blk::VirtioBlkDevice::new(&pci) {
+            SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=");
+            SERIAL.write_u32(dev.capacity_gib() as u32);
+            SERIAL.write_str(" GiB (real hardware probed)\n");
+            dev
+        } else {
+            let dev = asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(20 * 1024 * 1024 * 2);
+            SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)\n");
+            dev
+        }
+    } else {
+        let dev = asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(20 * 1024 * 1024 * 2);
+        SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)\n");
+        dev
+    };
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
 

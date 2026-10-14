@@ -1,0 +1,9 @@
+[package]
+name = "asl-router-drivers-virtio-blk"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-pci = { path = "../asl-router-pci" }

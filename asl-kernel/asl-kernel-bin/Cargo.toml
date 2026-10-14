@@ -22,6 +22,7 @@ asl-router-hwinv = { path = "../../router/asl-router-hwinv" }
 asl-router-lpm = { path = "../../router/asl-router-lpm" }
 asl-router-nat = { path = "../../router/asl-router-nat" }
 asl-router-tcpstub = { path = "../../router/asl-router-tcpstub" }
+asl-router-drivers-virtio-blk = { path = "../../router/asl-router-drivers-virtio-blk" }
 
 [lib]
 crate-type = ["rlib"]

@@ -27,6 +27,7 @@ dependencies = [
  "asl-kernel-core",
  "asl-memory",
  "asl-router-drivers-virtio",
+ "asl-router-drivers-virtio-blk",
  "asl-router-fastpath",
  "asl-router-hwinv",
  "asl-router-lpm",
@@ -64,6 +65,13 @@ version = "0.1.0"
 dependencies = [
  "asl-router-fastpath",
  "asl-router-netbuf",
+ "asl-router-pci",
+]
+
+[[package]]
+name = "asl-router-drivers-virtio-blk"
+version = "0.1.0"
+dependencies = [
  "asl-router-pci",
 ]
 

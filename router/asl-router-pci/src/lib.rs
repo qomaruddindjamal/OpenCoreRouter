@@ -55,6 +55,10 @@ impl PciDevice {
         self.vendor_id == 0x1AF4 && (self.device_id == 0x1000 || self.device_id == 0x1041)
     }
 
+    pub fn is_virtio_blk(&self) -> bool {
+        self.vendor_id == 0x1AF4 && (self.device_id == 0x1001 || self.device_id == 0x1042)
+    }
+
     pub fn is_e1000(&self) -> bool {
         self.vendor_id == 0x8086 && (self.device_id == 0x100E || self.device_id == 0x100F || self.device_id == 0x10D3)
     }
@@ -230,7 +234,25 @@ mod tests {
         };
         assert!(virtio.is_valid());
         assert!(virtio.is_virtio_net());
+        assert!(!virtio.is_virtio_blk());
         assert!(!virtio.is_e1000());
+
+        let blk = PciDevice {
+            bus: 0,
+            device: 5,
+            function: 0,
+            vendor_id: 0x1AF4,
+            device_id: 0x1001,
+            class_code: 0x01,
+            subclass: 0x00,
+            prog_if: 0,
+            header_type: 0,
+            bars: [PciBar::Io { port: 0xC100, size: 64 }, PciBar::None, PciBar::None, PciBar::None, PciBar::None, PciBar::None],
+        };
+        assert!(blk.is_valid());
+        assert!(!blk.is_virtio_net());
+        assert!(blk.is_virtio_blk());
+        assert!(!blk.is_e1000());
 
         let e1000 = PciDevice {
             bus: 0,
