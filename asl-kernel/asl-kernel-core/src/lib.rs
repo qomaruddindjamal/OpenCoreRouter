@@ -50,7 +50,10 @@ impl KernelExecutive {
         }
     }
 
-    pub fn register_partition(&mut self, partition: PartitionDescriptor) -> Result<usize, &'static str> {
+    pub fn register_partition(
+        &mut self,
+        partition: PartitionDescriptor,
+    ) -> Result<usize, &'static str> {
         let mut i = 0;
         while i < self.active_partitions.len() {
             if self.active_partitions[i].is_none() {
@@ -95,7 +98,9 @@ mod tests {
     fn test_kernel_executive_registration() {
         let mut exec = KernelExecutive::new();
         let p0 = PartitionDescriptor::new(1, 10_000, 2_000);
-        let slot = exec.register_partition(p0).expect("Registration should succeed");
+        let slot = exec
+            .register_partition(p0)
+            .expect("Registration should succeed");
         assert_eq!(slot, 0);
 
         let retrieved = exec.get_partition(slot).expect("Should exist");

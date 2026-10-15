@@ -34,8 +34,8 @@ pub const VIRTIO_BLK_CONFIG_GEOMETRY_SECTORS: u16 = 39;
 pub const VIRTIO_BLK_CONFIG_BLK_SIZE: u16 = 40; // 32-bit block size
 
 // VirtIO Request Types
-pub const VIRTIO_BLK_T_IN: u32 = 0;   // Read
-pub const VIRTIO_BLK_T_OUT: u32 = 1;  // Write
+pub const VIRTIO_BLK_T_IN: u32 = 0; // Read
+pub const VIRTIO_BLK_T_OUT: u32 = 1; // Write
 pub const VIRTIO_BLK_T_FLUSH: u32 = 4;
 
 // VirtIO Status
@@ -55,7 +55,10 @@ unsafe fn inb(port: u16) -> u8 {
         ret
     }
     #[cfg(not(target_arch = "x86_64"))]
-    { let _ = port; 0 }
+    {
+        let _ = port;
+        0
+    }
 }
 
 #[inline(always)]
@@ -75,7 +78,10 @@ unsafe fn inw(port: u16) -> u16 {
         ret
     }
     #[cfg(not(target_arch = "x86_64"))]
-    { let _ = port; 0 }
+    {
+        let _ = port;
+        0
+    }
 }
 
 #[inline(always)]
@@ -95,7 +101,10 @@ unsafe fn ind(port: u16) -> u32 {
         ret
     }
     #[cfg(not(target_arch = "x86_64"))]
-    { let _ = port; 0 }
+    {
+        let _ = port;
+        0
+    }
 }
 
 #[inline(always)]
@@ -171,7 +180,10 @@ impl VirtioBlkDevice {
         unsafe {
             outb(io_port + VIRTIO_PCI_STATUS, 0);
             outb(io_port + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE);
-            outb(io_port + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER);
+            outb(
+                io_port + VIRTIO_PCI_STATUS,
+                VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER,
+            );
         }
 
         // Read capacity (64-bit in 512-byte sectors)
@@ -184,7 +196,10 @@ impl VirtioBlkDevice {
 
         // Driver OK
         unsafe {
-            outb(io_port + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_DRIVER_OK);
+            outb(
+                io_port + VIRTIO_PCI_STATUS,
+                VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER | VIRTIO_STATUS_DRIVER_OK,
+            );
         }
 
         Ok(Self {
@@ -221,7 +236,11 @@ impl VirtioBlkDevice {
         }
     }
 
-    pub fn read_sector_sync(&mut self, sector: u64, out_buf: &mut [u8; SECTOR_SIZE]) -> Result<(), &'static str> {
+    pub fn read_sector_sync(
+        &mut self,
+        sector: u64,
+        out_buf: &mut [u8; SECTOR_SIZE],
+    ) -> Result<(), &'static str> {
         if sector >= self.capacity_sectors && self.capacity_sectors > 0 {
             return Err("Sector out of bounds");
         }
@@ -236,7 +255,11 @@ impl VirtioBlkDevice {
         Ok(())
     }
 
-    pub fn write_sector_sync(&mut self, sector: u64, in_buf: &[u8; SECTOR_SIZE]) -> Result<(), &'static str> {
+    pub fn write_sector_sync(
+        &mut self,
+        sector: u64,
+        in_buf: &[u8; SECTOR_SIZE],
+    ) -> Result<(), &'static str> {
         if sector >= self.capacity_sectors && self.capacity_sectors > 0 {
             return Err("Sector out of bounds");
         }
@@ -297,7 +320,10 @@ mod tests {
         let mut dev = VirtioBlkDevice::new_simulated(100);
         let mut buf = [0u8; SECTOR_SIZE];
         assert!(dev.read_sector_sync(50, &mut buf).is_ok());
-        assert_eq!(dev.read_sector_sync(100, &mut buf), Err("Sector out of bounds"));
+        assert_eq!(
+            dev.read_sector_sync(100, &mut buf),
+            Err("Sector out of bounds")
+        );
     }
 
     #[test]
@@ -305,6 +331,9 @@ mod tests {
         let mut dev = VirtioBlkDevice::new_simulated(100);
         let buf = [0x5Au8; SECTOR_SIZE];
         assert!(dev.write_sector_sync(99, &buf).is_ok());
-        assert_eq!(dev.write_sector_sync(150, &buf), Err("Sector out of bounds"));
+        assert_eq!(
+            dev.write_sector_sync(150, &buf),
+            Err("Sector out of bounds")
+        );
     }
 }

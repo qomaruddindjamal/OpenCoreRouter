@@ -3,6 +3,11 @@
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! Evaluation Stub: smoltcp Architecture & Zero-Copy DescriptorRing Adapter
 //!
+//! STATUS RINJANI 1.0.0: artifact evaluasi EVAL-01 (ADR-011, OPCR-54) dan
+//! adapter zero-copy ring. crate ini TIDAK lagi ditautkan ke `asl-kernel-bin`:
+//! jalur TCP/HTTP produksi adalah mesin natif di `asl-router-webui`
+//! (RFC 9293 + RFC 7230). Jangan kutuk crate ini sebagai bukti TCP hidup.
+//!
 //! MANDATE:
 //! - #![no_std] pure, no libc, bounded memory.
 //! - Direct binding to asl-router-fastpath DescriptorRing and netbuf pool.

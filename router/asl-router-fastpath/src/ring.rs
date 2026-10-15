@@ -109,7 +109,10 @@ pub struct DescriptorRing<T, const N: usize> {
 impl<T: Copy, const N: usize> DescriptorRing<T, N> {
     // Compile-time constraint: Ukuran N wajib power-of-two
     pub const fn new(init_val: T) -> Self {
-        assert!(N > 0 && (N & (N - 1)) == 0, "Ring capacity must be power-of-two");
+        assert!(
+            N > 0 && (N & (N - 1)) == 0,
+            "Ring capacity must be power-of-two"
+        );
         Self {
             descriptors: [init_val; N],
             head: AtomicU32::new(0),

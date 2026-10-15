@@ -129,7 +129,10 @@ impl<'a> HttpRequest<'a> {
         }
 
         // Body begins after \r\n\r\n
-        let body_start = text.find("\r\n\r\n").map(|idx| idx + 4).unwrap_or(text.len());
+        let body_start = text
+            .find("\r\n\r\n")
+            .map(|idx| idx + 4)
+            .unwrap_or(text.len());
         let body = &raw[body_start..];
 
         Ok(Self {
@@ -225,7 +228,11 @@ impl<'a> HttpResponseBuilder<'a> {
             self.write_str("ETag: \"")?;
             self.write_str(et)?;
             self.write_str("\"\r\n")?;
-            self.write_str("Cache-Control: public, max-age=3600\r\n")?;
+            // no-cache (bukan max-age): aset WebUI ter-compile ke dalam image kernel,
+            // sehingga build baru mengubah isi tanpa mengubah URL. Dengan max-age,
+            // browser menyembunyikan UI lama hingga 1 jam meski ETag sudah berganti;
+            // di sini browser wajib revalidasi dan kita jawab 304 bila ETag sama.
+            self.write_str("Cache-Control: no-cache, must-revalidate\r\n")?;
         } else {
             self.write_str("Cache-Control: no-cache, no-store, must-revalidate\r\n")?;
         }
@@ -260,7 +267,11 @@ pub struct StaticAsset {
     pub content: &'static [u8],
 }
 
-pub fn serve_static(asset: &StaticAsset, req: &HttpRequest, out_buf: &mut [u8]) -> Result<usize, &'static str> {
+pub fn serve_static(
+    asset: &StaticAsset,
+    req: &HttpRequest,
+    out_buf: &mut [u8],
+) -> Result<usize, &'static str> {
     if let Some(inm) = req.if_none_match {
         let clean_inm = inm.trim_matches('"');
         if clean_inm == asset.etag {
@@ -359,7 +370,9 @@ mod tests {
     fn test_06_error_statuses() {
         let mut buf = [0u8; 512];
         let builder = HttpResponseBuilder::new(&mut buf, HttpStatus::TooManyRequests);
-        let len = builder.finish_with_body(b"{\"error\":\"rate_limited\"}").unwrap();
+        let len = builder
+            .finish_with_body(b"{\"error\":\"rate_limited\"}")
+            .unwrap();
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
 
         assert!(resp.contains("HTTP/1.1 429 Too Many Requests\r\n"));

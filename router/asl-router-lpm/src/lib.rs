@@ -80,7 +80,13 @@ impl LpmTable {
     }
 
     /// Insert atau Update rute ke tabel (Single-Writer semantics)
-    pub fn insert(&mut self, network: [u8; 4], prefix_len: u8, next_hop: NextHop, metric: u32) -> Result<(), &'static str> {
+    pub fn insert(
+        &mut self,
+        network: [u8; 4],
+        prefix_len: u8,
+        next_hop: NextHop,
+        metric: u32,
+    ) -> Result<(), &'static str> {
         let prefix = if prefix_len > 32 { 32 } else { prefix_len };
         // Normalisasi network sesuai mask
         let mask = Self::prefix_to_mask(prefix);
@@ -88,7 +94,10 @@ impl LpmTable {
 
         // 1. Cek apakah route sudah ada (Update existing)
         for i in 0..self.count {
-            if self.routes[i].is_active && self.routes[i].network == norm_net && self.routes[i].prefix_len == prefix {
+            if self.routes[i].is_active
+                && self.routes[i].network == norm_net
+                && self.routes[i].prefix_len == prefix
+            {
                 self.routes[i].next_hop = next_hop;
                 self.routes[i].metric = metric;
                 return Ok(());
@@ -118,7 +127,10 @@ impl LpmTable {
         let norm_net = (Self::ip_to_u32(network) & mask).to_be_bytes();
 
         for i in 0..self.count {
-            if self.routes[i].is_active && self.routes[i].network == norm_net && self.routes[i].prefix_len == prefix {
+            if self.routes[i].is_active
+                && self.routes[i].network == norm_net
+                && self.routes[i].prefix_len == prefix
+            {
                 // Swap remove
                 self.routes[i] = self.routes[self.count - 1];
                 self.routes[self.count - 1] = RouteEntry::empty();
@@ -167,12 +179,33 @@ impl RoutingEngine {
         self.fib.insert([0, 0, 0, 0], 0, next_hop, 100)
     }
 
-    pub fn add_connected_route(&mut self, network: [u8; 4], prefix_len: u8, interface: u8) -> Result<(), &'static str> {
-        self.fib.insert(network, prefix_len, NextHop::Interface(interface), 0)
+    pub fn add_connected_route(
+        &mut self,
+        network: [u8; 4],
+        prefix_len: u8,
+        interface: u8,
+    ) -> Result<(), &'static str> {
+        self.fib
+            .insert(network, prefix_len, NextHop::Interface(interface), 0)
     }
 
-    pub fn add_static_route(&mut self, network: [u8; 4], prefix_len: u8, gateway: [u8; 4], interface: u8, metric: u32) -> Result<(), &'static str> {
-        self.fib.insert(network, prefix_len, NextHop::Gateway { interface, next_hop_ip: gateway }, metric)
+    pub fn add_static_route(
+        &mut self,
+        network: [u8; 4],
+        prefix_len: u8,
+        gateway: [u8; 4],
+        interface: u8,
+        metric: u32,
+    ) -> Result<(), &'static str> {
+        self.fib.insert(
+            network,
+            prefix_len,
+            NextHop::Gateway {
+                interface,
+                next_hop_ip: gateway,
+            },
+            metric,
+        )
     }
 
     pub fn route_packet(&self, dst_ip: [u8; 4]) -> NextHop {
@@ -188,9 +221,11 @@ mod tests {
     fn test_01_exact_and_default_match() {
         let mut lpm = LpmTable::new();
         // Default route 0.0.0.0/0 -> WAN (Interface 2)
-        lpm.insert([0, 0, 0, 0], 0, NextHop::Interface(2), 100).unwrap();
+        lpm.insert([0, 0, 0, 0], 0, NextHop::Interface(2), 100)
+            .unwrap();
         // Connected LAN 192.168.56.0/24 -> LAN (Interface 1)
-        lpm.insert([192, 168, 56, 0], 24, NextHop::Interface(1), 10).unwrap();
+        lpm.insert([192, 168, 56, 0], 24, NextHop::Interface(1), 10)
+            .unwrap();
 
         // 192.168.56.100 harus match ke LAN (Interface 1) karena prefix /24 > /0
         let res_lan = lpm.lookup([192, 168, 56, 100]);
@@ -205,9 +240,11 @@ mod tests {
     fn test_02_longest_prefix_wins() {
         let mut lpm = LpmTable::new();
         // Subnet besar /16 -> Interface 1
-        lpm.insert([10, 0, 0, 0], 16, NextHop::Interface(1), 20).unwrap();
+        lpm.insert([10, 0, 0, 0], 16, NextHop::Interface(1), 20)
+            .unwrap();
         // Subnet kecil /24 -> Interface 2 (lebih spesifik)
-        lpm.insert([10, 0, 2, 0], 24, NextHop::Interface(2), 10).unwrap();
+        lpm.insert([10, 0, 2, 0], 24, NextHop::Interface(2), 10)
+            .unwrap();
         // Host route /32 -> Local
         lpm.insert([10, 0, 2, 15], 32, NextHop::Local, 5).unwrap();
 
@@ -219,12 +256,14 @@ mod tests {
     #[test]
     fn test_03_route_update_existing() {
         let mut lpm = LpmTable::new();
-        lpm.insert([10, 0, 0, 0], 24, NextHop::Interface(1), 10).unwrap();
+        lpm.insert([10, 0, 0, 0], 24, NextHop::Interface(1), 10)
+            .unwrap();
         assert_eq!(lpm.count, 1);
         assert_eq!(lpm.lookup([10, 0, 0, 5]), Some(NextHop::Interface(1)));
 
         // Update ke Interface 3
-        lpm.insert([10, 0, 0, 0], 24, NextHop::Interface(3), 5).unwrap();
+        lpm.insert([10, 0, 0, 0], 24, NextHop::Interface(3), 5)
+            .unwrap();
         assert_eq!(lpm.count, 1); // Kapasitas tidak bertambah
         assert_eq!(lpm.lookup([10, 0, 0, 5]), Some(NextHop::Interface(3)));
     }
@@ -232,7 +271,8 @@ mod tests {
     #[test]
     fn test_04_route_remove() {
         let mut lpm = LpmTable::new();
-        lpm.insert([192, 168, 1, 0], 24, NextHop::Interface(1), 10).unwrap();
+        lpm.insert([192, 168, 1, 0], 24, NextHop::Interface(1), 10)
+            .unwrap();
         assert_eq!(lpm.lookup([192, 168, 1, 50]), Some(NextHop::Interface(1)));
 
         let removed = lpm.remove([192, 168, 1, 0], 24);
@@ -245,7 +285,8 @@ mod tests {
     fn test_05_table_overflow_error() {
         let mut lpm = LpmTable::new();
         for i in 0..MAX_ROUTES {
-            lpm.insert([10, i as u8, 0, 0], 24, NextHop::Interface(1), 10).unwrap();
+            lpm.insert([10, i as u8, 0, 0], 24, NextHop::Interface(1), 10)
+                .unwrap();
         }
         assert_eq!(lpm.count, MAX_ROUTES);
         // Entri ke-(MAX_ROUTES+1) harus ditolak politely
@@ -276,10 +317,13 @@ mod tests {
     fn test_08_metric_priority_on_tie() {
         let mut lpm = LpmTable::new();
         // Dua default route, satu metrik 200, satu metrik 50
-        lpm.insert([0, 0, 0, 0], 0, NextHop::Interface(1), 200).unwrap();
+        lpm.insert([0, 0, 0, 0], 0, NextHop::Interface(1), 200)
+            .unwrap();
         // Rute spesifik dengan prefix sama namun beda network/metrik
-        lpm.insert([10, 10, 0, 0], 16, NextHop::Interface(2), 100).unwrap();
-        lpm.insert([10, 10, 0, 0], 16, NextHop::Interface(3), 50).unwrap(); // Update metrik lebih rendah
+        lpm.insert([10, 10, 0, 0], 16, NextHop::Interface(2), 100)
+            .unwrap();
+        lpm.insert([10, 10, 0, 0], 16, NextHop::Interface(3), 50)
+            .unwrap(); // Update metrik lebih rendah
 
         assert_eq!(lpm.lookup([10, 10, 1, 1]), Some(NextHop::Interface(3)));
     }
@@ -288,13 +332,18 @@ mod tests {
     fn test_09_forward_multihop_gateway() {
         let mut re = RoutingEngine::new();
         // Route default ke Gateway 192.168.57.1 di interface WAN (2)
-        assert!(re.add_static_route([0, 0, 0, 0], 0, [192, 168, 57, 1], 2, 100).is_ok());
+        assert!(re
+            .add_static_route([0, 0, 0, 0], 0, [192, 168, 57, 1], 2, 100)
+            .is_ok());
         // Route langsung ke LAN (1)
         assert!(re.add_connected_route([192, 168, 56, 0], 24, 1).is_ok());
 
         assert_eq!(
             re.route_packet([8, 8, 8, 8]),
-            NextHop::Gateway { interface: 2, next_hop_ip: [192, 168, 57, 1] }
+            NextHop::Gateway {
+                interface: 2,
+                next_hop_ip: [192, 168, 57, 1]
+            }
         );
         assert_eq!(re.route_packet([192, 168, 56, 50]), NextHop::Interface(1));
     }

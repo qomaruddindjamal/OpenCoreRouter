@@ -305,8 +305,8 @@ fn write_lfn_entries(entries: &mut [u8], start_slot: usize, name: &str, checksum
 
 #[derive(Clone, Copy)]
 struct DirRec<'a> {
-    name: &'a str,     // last path segment ("" for root)
-    parent: usize,     // index into dirs, usize::MAX for root
+    name: &'a str, // last path segment ("" for root)
+    parent: usize, // index into dirs, usize::MAX for root
     sfn: [u8; 11],
     cluster: u32,
 }
@@ -321,7 +321,12 @@ struct FileRec<'a> {
     size: u32,
 }
 
-fn dir_index_of<'a>(dirs: &mut [DirRec<'a>; MAX_DIRS], ndirs: &mut usize, path_dir: &'a str, files: &[EspFile<'a>]) -> Option<usize> {
+fn dir_index_of<'a>(
+    dirs: &mut [DirRec<'a>; MAX_DIRS],
+    ndirs: &mut usize,
+    path_dir: &'a str,
+    files: &[EspFile<'a>],
+) -> Option<usize> {
     // Ensure all ancestor dirs exist for the directory path string (may be "")
     let mut parent = 0usize; // children of the root live at dir index 0
     if path_dir.is_empty() {
@@ -362,7 +367,12 @@ fn find_or_add_dir<'a>(
     if *ndirs >= MAX_DIRS {
         return None;
     }
-    dirs[*ndirs] = DirRec { name: seg, parent, sfn: sfn_spaces(), cluster: 0 };
+    dirs[*ndirs] = DirRec {
+        name: seg,
+        parent,
+        sfn: sfn_spaces(),
+        cluster: 0,
+    };
     let idx = *ndirs;
     *ndirs += 1;
     Some(idx)
@@ -388,27 +398,27 @@ fn write_boot_sector(buf: &mut [u8], geom: &Fat32Stats) {
     s[1] = 0x58;
     s[2] = 0x90;
     s[3..11].copy_from_slice(b"MSWIN4.1");
-    put_u16(s, 11, 512);              // bytes per sector
-    s[13] = 1;                        // sectors per cluster
+    put_u16(s, 11, 512); // bytes per sector
+    s[13] = 1; // sectors per cluster
     put_u16(s, 14, RESERVED_SECTORS as u16);
     s[16] = NUM_FATS as u8;
-    put_u16(s, 17, 0);                // root entry count (0 for FAT32)
-    put_u16(s, 19, 0);                // total sectors 16
-    s[21] = 0xF8;                     // media descriptor
-    put_u16(s, 22, 0);                // FAT size 16 (0 for FAT32)
-    put_u16(s, 24, 63);               // sectors per track
-    put_u16(s, 26, 255);              // heads
-    put_u32(s, 28, 0);                // hidden sectors
+    put_u16(s, 17, 0); // root entry count (0 for FAT32)
+    put_u16(s, 19, 0); // total sectors 16
+    s[21] = 0xF8; // media descriptor
+    put_u16(s, 22, 0); // FAT size 16 (0 for FAT32)
+    put_u16(s, 24, 63); // sectors per track
+    put_u16(s, 26, 255); // heads
+    put_u32(s, 28, 0); // hidden sectors
     put_u32(s, 32, geom.total_sectors as u32);
     put_u32(s, 36, geom.fat_sectors); // FAT size 32
-    put_u16(s, 40, 0);                // ext flags
-    put_u16(s, 42, 0);                // FS version
-    put_u32(s, 44, ROOT_CLUSTER);     // root cluster
-    put_u16(s, 48, 1);                // FSInfo sector
-    put_u16(s, 50, 6);                // backup boot sector
-    s[64] = 0x80;                     // drive number
-    s[66] = 0x29;                     // boot signature
-    put_u32(s, 67, 0x524A_4E31);      // volume serial "RJN1"
+    put_u16(s, 40, 0); // ext flags
+    put_u16(s, 42, 0); // FS version
+    put_u32(s, 44, ROOT_CLUSTER); // root cluster
+    put_u16(s, 48, 1); // FSInfo sector
+    put_u16(s, 50, 6); // backup boot sector
+    s[64] = 0x80; // drive number
+    s[66] = 0x29; // boot signature
+    put_u32(s, 67, 0x524A_4E31); // volume serial "RJN1"
     s[71..82].copy_from_slice(b"RINJANI ESP");
     s[82..90].copy_from_slice(b"FAT32   ");
     s[510] = 0x55;
@@ -431,7 +441,8 @@ fn write_fsinfo(buf: &mut [u8], geom: &Fat32Stats) {
 }
 
 fn fat_entry_off(fat: u64, cluster: u32, geom: &Fat32Stats) -> usize {
-    ((RESERVED_SECTORS + fat * geom.fat_sectors as u64) as usize * SECTOR_SIZE) + (cluster as usize * 4)
+    ((RESERVED_SECTORS + fat * geom.fat_sectors as u64) as usize * SECTOR_SIZE)
+        + (cluster as usize * 4)
 }
 
 fn write_fat_entries(buf: &mut [u8], geom: &Fat32Stats, cluster: u32, value: u32) {
@@ -492,7 +503,12 @@ pub fn format_esp<'a>(buf: &mut [u8], files: &[EspFile<'a>]) -> Result<Fat32Stat
     };
 
     // --- Parse paths, build dir table -------------------------------------
-    let mut dirs = [DirRec { name: "", parent: usize::MAX, sfn: sfn_spaces(), cluster: 0 }; MAX_DIRS];
+    let mut dirs = [DirRec {
+        name: "",
+        parent: usize::MAX,
+        sfn: sfn_spaces(),
+        cluster: 0,
+    }; MAX_DIRS];
     dirs[0].cluster = ROOT_CLUSTER;
     let mut ndirs = 1usize;
     let mut frecs = [const {
@@ -508,7 +524,11 @@ pub fn format_esp<'a>(buf: &mut [u8], files: &[EspFile<'a>]) -> Result<Fat32Stat
     let mut nfiles = 0usize;
 
     for f in files {
-        if f.path.is_empty() || f.path.starts_with('/') || f.path.ends_with('/') || f.path.contains("//") {
+        if f.path.is_empty()
+            || f.path.starts_with('/')
+            || f.path.ends_with('/')
+            || f.path.contains("//")
+        {
             return Err(FatError::BadPath);
         }
         let slash = f.path.rfind('/');
@@ -673,7 +693,11 @@ pub fn format_esp<'a>(buf: &mut [u8], files: &[EspFile<'a>]) -> Result<Fat32Stat
         write_fat_entries(buf, &geom, cluster, FAT32_EOC);
         let dsectors = &mut buf[off..off + SECTOR_SIZE];
         // we re-borrow: use raw slice for entries
-        let parent_cluster = if d == 0 { 0 } else { dirs[dirs[d].parent].cluster };
+        let parent_cluster = if d == 0 {
+            0
+        } else {
+            dirs[dirs[d].parent].cluster
+        };
         let self_cluster = cluster;
 
         // '.' entry (0x2E + 10 spaces per MS spec)
@@ -698,7 +722,14 @@ pub fn format_esp<'a>(buf: &mut [u8], files: &[EspFile<'a>]) -> Result<Fat32Stat
         let mut k = 1usize;
         while k < ndirs {
             if dirs[k].parent == d {
-                write_sfn_entry(dsectors, slot, &dirs[k].sfn, ATTR_DIRECTORY, dirs[k].cluster, 0);
+                write_sfn_entry(
+                    dsectors,
+                    slot,
+                    &dirs[k].sfn,
+                    ATTR_DIRECTORY,
+                    dirs[k].cluster,
+                    0,
+                );
                 slot += 1;
             }
             k += 1;
@@ -711,7 +742,14 @@ pub fn format_esp<'a>(buf: &mut [u8], files: &[EspFile<'a>]) -> Result<Fat32Stat
                     let used = write_lfn_entries(dsectors, slot, frecs[j].lfn, chk);
                     slot += used;
                 }
-                write_sfn_entry(dsectors, slot, &frecs[j].sfn, ATTR_ARCHIVE, frecs[j].first_cluster, frecs[j].size);
+                write_sfn_entry(
+                    dsectors,
+                    slot,
+                    &frecs[j].sfn,
+                    ATTR_ARCHIVE,
+                    frecs[j].first_cluster,
+                    frecs[j].size,
+                );
                 slot += 1;
             }
             j += 1;
@@ -746,8 +784,8 @@ mod tests {
         }
 
         fn cluster_off(&self, cluster: u32) -> usize {
-            ((RESERVED_SECTORS + NUM_FATS * self.fat_len as u64) as usize
-                + (cluster as usize - 2)) * SECTOR_SIZE
+            ((RESERVED_SECTORS + NUM_FATS * self.fat_len as u64) as usize + (cluster as usize - 2))
+                * SECTOR_SIZE
         }
 
         fn fat_get(&self, cluster: u32) -> u32 {
@@ -818,7 +856,10 @@ mod tests {
                             chunk.push(u);
                         }
                     }
-                    let s: String = chunk.iter().filter_map(|&c| char::from_u32(c as u32)).collect();
+                    let s: String = chunk
+                        .iter()
+                        .filter_map(|&c| char::from_u32(c as u32))
+                        .collect();
                     chunks.push((e[0] & 0x3F, s));
                     i += 32;
                     continue;
@@ -835,14 +876,22 @@ mod tests {
                 let name = if chunks.is_empty() {
                     let base = core::str::from_utf8(&e[0..8]).unwrap_or("").trim();
                     let ext = core::str::from_utf8(&e[8..11]).unwrap_or("").trim();
-                    if ext.is_empty() { base.to_string() } else { format!("{}.{}", base, ext) }
+                    if ext.is_empty() {
+                        base.to_string()
+                    } else {
+                        format!("{}.{}", base, ext)
+                    }
                 } else {
                     chunks.sort_by_key(|c| c.0);
                     chunks.iter().map(|(_, s)| s.as_str()).collect::<String>()
                 };
                 chunks.clear();
                 let data = self.read_clusters(&self.chain(first), size);
-                let full = if dir_path.is_empty() { name } else { format!("{}/{}", dir_path, name) };
+                let full = if dir_path.is_empty() {
+                    name
+                } else {
+                    format!("{}/{}", dir_path, name)
+                };
                 results.push((full, data));
                 i += 32;
             }
@@ -860,23 +909,39 @@ mod tests {
         let payload_b: Vec<u8> = (0u32..9000).map(|i| (i % 251) as u8).collect();
         let mut buf = esp_buf();
         let files = [
-            EspFile { path: "boot/limine/limine.conf", data: &payload_a },
-            EspFile { path: "boot/rinjani-kernel.elf", data: &payload_b },
-            EspFile { path: "boot/limine/limine-bios.sys", data: &payload_a },
+            EspFile {
+                path: "boot/limine/limine.conf",
+                data: &payload_a,
+            },
+            EspFile {
+                path: "boot/rinjani-kernel.elf",
+                data: &payload_b,
+            },
+            EspFile {
+                path: "boot/limine/limine-bios.sys",
+                data: &payload_a,
+            },
         ];
         let stats = format_esp(&mut buf, &files).expect("format ok");
         assert!(stats.total_clusters >= 65_525);
 
         let r = Reader::open(buf);
-        let boot = r.dir_cluster_at(&r.root_chain(), b"BOOT", ATTR_DIRECTORY)
+        let boot = r
+            .dir_cluster_at(&r.root_chain(), b"BOOT", ATTR_DIRECTORY)
             .expect("BOOT dir entry");
         let boot_chain = r.chain(boot);
         let mut all = r.list_files("boot", &boot_chain);
-        let limine = r.dir_cluster_at(&boot_chain, b"LIMINE", ATTR_DIRECTORY)
+        let limine = r
+            .dir_cluster_at(&boot_chain, b"LIMINE", ATTR_DIRECTORY)
             .expect("LIMINE dir entry");
         all.extend(r.list_files("boot/limine", &r.chain(limine)));
 
-        assert_eq!(all.len(), 3, "names: {:?}", all.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>());
+        assert_eq!(
+            all.len(),
+            3,
+            "names: {:?}",
+            all.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()
+        );
         for (name, data) in all.iter() {
             match name.as_str() {
                 "boot/limine/limine.conf" | "boot/limine/limine-bios.sys" => {
@@ -893,7 +958,10 @@ mod tests {
     #[test]
     fn fat_test_02_bpb_fields() {
         let mut buf = esp_buf();
-        let files = [EspFile { path: "boot/x.txt", data: b"hi" }];
+        let files = [EspFile {
+            path: "boot/x.txt",
+            data: b"hi",
+        }];
         let stats = format_esp(&mut buf, &files).unwrap();
         assert_eq!(&buf[3..11], b"MSWIN4.1");
         assert_eq!(u16::from_le_bytes([buf[11], buf[12]]), 512);
@@ -901,13 +969,19 @@ mod tests {
         assert_eq!(u16::from_le_bytes([buf[14], buf[15]]), 32);
         assert_eq!(buf[16], 2);
         assert_eq!(buf[21], 0xF8);
-        assert_eq!(u32::from_le_bytes(buf[32..36].try_into().unwrap()), ESP_SECTORS as u32);
+        assert_eq!(
+            u32::from_le_bytes(buf[32..36].try_into().unwrap()),
+            ESP_SECTORS as u32
+        );
         assert_eq!(u32::from_le_bytes(buf[44..48].try_into().unwrap()), 2);
         assert_eq!(&buf[82..87], b"FAT32");
         assert_eq!(buf[510], 0x55);
         assert_eq!(buf[511], 0xAA);
         assert_eq!(buf[6 * SECTOR_SIZE + 511], 0xAA);
-        assert_eq!(u32::from_le_bytes(buf[SECTOR_SIZE..SECTOR_SIZE + 4].try_into().unwrap()), 0x4161_5252);
+        assert_eq!(
+            u32::from_le_bytes(buf[SECTOR_SIZE..SECTOR_SIZE + 4].try_into().unwrap()),
+            0x4161_5252
+        );
         assert_eq!(stats.fat_sectors as u64, compute_fat_len(ESP_SECTORS));
     }
 
@@ -956,29 +1030,51 @@ mod tests {
     #[test]
     fn fat_test_06_bad_paths_rejected() {
         let mut buf = esp_buf();
-        let f = [EspFile { path: "/abs/path.txt", data: b"x" }];
+        let f = [EspFile {
+            path: "/abs/path.txt",
+            data: b"x",
+        }];
         assert_eq!(format_esp(&mut buf, &f), Err(FatError::BadPath));
-        let f2 = [EspFile { path: "trailing/", data: b"x" }];
+        let f2 = [EspFile {
+            path: "trailing/",
+            data: b"x",
+        }];
         assert_eq!(format_esp(&mut buf, &f2), Err(FatError::BadPath));
-        let small = [EspFile { path: "a.txt", data: b"x" }];
+        let small = [EspFile {
+            path: "a.txt",
+            data: b"x",
+        }];
         let mut tiny = vec![0u8; 8 * SECTOR_SIZE];
         assert_eq!(format_esp(&mut tiny, &small), Err(FatError::VolumeTooSmall));
         let mut misaligned = vec![0u8; ESP_SECTORS as usize * SECTOR_SIZE + 3];
-        assert_eq!(format_esp(&mut misaligned, &small), Err(FatError::BufferNotSectorAligned));
+        assert_eq!(
+            format_esp(&mut misaligned, &small),
+            Err(FatError::BufferNotSectorAligned)
+        );
     }
 
     #[test]
     fn fat_test_07_multisector_file_chain() {
         let payload: Vec<u8> = (0u32..4096).map(|i| (i % 256) as u8).collect();
         let mut buf = esp_buf();
-        let files = [EspFile { path: "boot/big.bin", data: &payload }];
+        let files = [EspFile {
+            path: "boot/big.bin",
+            data: &payload,
+        }];
         format_esp(&mut buf, &files).unwrap();
         let r = Reader::open(buf);
-        let boot = r.dir_cluster_at(&r.root_chain(), b"BOOT", ATTR_DIRECTORY).unwrap();
+        let boot = r
+            .dir_cluster_at(&r.root_chain(), b"BOOT", ATTR_DIRECTORY)
+            .unwrap();
         let boot_chain = r.chain(boot);
         // locate via LFN list instead of SFN tag
         let listed = r.list_files("boot", &boot_chain);
-        assert_eq!(listed.len(), 1, "names: {:?}", listed.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>());
+        assert_eq!(
+            listed.len(),
+            1,
+            "names: {:?}",
+            listed.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>()
+        );
         assert_eq!(listed[0].0, "boot/BIG.BIN");
         assert_eq!(listed[0].1, payload);
     }

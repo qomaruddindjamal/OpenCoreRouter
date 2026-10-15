@@ -160,7 +160,9 @@ pub struct QueueRegion {
 
 impl QueueRegion {
     const fn zeroed() -> Self {
-        Self { mem: [0u8; QUEUE_BYTES] }
+        Self {
+            mem: [0u8; QUEUE_BYTES],
+        }
     }
 
     #[inline(always)]
@@ -190,7 +192,11 @@ impl QueueRegion {
 
     #[inline(always)]
     fn used_elem_ptr(&self, q: usize, slot: usize) -> *mut UsedElem {
-        unsafe { self.base().add(used_off(q) + 4 + slot * core::mem::size_of::<UsedElem>()) as *mut UsedElem }
+        unsafe {
+            self.base()
+                .add(used_off(q) + 4 + slot * core::mem::size_of::<UsedElem>())
+                as *mut UsedElem
+        }
     }
 
     #[inline(always)]
@@ -288,7 +294,12 @@ impl VirtioNetDevice {
     /// Inisialisasi legacy virtio-net penuh: bus-master PCI, handshake status,
     /// guest features = 0, baca ukuran queue device (fixed di VBox), pasang
     /// PFN RX(0)/TX(1), DRIVER_OK, lalu prime NBUF rantai RX.
-    pub fn probe(&mut self, pci: &PciDevice, hhdm: u64, log: &dyn Fn(&str)) -> Result<(), &'static str> {
+    pub fn probe(
+        &mut self,
+        pci: &PciDevice,
+        hhdm: u64,
+        log: &dyn Fn(&str),
+    ) -> Result<(), &'static str> {
         let mut io_port = 0u16;
         for bar in pci.bars {
             if let asl_router_pci::PciBar::Io { port, .. } = bar {
@@ -309,7 +320,10 @@ impl VirtioNetDevice {
         unsafe {
             outb(io_port + VIRTIO_PCI_STATUS, 0);
             outb(io_port + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE);
-            outb(io_port + VIRTIO_PCI_STATUS, VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER);
+            outb(
+                io_port + VIRTIO_PCI_STATUS,
+                VIRTIO_STATUS_ACKNOWLEDGE | VIRTIO_STATUS_DRIVER,
+            );
 
             let host_features = ind(io_port + VIRTIO_PCI_HOST_FEATURES);
             let _ = host_features; // negosiasi nihil: guest features = 0
@@ -388,11 +402,21 @@ impl VirtioNetDevice {
             let buf_pa = pa_of(self.rx_buf[i].as_ptr(), self.hhdm);
             self.rxq.write_desc(
                 2 * i,
-                VirtqDesc { addr: hdr_pa, len: VIRTIO_NET_HDR_LEN as u32, flags: VRING_DESC_F_WRITE | VRING_DESC_F_NEXT, next: (2 * i + 1) as u16 },
+                VirtqDesc {
+                    addr: hdr_pa,
+                    len: VIRTIO_NET_HDR_LEN as u32,
+                    flags: VRING_DESC_F_WRITE | VRING_DESC_F_NEXT,
+                    next: (2 * i + 1) as u16,
+                },
             );
             self.rxq.write_desc(
                 2 * i + 1,
-                VirtqDesc { addr: buf_pa, len: PKTSZ as u32, flags: VRING_DESC_F_WRITE, next: 0 },
+                VirtqDesc {
+                    addr: buf_pa,
+                    len: PKTSZ as u32,
+                    flags: VRING_DESC_F_WRITE,
+                    next: 0,
+                },
             );
             self.rxq.write_avail_slot(q, i, (2 * i) as u16);
         }
@@ -420,12 +444,17 @@ impl VirtioNetDevice {
 
         let chain = (elem.id as usize / 2) % NBUF;
         let frame_len = (elem.len as usize).saturating_sub(VIRTIO_NET_HDR_LEN);
-        let n = if frame_len <= out.len() { frame_len } else { out.len() };
+        let n = if frame_len <= out.len() {
+            frame_len
+        } else {
+            out.len()
+        };
         out[..n].copy_from_slice(&self.rx_buf[chain][..n]);
 
         // Requeue rantai yang sudah dikonsumsi.
         let avail_ctr = self.rxq.read_avail_idx(q);
-        self.rxq.write_avail_slot(q, (avail_ctr as usize) % q, elem.id as u16);
+        self.rxq
+            .write_avail_slot(q, (avail_ctr as usize) % q, elem.id as u16);
         self.rxq.write_avail_idx(q, avail_ctr.wrapping_add(1));
         core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         unsafe {
@@ -482,14 +511,25 @@ impl VirtioNetDevice {
         let buf_pa = pa_of(self.tx_buf[slot].as_ptr(), self.hhdm);
         self.txq.write_desc(
             2 * slot,
-            VirtqDesc { addr: hdr_pa, len: VIRTIO_NET_HDR_LEN as u32, flags: VRING_DESC_F_NEXT, next: (2 * slot + 1) as u16 },
+            VirtqDesc {
+                addr: hdr_pa,
+                len: VIRTIO_NET_HDR_LEN as u32,
+                flags: VRING_DESC_F_NEXT,
+                next: (2 * slot + 1) as u16,
+            },
         );
         self.txq.write_desc(
             2 * slot + 1,
-            VirtqDesc { addr: buf_pa, len: packet.len() as u32, flags: 0, next: 0 },
+            VirtqDesc {
+                addr: buf_pa,
+                len: packet.len() as u32,
+                flags: 0,
+                next: 0,
+            },
         );
         let avail_ctr = self.txq.read_avail_idx(q);
-        self.txq.write_avail_slot(q, (avail_ctr as usize) % q, (2 * slot) as u16);
+        self.txq
+            .write_avail_slot(q, (avail_ctr as usize) % q, (2 * slot) as u16);
         self.txq.write_avail_idx(q, avail_ctr.wrapping_add(1));
         core::sync::atomic::fence(core::sync::atomic::Ordering::SeqCst);
         unsafe {
@@ -614,8 +654,15 @@ mod tests {
             prog_if: 0,
             header_type: 0,
             bars: [
-                PciBar::Memory { address: 0xF0000000, size: 0x20000, prefetchable: false },
-                PciBar::Io { port: 0xD000, size: 64 },
+                PciBar::Memory {
+                    address: 0xF0000000,
+                    size: 0x20000,
+                    prefetchable: false,
+                },
+                PciBar::Io {
+                    port: 0xD000,
+                    size: 64,
+                },
                 PciBar::None,
                 PciBar::None,
                 PciBar::None,
@@ -639,7 +686,10 @@ mod tests {
             prog_if: 0,
             header_type: 0,
             bars: [
-                PciBar::Io { port: 0xC000, size: 64 },
+                PciBar::Io {
+                    port: 0xC000,
+                    size: 64,
+                },
                 PciBar::None,
                 PciBar::None,
                 PciBar::None,

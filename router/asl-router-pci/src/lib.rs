@@ -12,8 +12,15 @@ pub const PCI_CONFIG_DATA: u16 = 0xCFC;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PciBar {
     None,
-    Io { port: u16, size: u32 },
-    Memory { address: u32, size: u32, prefetchable: bool },
+    Io {
+        port: u16,
+        size: u32,
+    },
+    Memory {
+        address: u32,
+        size: u32,
+        prefetchable: bool,
+    },
 }
 
 /// Deskriptor Perangkat PCI
@@ -60,7 +67,8 @@ impl PciDevice {
     }
 
     pub fn is_e1000(&self) -> bool {
-        self.vendor_id == 0x8086 && (self.device_id == 0x100E || self.device_id == 0x100F || self.device_id == 0x10D3)
+        self.vendor_id == 0x8086
+            && (self.device_id == 0x100E || self.device_id == 0x100F || self.device_id == 0x10D3)
     }
 }
 
@@ -181,7 +189,11 @@ impl PciEnumerator {
                         // Memory Space BAR
                         let address = bar_raw & 0xFFFFFFF0;
                         let prefetch = (bar_raw & 0x08) != 0;
-                        bars[bar_idx] = PciBar::Memory { address, size: 0, prefetchable: prefetch };
+                        bars[bar_idx] = PciBar::Memory {
+                            address,
+                            size: 0,
+                            prefetchable: prefetch,
+                        };
                     }
                 }
                 bar_idx += 1;
@@ -236,7 +248,17 @@ mod tests {
             subclass: 0x00,
             prog_if: 0,
             header_type: 0,
-            bars: [PciBar::Io { port: 0xC000, size: 64 }, PciBar::None, PciBar::None, PciBar::None, PciBar::None, PciBar::None],
+            bars: [
+                PciBar::Io {
+                    port: 0xC000,
+                    size: 64,
+                },
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+            ],
         };
         assert!(virtio.is_valid());
         assert!(virtio.is_virtio_net());
@@ -253,7 +275,17 @@ mod tests {
             subclass: 0x00,
             prog_if: 0,
             header_type: 0,
-            bars: [PciBar::Io { port: 0xC100, size: 64 }, PciBar::None, PciBar::None, PciBar::None, PciBar::None, PciBar::None],
+            bars: [
+                PciBar::Io {
+                    port: 0xC100,
+                    size: 64,
+                },
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+                PciBar::None,
+            ],
         };
         assert!(blk.is_valid());
         assert!(!blk.is_virtio_net());
@@ -285,8 +317,15 @@ mod tests {
 
     #[test]
     fn test_pci_bar_variants() {
-        let io_bar = PciBar::Io { port: 0xD000, size: 32 };
-        let mem_bar = PciBar::Memory { address: 0xE0000000, size: 4096, prefetchable: false };
+        let io_bar = PciBar::Io {
+            port: 0xD000,
+            size: 32,
+        };
+        let mem_bar = PciBar::Memory {
+            address: 0xE0000000,
+            size: 4096,
+            prefetchable: false,
+        };
         assert_ne!(io_bar, mem_bar);
     }
 }

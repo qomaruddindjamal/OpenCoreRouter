@@ -11,16 +11,32 @@ pub struct WebUiModule {
 }
 
 pub const MODULES: [WebUiModule; 4] = [
-    WebUiModule { name: "Dashboard", path: "/status", enabled: true },
-    WebUiModule { name: "Interfaces", path: "/interfaces", enabled: true },
-    WebUiModule { name: "Firewall", path: "/firewall", enabled: true },
-    WebUiModule { name: "Services", path: "/services", enabled: true },
+    WebUiModule {
+        name: "Dashboard",
+        path: "/status",
+        enabled: true,
+    },
+    WebUiModule {
+        name: "Interfaces",
+        path: "/interfaces",
+        enabled: true,
+    },
+    WebUiModule {
+        name: "Firewall",
+        path: "/firewall",
+        enabled: true,
+    },
+    WebUiModule {
+        name: "Services",
+        path: "/services",
+        enabled: true,
+    },
 ];
 
 pub const SHELL_HTML: StaticAsset = StaticAsset {
     path: "/",
     content_type: "text/html; charset=utf-8",
-    etag: "rinjani-shell-v100",
+    etag: "rinjani-shell-v102",
     content: include_bytes!("../assets/shell.html"),
 };
 
@@ -62,14 +78,14 @@ pub const JS_COMMON_HTMX: StaticAsset = StaticAsset {
 pub const JS_STATUS: StaticAsset = StaticAsset {
     path: "/js/status.js",
     content_type: "application/javascript; charset=utf-8",
-    etag: "rinjani-js-status-v100",
+    etag: "rinjani-js-status-v102",
     content: include_bytes!("../assets/js/status.js"),
 };
 
 pub const VENDOR_HTMX: StaticAsset = StaticAsset {
     path: "/vendor/htmx.js",
     content_type: "application/javascript; charset=utf-8",
-    etag: "htmx-1910-unmin",
+    etag: "rinjani-htmx-stub-v1",
     content: include_bytes!("../assets/vendor/htmx.js"),
 };
 
@@ -91,4 +107,3 @@ pub const ALL_ASSETS: [&StaticAsset; 9] = [
     &VENDOR_HTMX,
     &LOGO_SVG,
 ];
-

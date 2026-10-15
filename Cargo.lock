@@ -26,6 +26,7 @@ dependencies = [
  "asl-hal",
  "asl-kernel-core",
  "asl-memory",
+ "asl-router-api",
  "asl-router-drivers-ata",
  "asl-router-drivers-virtio",
  "asl-router-drivers-virtio-blk",
@@ -40,7 +41,8 @@ dependencies = [
  "asl-router-pci",
  "asl-router-persistence",
  "asl-router-tcam",
- "asl-router-tcpstub",
+ "asl-router-webcore",
+ "asl-router-webui",
  "asl-sched",
 ]
 
@@ -220,6 +222,7 @@ name = "asl-router-webui"
 version = "0.1.0"
 dependencies = [
  "asl-router-api",
+ "asl-router-netstack",
  "asl-router-webcore",
 ]
 

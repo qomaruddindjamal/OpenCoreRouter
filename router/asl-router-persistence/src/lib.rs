@@ -392,7 +392,9 @@ mod tests {
         let mut journal = RjcfgJournal::new_default();
         assert_eq!(journal.header.active_slot, 0);
 
-        let target_slot = journal.set_hostname("rinjani-router").expect("hostname set ok");
+        let target_slot = journal
+            .set_hostname("rinjani-router")
+            .expect("hostname set ok");
         assert_eq!(target_slot, 1);
         assert_eq!(journal.header.active_slot, 1);
         let seq = journal.header.sequence_number;
@@ -433,8 +435,14 @@ mod tests {
     #[test]
     fn test_05_hostname_length_bounds() {
         let mut journal = RjcfgJournal::new_default();
-        assert_eq!(journal.set_hostname(""), Err("Hostname must be 1..32 characters"));
-        assert_eq!(journal.set_hostname("this-hostname-is-definitely-far-too-long-for-rinjani-32-bytes"), Err("Hostname must be 1..32 characters"));
+        assert_eq!(
+            journal.set_hostname(""),
+            Err("Hostname must be 1..32 characters")
+        );
+        assert_eq!(
+            journal.set_hostname("this-hostname-is-definitely-far-too-long-for-rinjani-32-bytes"),
+            Err("Hostname must be 1..32 characters")
+        );
     }
 
     #[test]

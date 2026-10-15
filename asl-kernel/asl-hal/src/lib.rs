@@ -19,7 +19,9 @@ pub struct DummyCpu {
 
 impl DummyCpu {
     pub const fn new() -> Self {
-        Self { interrupts_enabled: true }
+        Self {
+            interrupts_enabled: true,
+        }
     }
 }
 
@@ -51,9 +53,7 @@ impl<T: Copy> MmioRegister<T> {
     }
 
     pub fn read_volatile(&self) -> T {
-        unsafe {
-            core::ptr::read_volatile(self.address as *const T)
-        }
+        unsafe { core::ptr::read_volatile(self.address as *const T) }
     }
 
     pub fn write_volatile(&self, val: T) {
@@ -156,7 +156,7 @@ impl ApicTimer {
         self.write_reg(APIC_REG_TIMER_DIV, 0x03);
         // Set initial count max
         self.write_reg(APIC_REG_TIMER_INIT_COUNT, 0xFFFF_FFFF);
-        
+
         // Simulasikan atau ukur 10ms window via PIT / TSC
         // Pada bare-metal, nilai tick 10ms tipikal ~10,000,000 tick pada 1GHz bus
         let ticks_per_10ms = 1_000_000u32;

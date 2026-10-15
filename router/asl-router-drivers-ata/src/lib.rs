@@ -303,7 +303,11 @@ impl AtaDevice {
             self.identity = AtaIdentity {
                 model: trimmed,
                 model_len: end - start,
-                sectors_lba28: if lba28 != 0 { lba28 } else { words[19] as u64 | ((words[10] as u64) << 16) },
+                sectors_lba28: if lba28 != 0 {
+                    lba28
+                } else {
+                    words[19] as u64 | ((words[10] as u64) << 16)
+                },
                 lba_supported: lba_ok,
             };
             self.ready = true;
@@ -313,7 +317,12 @@ impl AtaDevice {
     }
 
     #[inline]
-    fn poll<F: Fn(u8) -> bool>(&self, cond: F, stage: &'static str, log: &dyn Fn(&str)) -> Result<bool, &'static str> {
+    fn poll<F: Fn(u8) -> bool>(
+        &self,
+        cond: F,
+        stage: &'static str,
+        log: &dyn Fn(&str),
+    ) -> Result<bool, &'static str> {
         unsafe {
             for _ in 0..POLL_LIMIT {
                 let st = inb(ATA_STATUS_CMD);
@@ -342,7 +351,13 @@ impl AtaDevice {
         }
     }
 
-    fn cmd_lba28(&mut self, cmd: u8, sector: u32, count: u8, log: &dyn Fn(&str)) -> Result<(), &'static str> {
+    fn cmd_lba28(
+        &mut self,
+        cmd: u8,
+        sector: u32,
+        count: u8,
+        log: &dyn Fn(&str),
+    ) -> Result<(), &'static str> {
         unsafe {
             if !self.poll(|s| s & ST_BSY == 0, "pre-cmd", log)? {
                 return Err("BSY timeout sebelum command");
@@ -351,7 +366,10 @@ impl AtaDevice {
             outb(ATA_LBA0, sector as u8);
             outb(ATA_LBA1, (sector >> 8) as u8);
             outb(ATA_LBA2, (sector >> 16) as u8);
-            outb(ATA_DRIVE_HEAD, drive_head_lba(self.drive, (sector >> 24) as u8));
+            outb(
+                ATA_DRIVE_HEAD,
+                drive_head_lba(self.drive, (sector >> 24) as u8),
+            );
             outb(ATA_STATUS_CMD, cmd);
             ata_delay_400ns();
             Ok(())
@@ -359,7 +377,12 @@ impl AtaDevice {
     }
 
     /// Baca 1 sektor (512 B) via PIO 16-bit (compatibility maksimal: 256 word).
-    pub fn read_sector(&mut self, sector: u64, out_buf: &mut [u8; SECTOR_SIZE], log: &dyn Fn(&str)) -> Result<(), &'static str> {
+    pub fn read_sector(
+        &mut self,
+        sector: u64,
+        out_buf: &mut [u8; SECTOR_SIZE],
+        log: &dyn Fn(&str),
+    ) -> Result<(), &'static str> {
         if !self.ready {
             return Err("ATA device belum di-probe");
         }
@@ -384,7 +407,12 @@ impl AtaDevice {
     }
 
     /// Tulis 1 sektor (512 B) via PIO 16-bit + flush cache.
-    pub fn write_sector(&mut self, sector: u64, in_buf: &[u8; SECTOR_SIZE], log: &dyn Fn(&str)) -> Result<(), &'static str> {
+    pub fn write_sector(
+        &mut self,
+        sector: u64,
+        in_buf: &[u8; SECTOR_SIZE],
+        log: &dyn Fn(&str),
+    ) -> Result<(), &'static str> {
         if !self.ready {
             return Err("ATA device belum di-probe");
         }
@@ -456,8 +484,14 @@ mod tests {
         let quiet = &|_s: &str| {};
         assert!(dev.read_sector(0, &mut buf, quiet).is_err()); // belum ready
         dev.ready = true;
-        assert_eq!(dev.read_sector(LBA28_MAX_SECTOR + 1, &mut buf, quiet), Err("sektor di luar jendela LBA28 driver"));
-        assert_eq!(dev.write_sector(LBA28_MAX_SECTOR + 1, &[0u8; SECTOR_SIZE], quiet), Err("sektor di luar jendela LBA28 driver"));
+        assert_eq!(
+            dev.read_sector(LBA28_MAX_SECTOR + 1, &mut buf, quiet),
+            Err("sektor di luar jendela LBA28 driver")
+        );
+        assert_eq!(
+            dev.write_sector(LBA28_MAX_SECTOR + 1, &[0u8; SECTOR_SIZE], quiet),
+            Err("sektor di luar jendela LBA28 driver")
+        );
     }
 
     #[test]

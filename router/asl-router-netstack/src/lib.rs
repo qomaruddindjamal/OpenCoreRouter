@@ -1,7 +1,7 @@
 //! Open Core Router (OpenCR) — asl-router-netstack
 //! Version: RINJANI_1_0_0
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
-//! Minimal Native Carrier-Grade Network Protocol Stack (Ethernet II, ARP, IPv4, ICMP, UDP)
+//! Minimal Native Carrier-Grade Network Protocol Stack (Ethernet II, ARP, IPv4, ICMP, UDP, TCP)
 
 #![no_std]
 
@@ -24,6 +24,15 @@ pub const ARP_HTYPE_ETHERNET: u16 = 1;
 pub const ARP_PTYPE_IPV4: u16 = 0x0800;
 pub const ARP_OP_REQUEST: u16 = 1;
 pub const ARP_OP_REPLY: u16 = 2;
+
+pub const TCP_FLAG_FIN: u8 = 0x01;
+pub const TCP_FLAG_SYN: u8 = 0x02;
+pub const TCP_FLAG_RST: u8 = 0x04;
+pub const TCP_FLAG_PSH: u8 = 0x08;
+pub const TCP_FLAG_ACK: u8 = 0x10;
+pub const TCP_HEADER_MIN: usize = 20;
+/// Payload TCP maksimum dalam frame Ethernet 1500-byte MTU (1500 - 20 IPv4 - 20 TCP).
+pub const TCP_MAX_PAYLOAD: usize = 1460;
 
 // -----------------------------------------------------------------------------
 // CHECKSUM UTILITY (RFC 1071 STANDARD 1'S COMPLEMENT)
@@ -102,6 +111,19 @@ pub struct UdpHeader {
     pub checksum: u16,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TcpHeader {
+    pub src_port: u16,
+    pub dst_port: u16,
+    pub seq: u32,
+    pub ack: u32,
+    pub data_offset: u8,
+    pub flags: u8,
+    pub window: u16,
+    pub checksum: u16,
+    pub urgent: u16,
+}
+
 // -----------------------------------------------------------------------------
 // PARSERS
 // -----------------------------------------------------------------------------
@@ -116,7 +138,11 @@ pub fn parse_ethernet_header(buf: &[u8]) -> Result<(EthernetHeader, &[u8]), &'st
     src_mac.copy_from_slice(&buf[6..12]);
     let ethertype = u16::from_be_bytes([buf[12], buf[13]]);
     Ok((
-        EthernetHeader { dst_mac, src_mac, ethertype },
+        EthernetHeader {
+            dst_mac,
+            src_mac,
+            ethertype,
+        },
         &buf[14..],
     ))
 }
@@ -238,9 +264,81 @@ pub fn parse_icmp_header(payload: &[u8]) -> Result<(IcmpHeader, &[u8]), &'static
     rest_of_header.copy_from_slice(&payload[4..8]);
 
     Ok((
-        IcmpHeader { icmp_type, code, checksum, rest_of_header },
+        IcmpHeader {
+            icmp_type,
+            code,
+            checksum,
+            rest_of_header,
+        },
         &payload[8..],
     ))
+}
+
+// -----------------------------------------------------------------------------
+// TCP (RFC 9293) — PARSER + CHECKSUM PSEUDO-HDR
+// -----------------------------------------------------------------------------
+
+pub fn parse_tcp_header(payload: &[u8]) -> Result<(TcpHeader, &[u8]), &'static str> {
+    if payload.len() < TCP_HEADER_MIN {
+        return Err("TCP segment too short (<20B)");
+    }
+    let data_offset = payload[12] >> 4;
+    let hdr_len = (data_offset as usize) * 4;
+    if hdr_len < TCP_HEADER_MIN {
+        return Err("TCP data offset below minimum 20B");
+    }
+    if payload.len() < hdr_len {
+        return Err("TCP segment smaller than declared data offset");
+    }
+    let hdr = TcpHeader {
+        src_port: u16::from_be_bytes([payload[0], payload[1]]),
+        dst_port: u16::from_be_bytes([payload[2], payload[3]]),
+        seq: u32::from_be_bytes([payload[4], payload[5], payload[6], payload[7]]),
+        ack: u32::from_be_bytes([payload[8], payload[9], payload[10], payload[11]]),
+        data_offset,
+        flags: payload[13] & 0x3F,
+        window: u16::from_be_bytes([payload[14], payload[15]]),
+        checksum: u16::from_be_bytes([payload[16], payload[17]]),
+        urgent: u16::from_be_bytes([payload[18], payload[19]]),
+    };
+    Ok((hdr, &payload[hdr_len..]))
+}
+
+/// Akumulator 1's-complement atas pseudo-header IPv4 (src, dst, proto, panjang TCP)
+/// dilanjutkan seluruh oktet segmen TCP (header + data). Nilai terlipat 0xFFFF
+/// berarti checksum valid; untuk membangun, field checksum diisi nol lalu
+/// hasilnya dinegasi.
+fn sum_tcp_with_pseudo(src_ip: [u8; 4], dst_ip: [u8; 4], seg: &[u8]) -> u32 {
+    let mut sum: u32 = 0;
+    sum += u16::from_be_bytes([src_ip[0], src_ip[1]]) as u32;
+    sum += u16::from_be_bytes([src_ip[2], src_ip[3]]) as u32;
+    sum += u16::from_be_bytes([dst_ip[0], dst_ip[1]]) as u32;
+    sum += u16::from_be_bytes([dst_ip[2], dst_ip[3]]) as u32;
+    sum += u16::from_be_bytes([0, IP_PROTO_TCP]) as u32;
+    sum += seg.len() as u32;
+    let mut i = 0;
+    while i + 1 < seg.len() {
+        sum += u16::from_be_bytes([seg[i], seg[i + 1]]) as u32;
+        i += 2;
+    }
+    if i < seg.len() {
+        sum += u16::from_be_bytes([seg[i], 0]) as u32;
+    }
+    while (sum >> 16) != 0 {
+        sum = (sum & 0xFFFF) + (sum >> 16);
+    }
+    sum
+}
+
+/// Checksum TCP yang harus dituliskan pada offset 16..18 segmen (field checksum
+/// wajib bernilai nol pada `seg` saat pemanggilan).
+pub fn tcp_checksum(src_ip: [u8; 4], dst_ip: [u8; 4], seg: &[u8]) -> u16 {
+    !sum_tcp_with_pseudo(src_ip, dst_ip, seg) as u16
+}
+
+/// Verifikasi checksum segmen TCP masuk (termasuk field checksum aslinya).
+pub fn tcp_checksum_ok(src_ip: [u8; 4], dst_ip: [u8; 4], seg: &[u8]) -> bool {
+    sum_tcp_with_pseudo(src_ip, dst_ip, seg) == 0xFFFF
 }
 
 // -----------------------------------------------------------------------------
@@ -264,7 +362,6 @@ pub const DHCP_INFORM: u8 = 8;
 
 pub const DHCP_MAGIC_COOKIE: [u8; 4] = [99, 130, 83, 99];
 
-
 pub fn parse_udp_header(payload: &[u8]) -> Result<(UdpHeader, &[u8]), &'static str> {
     if payload.len() < 8 {
         return Err("UDP packet too short (<8B)");
@@ -282,7 +379,12 @@ pub fn parse_udp_header(payload: &[u8]) -> Result<(UdpHeader, &[u8]), &'static s
     };
 
     Ok((
-        UdpHeader { src_port, dst_port, length, checksum },
+        UdpHeader {
+            src_port,
+            dst_port,
+            length,
+            checksum,
+        },
         &payload[8..body_end],
     ))
 }
@@ -430,7 +532,11 @@ pub fn build_dhcp_discover_with_hostname(
     out: &mut [u8],
 ) -> Result<usize, &'static str> {
     let host_bytes = hostname.as_bytes();
-    let host_opt_len = if host_bytes.is_empty() { 0 } else { 2 + host_bytes.len() };
+    let host_opt_len = if host_bytes.is_empty() {
+        0
+    } else {
+        2 + host_bytes.len()
+    };
     let dhcp_len = 240 + 4 + host_opt_len; // 240 header + 3 opt53 + opt12 + 1 end
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
@@ -518,8 +624,12 @@ pub fn build_dhcp_request_with_hostname(
     out: &mut [u8],
 ) -> Result<usize, &'static str> {
     let host_bytes = hostname.as_bytes();
-    let host_opt_len = if host_bytes.is_empty() { 0 } else { 2 + host_bytes.len() };
-    let dhcp_len = 240 + 10 + host_opt_len; // 240 header + 3 opt53 + 6 opt50 + opt12 + 1 end
+    let host_opt_len = if host_bytes.is_empty() {
+        0
+    } else {
+        2 + host_bytes.len()
+    };
+    let dhcp_len = 240 + 16 + host_opt_len; // 240 header + opt53(3) + opt50(6) + opt54(6) + opt12 + 1 end
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
     let total_len = 14 + ip_len;
@@ -568,7 +678,7 @@ pub fn build_dhcp_request_with_hostname(
     out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
     out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
 
-    // Options: 53 (Request) + 50 (Requested IP) + 12 (Host Name) + 255 (End)
+    // Options: 53 (Request) + 50 (Requested IP) + 54 (Server Identifier) + 12 + 255 (End)
     let mut opt_idx = dhcp_start + 240;
     out[opt_idx] = 53;
     out[opt_idx + 1] = 1;
@@ -580,6 +690,13 @@ pub fn build_dhcp_request_with_hostname(
     out[opt_idx + 2..opt_idx + 6].copy_from_slice(&requested_ip);
     opt_idx += 6;
 
+    // RFC 2131 4.3.2: REQUEST dalam SELECTING WAJIB memuat Server Identifier
+    // (isi si-peng-offer). Server nyata menjawab NAK bila opsi ini absen.
+    out[opt_idx] = 54;
+    out[opt_idx + 1] = 4;
+    out[opt_idx + 2..opt_idx + 6].copy_from_slice(&server_ip);
+    opt_idx += 6;
+
     if !host_bytes.is_empty() {
         out[opt_idx] = 12; // Option 12: Host Name
         out[opt_idx + 1] = host_bytes.len() as u8;
@@ -589,7 +706,6 @@ pub fn build_dhcp_request_with_hostname(
 
     out[opt_idx] = 255;
 
-    let _ = server_ip;
     Ok(total_len)
 }
 
@@ -600,9 +716,24 @@ pub fn build_dhcp_request_with_hostname(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DhcpClientState {
     Init,
-    Selecting { xid: u32, elapsed_ticks: u32, retries: u8 },
-    Requesting { xid: u32, offered_ip: [u8; 4], server_ip: [u8; 4], elapsed_ticks: u32, retries: u8 },
-    Bound { ip: [u8; 4], netmask: [u8; 4], gateway: [u8; 4], lease_time: u32 },
+    Selecting {
+        xid: u32,
+        elapsed_ticks: u32,
+        retries: u8,
+    },
+    Requesting {
+        xid: u32,
+        offered_ip: [u8; 4],
+        server_ip: [u8; 4],
+        elapsed_ticks: u32,
+        retries: u8,
+    },
+    Bound {
+        ip: [u8; 4],
+        netmask: [u8; 4],
+        gateway: [u8; 4],
+        lease_time: u32,
+    },
     HaltedNoOffer,
 }
 
@@ -652,7 +783,11 @@ impl DhcpClientEngine {
 
     pub fn on_tick(&mut self, delta_ticks: u32) -> DhcpClientState {
         match self.state {
-            DhcpClientState::Selecting { xid, elapsed_ticks, retries } => {
+            DhcpClientState::Selecting {
+                xid,
+                elapsed_ticks,
+                retries,
+            } => {
                 let new_elapsed = elapsed_ticks.saturating_add(delta_ticks);
                 if new_elapsed >= self.config.timeout_ticks {
                     if self.config.strict_net {
@@ -669,7 +804,13 @@ impl DhcpClientEngine {
                     };
                 }
             }
-            DhcpClientState::Requesting { xid, offered_ip, server_ip, elapsed_ticks, retries } => {
+            DhcpClientState::Requesting {
+                xid,
+                offered_ip,
+                server_ip,
+                elapsed_ticks,
+                retries,
+            } => {
                 let new_elapsed = elapsed_ticks.saturating_add(delta_ticks);
                 if new_elapsed >= self.config.timeout_ticks {
                     self.state = DhcpClientState::HaltedNoOffer;
@@ -688,7 +829,10 @@ impl DhcpClientEngine {
         self.state
     }
 
-    pub fn handle_incoming_packet(&mut self, packet: &[u8]) -> Result<Option<DhcpClientState>, &'static str> {
+    pub fn handle_incoming_packet(
+        &mut self,
+        packet: &[u8],
+    ) -> Result<Option<DhcpClientState>, &'static str> {
         let (_eth, ip_bytes) = parse_ethernet_header(packet)?;
         let (ip, udp_bytes) = parse_ipv4_header(ip_bytes)?;
         if ip.protocol != IP_PROTO_UDP {
@@ -715,10 +859,14 @@ impl DhcpClientEngine {
                     return Ok(Some(self.state));
                 }
             }
-            DhcpClientState::Requesting { xid, offered_ip, .. } => {
+            DhcpClientState::Requesting {
+                xid, offered_ip, ..
+            } => {
                 if dhcp.xid == xid && dhcp.msg_type == Some(DHCP_ACK) {
                     let netmask = dhcp.subnet_mask.unwrap_or([255, 255, 255, 0]);
-                    let gateway = dhcp.router_ip.unwrap_or([offered_ip[0], offered_ip[1], offered_ip[2], 1]);
+                    let gateway =
+                        dhcp.router_ip
+                            .unwrap_or([offered_ip[0], offered_ip[1], offered_ip[2], 1]);
                     let lease_time = dhcp.lease_time.unwrap_or(86400);
                     self.state = DhcpClientState::Bound {
                         ip: offered_ip,
@@ -1087,6 +1235,97 @@ pub fn build_arp_gratuitous(
     Ok(42)
 }
 
+/// ARP request broadcast (who-has): dipakai DAD (Duplicate Address Detection,
+/// RFC 5227) sebelum kernel mengkalim alamat WAN.
+pub fn build_arp_request(
+    our_mac: [u8; 6],
+    our_ip: [u8; 4],
+    target_ip: [u8; 4],
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    if out.len() < 42 {
+        return Err("Buffer too small for Ethernet+ARP request");
+    }
+    out[0..6].copy_from_slice(&[0xFF; 6]);
+    out[6..12].copy_from_slice(&our_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_ARP.to_be_bytes());
+    out[14..16].copy_from_slice(&ARP_HTYPE_ETHERNET.to_be_bytes());
+    out[16..18].copy_from_slice(&ARP_PTYPE_IPV4.to_be_bytes());
+    out[18] = 6;
+    out[19] = 4;
+    out[20..22].copy_from_slice(&ARP_OP_REQUEST.to_be_bytes());
+    out[22..28].copy_from_slice(&our_mac);
+    out[28..32].copy_from_slice(&our_ip);
+    out[32..38].copy_from_slice(&[0x00; 6]);
+    out[38..42].copy_from_slice(&target_ip);
+    Ok(42)
+}
+
+/// Frame Ethernet + IPv4 + TCP lengkap. Payload TCP boleh kosong (murni
+/// SYN/SYN-ACK/ACK/FIN). Checksum IPv4 dan TCP dihitung penuh.
+#[allow(clippy::too_many_arguments)]
+pub fn build_tcp_frame(
+    eth_dst: [u8; 6],
+    our_mac: [u8; 6],
+    src_ip: [u8; 4],
+    dst_ip: [u8; 4],
+    src_port: u16,
+    dst_port: u16,
+    seq: u32,
+    ack: u32,
+    flags: u8,
+    window: u16,
+    payload: &[u8],
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let tcp_len = TCP_HEADER_MIN + payload.len();
+    let ip_len = 20 + tcp_len;
+    let total_len = 14 + ip_len;
+    if out.len() < total_len {
+        return Err("Buffer too small for Ethernet+IPv4+TCP frame");
+    }
+    if payload.len() > TCP_MAX_PAYLOAD {
+        return Err("TCP payload melebihi MSS 1460");
+    }
+
+    out[0..6].copy_from_slice(&eth_dst);
+    out[6..12].copy_from_slice(&our_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    // IPv4
+    out[14] = 0x45;
+    out[15] = 0x00;
+    out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+    out[18..20].copy_from_slice(&0u16.to_be_bytes());
+    out[20..22].copy_from_slice(&0x4000u16.to_be_bytes()); // DF
+    out[22] = 64;
+    out[23] = IP_PROTO_TCP;
+    out[24..26].copy_from_slice(&[0, 0]);
+    out[26..30].copy_from_slice(&src_ip);
+    out[30..34].copy_from_slice(&dst_ip);
+    let ip_csum = compute_internet_checksum(&out[14..34]);
+    out[24..26].copy_from_slice(&ip_csum.to_be_bytes());
+
+    // TCP header (checksum nol sementara)
+    let t = &mut out[34..34 + TCP_HEADER_MIN];
+    t[0..2].copy_from_slice(&src_port.to_be_bytes());
+    t[2..4].copy_from_slice(&dst_port.to_be_bytes());
+    t[4..8].copy_from_slice(&seq.to_be_bytes());
+    t[8..12].copy_from_slice(&ack.to_be_bytes());
+    t[12] = 5u8 << 4;
+    t[13] = flags;
+    t[14..16].copy_from_slice(&window.to_be_bytes());
+    t[16..18].copy_from_slice(&[0, 0]);
+    t[18..20].copy_from_slice(&[0, 0]);
+    if !payload.is_empty() {
+        out[34 + TCP_HEADER_MIN..total_len].copy_from_slice(payload);
+    }
+    let csum = tcp_checksum(src_ip, dst_ip, &out[34..total_len]);
+    out[50..52].copy_from_slice(&csum.to_be_bytes());
+
+    Ok(total_len)
+}
+
 pub fn build_icmp_echo_reply(
     eth_req: &EthernetHeader,
     ip_req: &Ipv4Header,
@@ -1146,7 +1385,11 @@ pub fn build_icmp_time_exceeded(
     out: &mut [u8],
 ) -> Result<usize, &'static str> {
     // RFC 792: ICMP Time Exceeded payload carries original IP header (20B) + 8B of original IP payload
-    let copy_payload_len = if orig_ip_payload.len() >= 8 { 8 } else { orig_ip_payload.len() };
+    let copy_payload_len = if orig_ip_payload.len() >= 8 {
+        8
+    } else {
+        orig_ip_payload.len()
+    };
     let icmp_payload_len = 20 + copy_payload_len;
     let total_len = 14 + 20 + 8 + icmp_payload_len;
     if out.len() < total_len {
@@ -1194,8 +1437,14 @@ pub fn build_icmp_time_exceeded(
         orig_ip_hdr.protocol,
         (orig_ip_hdr.header_checksum >> 8) as u8,
         (orig_ip_hdr.header_checksum & 0xFF) as u8,
-        orig_ip_hdr.src_ip[0], orig_ip_hdr.src_ip[1], orig_ip_hdr.src_ip[2], orig_ip_hdr.src_ip[3],
-        orig_ip_hdr.dst_ip[0], orig_ip_hdr.dst_ip[1], orig_ip_hdr.dst_ip[2], orig_ip_hdr.dst_ip[3],
+        orig_ip_hdr.src_ip[0],
+        orig_ip_hdr.src_ip[1],
+        orig_ip_hdr.src_ip[2],
+        orig_ip_hdr.src_ip[3],
+        orig_ip_hdr.dst_ip[0],
+        orig_ip_hdr.dst_ip[1],
+        orig_ip_hdr.dst_ip[2],
+        orig_ip_hdr.dst_ip[3],
     ];
     out[42..62].copy_from_slice(&orig_hdr_bytes);
     out[62..62 + copy_payload_len].copy_from_slice(&orig_ip_payload[..copy_payload_len]);
@@ -1304,6 +1553,10 @@ impl TcpConnection {
     }
 }
 
+/// FACADE BOOKKEEPING listener (bukan mesin TCP). Hanya menyimpan port +
+/// jumlah koneksi; TIDAK ada handshake, seq/ack, atau checksum di sini.
+/// Mesin TCP/HTTP produksi yang sebenarnya ada di `asl-router-webui`
+/// (`TcpWebServer`). Jangan pakai tipe ini sebagai bukti layanan HTTP hidup.
 pub struct TcpListenerFacade<const MAX_CONNS: usize = 4> {
     pub port: u16,
     pub is_listening: bool,
@@ -1391,7 +1644,9 @@ pub fn is_mdns_query_for_rinjani(udp_payload: &[u8]) -> bool {
     }
     // Also match simple "rinjani" label
     let short_needle = b"\x07rinjani";
-    udp_payload[12..].windows(short_needle.len()).any(|w| w == short_needle)
+    udp_payload[12..]
+        .windows(short_needle.len())
+        .any(|w| w == short_needle)
 }
 
 pub fn build_mdns_a_response(
@@ -1548,8 +1803,8 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
         engine.hosts[0] = DnsStaticHost {
             name_len: 11,
             name: [
-                b'r', b'i', b'n', b'j', b'a', b'n', b'i', b'.', b'l', b'a', b'n', 0, 0, 0, 0, 0,
-                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+                b'r', b'i', b'n', b'j', b'a', b'n', b'i', b'.', b'l', b'a', b'n', 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             ],
             ip: server_ip,
             active: true,
@@ -1564,7 +1819,10 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
             return Err("Host name too long (>32 bytes)");
         }
         for entry in self.hosts.iter_mut() {
-            if entry.active && entry.name_len as usize == bytes.len() && &entry.name[..bytes.len()] == bytes {
+            if entry.active
+                && entry.name_len as usize == bytes.len()
+                && &entry.name[..bytes.len()] == bytes
+            {
                 entry.ip = ip;
                 return Ok(());
             }
@@ -1584,7 +1842,10 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
     pub fn delete_static_host(&mut self, name: &str) -> bool {
         let bytes = name.as_bytes();
         for entry in self.hosts.iter_mut() {
-            if entry.active && entry.name_len as usize == bytes.len() && &entry.name[..bytes.len()] == bytes {
+            if entry.active
+                && entry.name_len as usize == bytes.len()
+                && &entry.name[..bytes.len()] == bytes
+            {
                 entry.active = false;
                 return true;
             }
@@ -1594,7 +1855,10 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
 
     pub fn lookup_static_host(&self, name: &[u8]) -> Option<[u8; 4]> {
         for entry in self.hosts.iter() {
-            if entry.active && entry.name_len as usize == name.len() && &entry.name[..name.len()] == name {
+            if entry.active
+                && entry.name_len as usize == name.len()
+                && &entry.name[..name.len()] == name
+            {
                 return Some(entry.ip);
             }
         }
@@ -1603,7 +1867,10 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
 
     pub fn lookup_cache(&mut self, qname: &[u8], current_tick: u64) -> Option<[u8; 4]> {
         for entry in self.cache.iter_mut() {
-            if entry.active && entry.qname_len as usize == qname.len() && &entry.qname[..qname.len()] == qname {
+            if entry.active
+                && entry.qname_len as usize == qname.len()
+                && &entry.qname[..qname.len()] == qname
+            {
                 if current_tick <= entry.expire_tick {
                     entry.last_used_tick = current_tick;
                     self.cache_hits += 1;
@@ -1621,7 +1888,9 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
         let qlen = qname.len().min(64);
         // Find existing or free slot
         for entry in self.cache.iter_mut() {
-            if !entry.active || (entry.qname_len as usize == qlen && &entry.qname[..qlen] == &qname[..qlen]) {
+            if !entry.active
+                || (entry.qname_len as usize == qlen && &entry.qname[..qlen] == &qname[..qlen])
+            {
                 entry.active = true;
                 entry.qname_len = qlen as u8;
                 entry.qname[..qlen].copy_from_slice(&qname[..qlen]);
@@ -1660,7 +1929,10 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
     }
 }
 
-pub fn parse_dns_query_qname(udp_payload: &[u8], out_qname: &mut [u8]) -> Result<(u16, usize), &'static str> {
+pub fn parse_dns_query_qname(
+    udp_payload: &[u8],
+    out_qname: &mut [u8],
+) -> Result<(u16, usize), &'static str> {
     if udp_payload.len() < 12 {
         return Err("DNS packet too short (<12B)");
     }
@@ -1791,7 +2063,10 @@ mod tests {
 
     #[test]
     fn test_01_checksum_simple() {
-        let data = [0x45, 0x00, 0x00, 0x3C, 0x1C, 0x46, 0x40, 0x00, 0x40, 0x06, 0x00, 0x00, 0x0A, 0x00, 0x02, 0x0F, 0x0A, 0x00, 0x02, 0x02];
+        let data = [
+            0x45, 0x00, 0x00, 0x3C, 0x1C, 0x46, 0x40, 0x00, 0x40, 0x06, 0x00, 0x00, 0x0A, 0x00,
+            0x02, 0x0F, 0x0A, 0x00, 0x02, 0x02,
+        ];
         let csum = compute_internet_checksum(&data);
         assert_ne!(csum, 0);
     }
@@ -1852,7 +2127,13 @@ mod tests {
         let parsed = parse_arp_packet(&arp).unwrap();
 
         let mut out = [0u8; 64];
-        let len = build_arp_reply(&parsed, [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33], [10, 0, 2, 15], &mut out).unwrap();
+        let len = build_arp_reply(
+            &parsed,
+            [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33],
+            [10, 0, 2, 15],
+            &mut out,
+        )
+        .unwrap();
         assert_eq!(len, 42);
         assert_eq!(out[12..14], [0x08, 0x06]); // ETHERTYPE_ARP
         assert_eq!(out[20..22], [0x00, 0x02]); // ARP_REPLY
@@ -1958,7 +2239,8 @@ mod tests {
             [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33],
             [10, 0, 2, 15],
             &mut out,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(len, 14 + 20 + 8 + 3);
         assert_eq!(out[34], 0); // Echo reply type
@@ -2090,6 +2372,9 @@ mod tests {
         assert_eq!(dhcp.op, DHCP_OP_BOOTREQUEST);
         assert_eq!(dhcp.xid, 0x87654321);
         assert_eq!(dhcp.msg_type, Some(DHCP_REQUEST));
+        // Regresi runtime 2026-10-15: router nyata (bridged) menjawab NAK karena
+        // Option 54 (Server Identifier) absen di REQUEST.
+        assert_eq!(dhcp.server_ip, Some(srv_ip));
     }
 
     #[test]
@@ -2168,7 +2453,7 @@ mod tests {
         assert_eq!(out[23], IP_PROTO_ICMP);
         assert_eq!(out[34], ICMP_TYPE_TIME_EXCEEDED);
         assert_eq!(out[35], 0); // Code 0: TTL expired
-        // Verify ICMP checksum != 0
+                                // Verify ICMP checksum != 0
         let icmp_csum = compute_internet_checksum(&out[34..len]);
         assert_eq!(icmp_csum, 0);
     }
@@ -2219,7 +2504,9 @@ mod tests {
 
         // Option 12 should be in dhcp payload: [12, 7, b'r', b'i', b'n', b'j', b'a', b'n', b'i']
         let opt12_needle = b"\x0C\x07rinjani";
-        assert!(dhcp_bytes.windows(opt12_needle.len()).any(|w| w == opt12_needle));
+        assert!(dhcp_bytes
+            .windows(opt12_needle.len())
+            .any(|w| w == opt12_needle));
     }
 
     #[test]
@@ -2239,7 +2526,8 @@ mod tests {
             [192, 168, 56, 2],
             0x1234,
             &mut out,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert!(len > 60);
         let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
@@ -2258,19 +2546,23 @@ mod tests {
 
     #[test]
     fn test_25_dhcp_server_pool_allocation_basic() {
-        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         server.pool_start_last_octet = 100;
         server.pool_end_last_octet = 103;
 
         let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
-        let ip1 = server.find_or_allocate_ip(mac1, None, Some(b"laptop-1"), 100).unwrap();
+        let ip1 = server
+            .find_or_allocate_ip(mac1, None, Some(b"laptop-1"), 100)
+            .unwrap();
         assert_eq!(ip1, [192, 168, 56, 100]);
         assert_eq!(server.active_leases, 1);
     }
 
     #[test]
     fn test_26_dhcp_server_pool_mac_binding_idempotent() {
-        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         let mac1 = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
         let ip1 = server.find_or_allocate_ip(mac1, None, None, 100).unwrap();
         let ip2 = server.find_or_allocate_ip(mac1, None, None, 200).unwrap();
@@ -2280,18 +2572,22 @@ mod tests {
 
     #[test]
     fn test_27_dhcp_server_pool_requested_ip_match() {
-        let mut server = DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<4>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         server.pool_start_last_octet = 100;
         server.pool_end_last_octet = 103;
 
         let mac = [0x08, 0x00, 0x27, 0x22, 0x22, 0x22];
-        let ip = server.find_or_allocate_ip(mac, Some([192, 168, 56, 102]), None, 100).unwrap();
+        let ip = server
+            .find_or_allocate_ip(mac, Some([192, 168, 56, 102]), None, 100)
+            .unwrap();
         assert_eq!(ip, [192, 168, 56, 102]);
     }
 
     #[test]
     fn test_28_dhcp_server_pool_exhaustion_error() {
-        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         server.pool_start_last_octet = 100;
         server.pool_end_last_octet = 101;
 
@@ -2301,12 +2597,16 @@ mod tests {
 
         assert!(server.find_or_allocate_ip(mac1, None, None, 10).is_ok());
         assert!(server.find_or_allocate_ip(mac2, None, None, 10).is_ok());
-        assert_eq!(server.find_or_allocate_ip(mac3, None, None, 10), Err("DHCP pool exhausted"));
+        assert_eq!(
+            server.find_or_allocate_ip(mac3, None, None, 10),
+            Err("DHCP pool exhausted")
+        );
     }
 
     #[test]
     fn test_29_dhcp_server_pool_release_and_reclaim() {
-        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         server.pool_start_last_octet = 100;
         server.pool_end_last_octet = 101;
 
@@ -2323,7 +2623,8 @@ mod tests {
 
     #[test]
     fn test_30_dhcp_server_pool_renewal() {
-        let mut server = DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        let mut server =
+            DhcpServerPool::<2>::new([192, 168, 56, 1], [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
         server.default_lease_time = 3600;
         let mac = [0x08, 0x00, 0x27, 0x11, 0x11, 0x11];
         let ip = server.find_or_allocate_ip(mac, None, None, 1000).unwrap();
@@ -2350,7 +2651,8 @@ mod tests {
             0x12345678,
             false, // Offer
             &mut out,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
         let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
@@ -2384,7 +2686,8 @@ mod tests {
             0x12345678,
             true, // ACK
             &mut out,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
         let (_ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
@@ -2415,8 +2718,13 @@ mod tests {
     #[test]
     fn test_35_dns_proxy_custom_static_host_add_and_delete() {
         let mut dns = DnsProxyEngine::<4, 4>::new([192, 168, 56, 1], [8, 8, 8, 8]);
-        assert!(dns.add_static_host("server.lan", [192, 168, 56, 20]).is_ok());
-        assert_eq!(dns.lookup_static_host(b"server.lan"), Some([192, 168, 56, 20]));
+        assert!(dns
+            .add_static_host("server.lan", [192, 168, 56, 20])
+            .is_ok());
+        assert_eq!(
+            dns.lookup_static_host(b"server.lan"),
+            Some([192, 168, 56, 20])
+        );
 
         assert!(dns.delete_static_host("server.lan"));
         assert_eq!(dns.lookup_static_host(b"server.lan"), None);
@@ -2486,7 +2794,8 @@ mod tests {
             [192, 168, 56, 1],
             300,
             &mut out,
-        ).unwrap();
+        )
+        .unwrap();
 
         let (_eth, ip_bytes) = parse_ethernet_header(&out[..len]).unwrap();
         let (ip, udp_bytes) = parse_ipv4_header(ip_bytes).unwrap();
@@ -2547,9 +2856,12 @@ mod tests {
             xid,
             false, // OFFER
             &mut offer_buf,
-        ).unwrap();
+        )
+        .unwrap();
 
-        let state = client.handle_incoming_packet(&offer_buf[..offer_len]).unwrap();
+        let state = client
+            .handle_incoming_packet(&offer_buf[..offer_len])
+            .unwrap();
         assert!(state.is_some());
         assert_eq!(
             client.state,
@@ -2576,7 +2888,8 @@ mod tests {
             xid,
             true, // ACK
             &mut ack_buf,
-        ).unwrap();
+        )
+        .unwrap();
 
         let state_ack = client.handle_incoming_packet(&ack_buf[..ack_len]).unwrap();
         assert!(state_ack.is_some());
@@ -2594,7 +2907,10 @@ mod tests {
     fn test_43_dhcp_client_nak_triggers_halt_in_strict_mode() {
         let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
         let srv_mac = [0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC];
-        let config = DhcpClientConfig { strict_net: true, ..Default::default() };
+        let config = DhcpClientConfig {
+            strict_net: true,
+            ..Default::default()
+        };
         let mut client = DhcpClientEngine::new(mac, config);
         let xid = 0x99887766;
         client.start_discover(xid);
@@ -2622,7 +2938,8 @@ mod tests {
             xid,
             false,
             &mut nak_buf,
-        ).unwrap();
+        )
+        .unwrap();
         // Overwrite Option 53 with DHCP_NAK (6)
         // Offset of Opt53 in DHCP Server Reply: 14 eth + 20 ip + 8 udp + 240 dhcp + 2 (opt53 type & len) = 284
         nak_buf[284] = DHCP_NAK;
@@ -2635,7 +2952,11 @@ mod tests {
     #[test]
     fn test_44_dhcp_client_requesting_timeout_halts() {
         let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
-        let config = DhcpClientConfig { strict_net: true, timeout_ticks: 500, max_retries: 3 };
+        let config = DhcpClientConfig {
+            strict_net: true,
+            timeout_ticks: 500,
+            max_retries: 3,
+        };
         let mut client = DhcpClientEngine::new(mac, config);
         client.state = DhcpClientState::Requesting {
             xid: 0x1234,
@@ -2664,6 +2985,173 @@ mod tests {
         assert_eq!(&out[28..32], &ip);
         assert_eq!(&out[38..42], &ip);
     }
+
+    #[test]
+    fn test_46_build_arp_request_who_has() {
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let mut out = [0u8; 64];
+        let n = build_arp_request(mac, [0, 0, 0, 0], [198, 51, 100, 1], &mut out).unwrap();
+        assert_eq!(n, 42);
+        assert_eq!(&out[0..6], &[0xFF; 6]);
+        assert_eq!(&out[20..22], &ARP_OP_REQUEST.to_be_bytes());
+        assert_eq!(&out[28..32], &[0, 0, 0, 0]);
+        assert_eq!(&out[38..42], &[198, 51, 100, 1]);
+        let parsed = parse_arp_packet(&out[14..42]).unwrap();
+        assert_eq!(parsed.opcode, ARP_OP_REQUEST);
+        assert_eq!(parsed.target_ip, [198, 51, 100, 1]);
+    }
+
+    #[test]
+    fn test_47_build_tcp_frame_syn_checksum_roundtrip() {
+        let our_mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let peer_mac = [0x98, 0xee, 0xcb, 0xa1, 0x0b, 0xbb];
+        let our_ip = [198, 51, 100, 20];
+        let peer_ip = [198, 51, 100, 1];
+        let mut out = [0u8; 1518];
+        let n = build_tcp_frame(
+            peer_mac,
+            our_mac,
+            our_ip,
+            peer_ip,
+            80,
+            40000,
+            1000,
+            0,
+            TCP_FLAG_SYN,
+            64240,
+            &[],
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(n, 54); // 14 eth + 20 ipv4 + 20 tcp
+        assert_eq!(&out[12..14], &ETHERTYPE_IPV4.to_be_bytes());
+        assert_eq!(out[23], IP_PROTO_TCP);
+        let (ip, seg) = parse_ipv4_header(&out[14..n]).unwrap();
+        assert_eq!(ip.src_ip, our_ip);
+        assert_eq!(ip.dst_ip, peer_ip);
+        assert!(tcp_checksum_ok(our_ip, peer_ip, seg));
+        let (tcp, data) = parse_tcp_header(seg).unwrap();
+        assert!(data.is_empty());
+        assert_eq!(tcp.src_port, 80);
+        assert_eq!(tcp.dst_port, 40000);
+        assert_eq!(tcp.seq, 1000);
+        assert_eq!(tcp.flags, TCP_FLAG_SYN);
+        assert_eq!(tcp.window, 64240);
+        assert_eq!(tcp.data_offset, 5);
+    }
+
+    #[test]
+    fn test_48_tcp_checksum_detects_corruption() {
+        let mut out = [0u8; 1518];
+        let n = build_tcp_frame(
+            [2, 2, 2, 2, 2, 2],
+            [1, 1, 1, 1, 1, 1],
+            [192, 0, 2, 10],
+            [192, 0, 2, 1],
+            80,
+            1,
+            7,
+            3,
+            TCP_FLAG_PSH | TCP_FLAG_ACK,
+            65535,
+            b"HTTP/1.1 200 OK\r\n",
+            &mut out,
+        )
+        .unwrap();
+        let (ip, seg) = parse_ipv4_header(&out[14..n]).unwrap();
+        assert!(tcp_checksum_ok(ip.src_ip, ip.dst_ip, seg));
+        // Ubah satu oktet payload -> checksum wajib gagal.
+        let last = n - 1;
+        out[last] ^= 0xFF;
+        assert!(!tcp_checksum_ok(ip.src_ip, ip.dst_ip, &out[34..n]));
+    }
+
+    #[test]
+    fn test_49_parse_tcp_header_rejects_bad_offset_and_length() {
+        let mut seg = [0u8; 24];
+        seg[12] = 4 << 4; // data offset 16B < minimum 20B
+        assert_eq!(
+            parse_tcp_header(&seg).unwrap_err(),
+            "TCP data offset below minimum 20B"
+        );
+        let mut s2 = [0u8; 20];
+        s2[12] = 6 << 4; // offset 24B tapi segmen hanya 20B
+        assert_eq!(
+            parse_tcp_header(&s2).unwrap_err(),
+            "TCP segment smaller than declared data offset"
+        );
+        assert_eq!(
+            parse_tcp_header(&seg[..19]).unwrap_err(),
+            "TCP segment too short (<20B)"
+        );
+    }
+
+    #[test]
+    fn test_50_tcp_builder_rejects_oversize_payload_and_small_buffer() {
+        let big = [0u8; TCP_MAX_PAYLOAD + 1];
+        let mut out = [0u8; 1600];
+        assert_eq!(
+            build_tcp_frame(
+                [2, 2, 2, 2, 2, 2],
+                [1, 1, 1, 1, 1, 1],
+                [192, 0, 2, 10],
+                [192, 0, 2, 1],
+                80,
+                1,
+                0,
+                0,
+                TCP_FLAG_ACK,
+                100,
+                &big,
+                &mut out
+            )
+            .unwrap_err(),
+            "TCP payload melebihi MSS 1460"
+        );
+        let mut tiny = [0u8; 40];
+        assert_eq!(
+            build_tcp_frame(
+                [2, 2, 2, 2, 2, 2],
+                [1, 1, 1, 1, 1, 1],
+                [192, 0, 2, 10],
+                [192, 0, 2, 1],
+                80,
+                1,
+                0,
+                0,
+                TCP_FLAG_SYN,
+                100,
+                &[],
+                &mut tiny
+            )
+            .unwrap_err(),
+            "Buffer too small for Ethernet+IPv4+TCP frame"
+        );
+    }
+
+    #[test]
+    fn test_51_tcp_payload_boundary_mss_exact() {
+        let payload = [0x41u8; TCP_MAX_PAYLOAD];
+        let mut out = [0u8; 1518];
+        let n = build_tcp_frame(
+            [2, 2, 2, 2, 2, 2],
+            [1, 1, 1, 1, 1, 1],
+            [192, 0, 2, 10],
+            [192, 0, 2, 1],
+            80,
+            1,
+            0,
+            0,
+            TCP_FLAG_PSH | TCP_FLAG_ACK,
+            100,
+            &payload,
+            &mut out,
+        )
+        .unwrap();
+        assert_eq!(n, 14 + 20 + 20 + TCP_MAX_PAYLOAD);
+        let (ip, seg) = parse_ipv4_header(&out[14..n]).unwrap();
+        assert!(tcp_checksum_ok(ip.src_ip, ip.dst_ip, seg));
+        let (_, data) = parse_tcp_header(seg).unwrap();
+        assert_eq!(data.len(), TCP_MAX_PAYLOAD);
+    }
 }
-
-

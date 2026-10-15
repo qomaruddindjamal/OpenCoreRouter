@@ -25,9 +25,16 @@ impl Default for BootConfig {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DhcpBootResult {
-    Bound { ip: [u8; 4], gw: [u8; 4], mask: [u8; 4] },
+    Bound {
+        ip: [u8; 4],
+        gw: [u8; 4],
+        mask: [u8; 4],
+    },
     HaltedStrictNoOffer,
-    DevFallback { ip: [u8; 4], gw: [u8; 4] },
+    DevFallback {
+        ip: [u8; 4],
+        gw: [u8; 4],
+    },
 }
 
 pub fn evaluate_dhcp_outcome(
@@ -38,7 +45,11 @@ pub fn evaluate_dhcp_outcome(
     cfg: BootConfig,
 ) -> DhcpBootResult {
     if has_offer {
-        DhcpBootResult::Bound { ip: offered_ip, gw: gateway, mask }
+        DhcpBootResult::Bound {
+            ip: offered_ip,
+            gw: gateway,
+            mask,
+        }
     } else if cfg.strict_net {
         DhcpBootResult::HaltedStrictNoOffer
     } else {
@@ -49,7 +60,9 @@ pub fn evaluate_dhcp_outcome(
     }
 }
 
-pub fn kernel_init(boot_info: &asl_bootloader::BootInfo) -> Result<asl_kernel_core::KernelExecutive, &'static str> {
+pub fn kernel_init(
+    boot_info: &asl_bootloader::BootInfo,
+) -> Result<asl_kernel_core::KernelExecutive, &'static str> {
     if !boot_info.validate() {
         return Err("Invalid bootloader info");
     }
@@ -128,7 +141,10 @@ mod tests {
 
     #[test]
     fn test_dev_fallback_when_strict_net_disabled() {
-        let cfg = BootConfig { strict_net: false, dhcp_timeout_secs: 5 };
+        let cfg = BootConfig {
+            strict_net: false,
+            dhcp_timeout_secs: 5,
+        };
         let res = evaluate_dhcp_outcome(false, [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], cfg);
         assert_eq!(
             res,

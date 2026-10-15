@@ -19,20 +19,17 @@ pub const GPT_MAX_PARTITIONS: usize = 128;
 // Well-known partition type GUIDs
 // ESP: C12A7328-F81F-11D2-BA4B-00A0C93EC93B
 pub const GUID_ESP: [u8; 16] = [
-    0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11,
-    0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
+    0x28, 0x73, 0x2A, 0xC1, 0x1F, 0xF8, 0xD2, 0x11, 0xBA, 0x4B, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
 ];
 
 // RJCFG01 (Rinjani Config Journal): 524A4346-4730-3100-8000-00A0C93EC93B ("RJCFG01")
 pub const GUID_RINJANI_CFG: [u8; 16] = [
-    0x46, 0x43, 0x4A, 0x52, 0x30, 0x47, 0x00, 0x31,
-    0x80, 0x00, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
+    0x46, 0x43, 0x4A, 0x52, 0x30, 0x47, 0x00, 0x31, 0x80, 0x00, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
 ];
 
 // RJDATA (Rinjani Elastic Data): 524A4441-5441-0000-8000-00A0C93EC93B ("RJDATA")
 pub const GUID_RINJANI_DATA: [u8; 16] = [
-    0x41, 0x44, 0x4A, 0x52, 0x41, 0x54, 0x00, 0x00,
-    0x80, 0x00, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
+    0x41, 0x44, 0x4A, 0x52, 0x41, 0x54, 0x00, 0x00, 0x80, 0x00, 0x00, 0xA0, 0xC9, 0x3E, 0xC9, 0x3B,
 ];
 
 // -----------------------------------------------------------------------------
@@ -43,11 +40,22 @@ pub const GUID_RINJANI_DATA: [u8; 16] = [
 /// ("RJN" flavored; images are reproducible byte-for-byte, no randomness).
 pub const fn make_unique_guid(partition_no: u8) -> [u8; 16] {
     [
-        0x52, 0x4A, 0x4E, 0x30 + partition_no,
-        0x00, 0x01,
-        0x4E, 0x01,
-        0x80, 0x00,
-        0x52, 0x4A, 0x4E, 0x00, 0x00, 0x01,
+        0x52,
+        0x4A,
+        0x4E,
+        0x30 + partition_no,
+        0x00,
+        0x01,
+        0x4E,
+        0x01,
+        0x80,
+        0x00,
+        0x52,
+        0x4A,
+        0x4E,
+        0x00,
+        0x00,
+        0x01,
     ]
 }
 
@@ -167,7 +175,8 @@ pub struct GptDiskLayout {
 impl GptDiskLayout {
     /// Formats a clean Rinjani 3-partition GPT layout given total disk capacity in sectors
     pub fn create_default_layout(total_sectors: u64) -> Result<Self, &'static str> {
-        if total_sectors < 1024 * 1024 { // Minimum ~512 MiB
+        if total_sectors < 1024 * 1024 {
+            // Minimum ~512 MiB
             return Err("Disk too small for Rinjani GPT layout");
         }
 
@@ -221,7 +230,10 @@ impl GptDiskLayout {
             backup_lba: total_sectors - 1,
             first_usable_lba: first_usable,
             last_usable_lba: last_usable,
-            disk_guid: [0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF, 0x00],
+            disk_guid: [
+                0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE,
+                0xFF, 0x00,
+            ],
             partition_entry_lba: 2,
             num_partition_entries: 4,
             size_of_partition_entry: GPT_PARTITION_ENTRY_SIZE,
@@ -336,7 +348,9 @@ pub const GPT_ENTRY_ARRAY_SECTORS: usize = 32; // 128 entries x 128 bytes
 impl GptDiskLayout {
     /// Builds the canonical 128-entry partition array bytes (entries beyond
     /// the declared partitions are zero-filled) and refreshes both header CRCs.
-    pub fn entry_array_bytes(&mut self) -> [u8; GPT_MAX_PARTITIONS * GPT_PARTITION_ENTRY_SIZE as usize] {
+    pub fn entry_array_bytes(
+        &mut self,
+    ) -> [u8; GPT_MAX_PARTITIONS * GPT_PARTITION_ENTRY_SIZE as usize] {
         let mut arr = [0u8; GPT_MAX_PARTITIONS * GPT_PARTITION_ENTRY_SIZE as usize];
         for (i, p) in self.partitions.iter().enumerate() {
             let bytes = p.to_bytes();
@@ -380,7 +394,8 @@ impl GptDiskLayout {
         out[0..arr.len()].copy_from_slice(&arr);
         let mut hdr = self.backup_header;
         let hdr_bytes = hdr.to_bytes();
-        out[32 * SECTOR_SIZE..32 * SECTOR_SIZE + GPT_HEADER_SIZE as usize].copy_from_slice(&hdr_bytes);
+        out[32 * SECTOR_SIZE..32 * SECTOR_SIZE + GPT_HEADER_SIZE as usize]
+            .copy_from_slice(&hdr_bytes);
         Ok(())
     }
 }
@@ -395,7 +410,7 @@ pub fn build_protective_mbr(total_sectors: u64, out_sector: &mut [u8; SECTOR_SIZ
     }
     // Partition entry 1 at offset 446 (0x1BE)
     let p1_start = 446;
-    out_sector[p1_start] = 0x00;     // Non-bootable
+    out_sector[p1_start] = 0x00; // Non-bootable
     out_sector[p1_start + 1] = 0x00; // Starting CHS (0/2/0)
     out_sector[p1_start + 2] = 0x02;
     out_sector[p1_start + 3] = 0x00;
@@ -446,7 +461,11 @@ pub fn parse_gpt_header_lba1(sec: &[u8]) -> Option<GptHeaderInfo> {
     let num_entries = u32::from_le_bytes(sec[80..84].try_into().unwrap());
     let entry_size = u32::from_le_bytes(sec[84..88].try_into().unwrap());
 
-    let hs = if header_size >= 92 && header_size <= sec.len() { header_size } else { 92 };
+    let hs = if header_size >= 92 && header_size <= sec.len() {
+        header_size
+    } else {
+        92
+    };
     let mut hdr_copy = [0u8; 92];
     hdr_copy[..hs.min(92)].copy_from_slice(&sec[..hs.min(92)]);
     hdr_copy[16..20].fill(0);
@@ -491,11 +510,22 @@ pub fn parse_gpt_entry(bytes: &[u8]) -> Option<GptEntryInfo> {
             if ch == 0 {
                 break;
             }
-            name[nlen] = if ch >= 0x20 && ch < 0x7F { ch as u8 } else { b'?' };
+            name[nlen] = if ch >= 0x20 && ch < 0x7F {
+                ch as u8
+            } else {
+                b'?'
+            };
             nlen += 1;
         }
     }
-    Some(GptEntryInfo { start_lba, end_lba, name, name_len: nlen, used, type_guid })
+    Some(GptEntryInfo {
+        start_lba,
+        end_lba,
+        name,
+        name_len: nlen,
+        used,
+        type_guid,
+    })
 }
 
 #[cfg(test)]
@@ -520,7 +550,8 @@ mod tests {
         assert_eq!(mbr[510], 0x55);
         assert_eq!(mbr[511], 0xAA);
         assert_eq!(mbr[446 + 4], 0xEE); // GPT Protective
-        let start_lba = u32::from_le_bytes([mbr[446 + 8], mbr[446 + 9], mbr[446 + 10], mbr[446 + 11]]);
+        let start_lba =
+            u32::from_le_bytes([mbr[446 + 8], mbr[446 + 9], mbr[446 + 10], mbr[446 + 11]]);
         assert_eq!(start_lba, 1);
     }
 
@@ -551,7 +582,9 @@ mod tests {
         let initial_p3_size = layout.partitions[2].sector_count();
 
         let expanded_sectors = 83_886_080u64; // 40 GiB
-        let new_p3_size = layout.resize_data_partition(expanded_sectors).expect("resize ok");
+        let new_p3_size = layout
+            .resize_data_partition(expanded_sectors)
+            .expect("resize ok");
         assert!(new_p3_size > initial_p3_size);
         assert_eq!(layout.total_sectors, expanded_sectors);
         let backup_lba = layout.primary_header.backup_lba;
@@ -626,7 +659,12 @@ mod tests {
         assert_eq!(head[511], 0xAA);
         assert_eq!(head[446 + 4], 0xEE);
         assert_eq!(&head[512..520], b"EFI PART");
-        let n = u32::from_le_bytes([head[512 + 80], head[512 + 81], head[512 + 82], head[512 + 83]]);
+        let n = u32::from_le_bytes([
+            head[512 + 80],
+            head[512 + 81],
+            head[512 + 82],
+            head[512 + 83],
+        ]);
         assert_eq!(n, 128);
         // ESP entry first bytes = GUID_ESP
         assert_eq!(&head[2 * SECTOR_SIZE..2 * SECTOR_SIZE + 16], &GUID_ESP);
@@ -639,7 +677,11 @@ mod tests {
         let mut tail = vec![0u8; 33 * SECTOR_SIZE];
         layout.write_backup(&mut tail).unwrap();
         assert_eq!(&tail[32 * SECTOR_SIZE..32 * SECTOR_SIZE + 8], b"EFI PART");
-        let cur = u64::from_le_bytes(tail[32 * SECTOR_SIZE + 24..32 * SECTOR_SIZE + 32].try_into().unwrap());
+        let cur = u64::from_le_bytes(
+            tail[32 * SECTOR_SIZE + 24..32 * SECTOR_SIZE + 32]
+                .try_into()
+                .unwrap(),
+        );
         assert_eq!(cur, total - 1);
     }
 
@@ -649,7 +691,10 @@ mod tests {
         let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
         let arr = layout.entry_array_bytes();
         assert_eq!(arr.len(), 128 * 128);
-        assert_eq!(layout.primary_header.partition_array_crc32, compute_crc32(&arr));
+        assert_eq!(
+            layout.primary_header.partition_array_crc32,
+            compute_crc32(&arr)
+        );
         // Slots 4..128 must be fully zero
         for b in &arr[4 * 128..] {
             assert_eq!(*b, 0);
@@ -663,8 +708,14 @@ mod tests {
         for p in layout.partitions.iter().take(3) {
             assert_ne!(p.unique_partition_guid, [0u8; 16]);
         }
-        assert_ne!(layout.partitions[0].unique_partition_guid, layout.partitions[1].unique_partition_guid);
-        assert_ne!(layout.partitions[1].unique_partition_guid, layout.partitions[2].unique_partition_guid);
+        assert_ne!(
+            layout.partitions[0].unique_partition_guid,
+            layout.partitions[1].unique_partition_guid
+        );
+        assert_ne!(
+            layout.partitions[1].unique_partition_guid,
+            layout.partitions[2].unique_partition_guid
+        );
     }
 
     #[test]
@@ -673,12 +724,16 @@ mod tests {
         let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
         let mut head = [0u8; 34 * SECTOR_SIZE];
         layout.write_head(&mut head).unwrap();
-        let info = parse_gpt_header_lba1(&head[SECTOR_SIZE..2 * SECTOR_SIZE]).expect("header parse");
+        let info =
+            parse_gpt_header_lba1(&head[SECTOR_SIZE..2 * SECTOR_SIZE]).expect("header parse");
         assert!(info.header_crc_ok, "CRC header harus cocok dgn to_bytes()");
         assert_eq!(info.entry_lba, layout.primary_header.partition_entry_lba);
         assert_eq!(info.num_entries, 128);
         assert_eq!(info.entry_size, 128);
-        assert_eq!(info.first_usable_lba, layout.primary_header.first_usable_lba);
+        assert_eq!(
+            info.first_usable_lba,
+            layout.primary_header.first_usable_lba
+        );
         assert_eq!(info.last_usable_lba, layout.primary_header.last_usable_lba);
     }
 

@@ -101,8 +101,14 @@ impl DnatRule {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NatAction {
     Untouched,
-    TranslateSnat { new_src_ip: [u8; 4], new_src_port: u16 },
-    TranslateDnat { new_dst_ip: [u8; 4], new_dst_port: u16 },
+    TranslateSnat {
+        new_src_ip: [u8; 4],
+        new_src_port: u16,
+    },
+    TranslateDnat {
+        new_dst_ip: [u8; 4],
+        new_dst_port: u16,
+    },
     DropTableFull,
 }
 
@@ -142,7 +148,9 @@ impl NatEngine {
     /// Bersihkan entri conntrack yang telah kadaluarsa
     pub fn evict_expired_entries(&mut self) {
         for i in 0..MAX_CONNTRACK_ENTRIES {
-            if self.conntrack[i].state != ConntrackState::Unused && self.current_tick >= self.conntrack[i].expiry_tick {
+            if self.conntrack[i].state != ConntrackState::Unused
+                && self.current_tick >= self.conntrack[i].expiry_tick
+            {
                 self.conntrack[i] = ConntrackEntry::empty();
                 if self.active_sessions > 0 {
                     self.active_sessions -= 1;
@@ -354,7 +362,10 @@ mod tests {
         let act = nat.process_egress(lan_src, wan_dst, 12345, 80, PROTO_TCP);
 
         let trans_port = match act {
-            NatAction::TranslateSnat { new_src_ip, new_src_port } => {
+            NatAction::TranslateSnat {
+                new_src_ip,
+                new_src_port,
+            } => {
                 assert_eq!(new_src_ip, wan_ip);
                 assert!(new_src_port >= 40000);
                 new_src_port
@@ -365,7 +376,10 @@ mod tests {
         // Balasan dari WAN (192.168.57.1:80 -> WAN_IP:trans_port)
         let rev_act = nat.process_ingress(wan_dst, wan_ip, 80, trans_port, PROTO_TCP);
         match rev_act {
-            NatAction::TranslateDnat { new_dst_ip, new_dst_port } => {
+            NatAction::TranslateDnat {
+                new_dst_ip,
+                new_dst_port,
+            } => {
                 assert_eq!(new_dst_ip, lan_src);
                 assert_eq!(new_dst_port, 12345);
             }
@@ -378,12 +392,16 @@ mod tests {
         let wan_ip = [192, 168, 57, 10];
         let mut nat = NatEngine::new(wan_ip);
         // Rule: WAN UDP 7777 -> Klien LAN 192.168.56.2:7777
-        nat.add_dnat_rule(7777, PROTO_UDP, [192, 168, 56, 2], 7777).unwrap();
+        nat.add_dnat_rule(7777, PROTO_UDP, [192, 168, 56, 2], 7777)
+            .unwrap();
 
         // Paket dari WAN Host (192.168.57.1:55555) -> Rinjani WAN (192.168.57.10:7777)
         let act = nat.process_ingress([192, 168, 57, 1], wan_ip, 55555, 7777, PROTO_UDP);
         match act {
-            NatAction::TranslateDnat { new_dst_ip, new_dst_port } => {
+            NatAction::TranslateDnat {
+                new_dst_ip,
+                new_dst_port,
+            } => {
                 assert_eq!(new_dst_ip, [192, 168, 56, 2]);
                 assert_eq!(new_dst_port, 7777);
             }
@@ -399,7 +417,10 @@ mod tests {
         // ICMP Echo LAN Klien (ID=0x1122) -> WAN
         let act = nat.process_egress([192, 168, 56, 2], [192, 168, 57, 1], 0x1122, 0, PROTO_ICMP);
         let trans_id = match act {
-            NatAction::TranslateSnat { new_src_ip, new_src_port } => {
+            NatAction::TranslateSnat {
+                new_src_ip,
+                new_src_port,
+            } => {
                 assert_eq!(new_src_ip, wan_ip);
                 new_src_port
             }
@@ -409,7 +430,10 @@ mod tests {
         // Balasan ICMP Reply WAN -> Rinjani
         let rev = nat.process_ingress([192, 168, 57, 1], wan_ip, 0, trans_id, PROTO_ICMP);
         match rev {
-            NatAction::TranslateDnat { new_dst_ip, new_dst_port } => {
+            NatAction::TranslateDnat {
+                new_dst_ip,
+                new_dst_port,
+            } => {
                 assert_eq!(new_dst_ip, [192, 168, 56, 2]);
                 assert_eq!(new_dst_port, 0x1122);
             }
@@ -434,7 +458,13 @@ mod tests {
         let wan_ip = [192, 168, 57, 10];
         let mut nat = NatEngine::new(wan_ip);
         for i in 0..MAX_CONNTRACK_ENTRIES {
-            let act = nat.process_egress([192, 168, 56, 2], [10, 0, 0, 1], (1000 + i) as u16, 80, PROTO_TCP);
+            let act = nat.process_egress(
+                [192, 168, 56, 2],
+                [10, 0, 0, 1],
+                (1000 + i) as u16,
+                80,
+                PROTO_TCP,
+            );
             assert!(matches!(act, NatAction::TranslateSnat { .. }));
         }
         assert_eq!(nat.active_sessions, MAX_CONNTRACK_ENTRIES);
@@ -481,12 +511,17 @@ mod tests {
         let wan_ip = [192, 168, 57, 10];
         let mut nat = NatEngine::new(wan_ip);
         // Rule: WAN:7777 UDP -> LAN Klien 192.168.56.2:7777
-        assert!(nat.add_dnat_rule(7777, PROTO_UDP, [192, 168, 56, 2], 7777).is_ok());
+        assert!(nat
+            .add_dnat_rule(7777, PROTO_UDP, [192, 168, 56, 2], 7777)
+            .is_ok());
 
         // Host WAN (192.168.57.1:54321) sends UDP packet to WAN:7777
         let ingress_act = nat.process_ingress([192, 168, 57, 1], wan_ip, 54321, 7777, PROTO_UDP);
         match ingress_act {
-            NatAction::TranslateDnat { new_dst_ip, new_dst_port } => {
+            NatAction::TranslateDnat {
+                new_dst_ip,
+                new_dst_port,
+            } => {
                 assert_eq!(new_dst_ip, [192, 168, 56, 2]);
                 assert_eq!(new_dst_port, 7777);
             }
@@ -495,9 +530,13 @@ mod tests {
         assert_eq!(nat.active_sessions, 1);
 
         // Klien LAN (192.168.56.2:7777) sends UDP reply back to Host WAN (192.168.57.1:54321)
-        let egress_act = nat.process_egress([192, 168, 56, 2], [192, 168, 57, 1], 7777, 54321, PROTO_UDP);
+        let egress_act =
+            nat.process_egress([192, 168, 56, 2], [192, 168, 57, 1], 7777, 54321, PROTO_UDP);
         match egress_act {
-            NatAction::TranslateSnat { new_src_ip, new_src_port } => {
+            NatAction::TranslateSnat {
+                new_src_ip,
+                new_src_port,
+            } => {
                 assert_eq!(new_src_ip, wan_ip);
                 assert_eq!(new_src_port, 7777); // Translated back to original advertised WAN port
             }

@@ -18,10 +18,12 @@ asl-router-pci = { path = "../../router/asl-router-pci" }
 asl-router-drivers-virtio = { path = "../../router/asl-router-drivers-virtio" }
 asl-router-netbuf = { path = "../../router/asl-router-netbuf" }
 asl-router-netstack = { path = "../../router/asl-router-netstack" }
+asl-router-webcore = { path = "../../router/asl-router-webcore" }
+asl-router-api = { path = "../../router/asl-router-api" }
+asl-router-webui = { path = "../../router/asl-router-webui" }
 asl-router-hwinv = { path = "../../router/asl-router-hwinv" }
 asl-router-lpm = { path = "../../router/asl-router-lpm" }
 asl-router-nat = { path = "../../router/asl-router-nat" }
-asl-router-tcpstub = { path = "../../router/asl-router-tcpstub" }
 asl-router-drivers-virtio-blk = { path = "../../router/asl-router-drivers-virtio-blk" }
 asl-router-drivers-ata = { path = "../../router/asl-router-drivers-ata" }
 asl-router-gpt = { path = "../../router/asl-router-gpt" }

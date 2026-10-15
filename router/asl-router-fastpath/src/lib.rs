@@ -6,7 +6,9 @@
 
 pub mod ring;
 
-pub use ring::{DmaAddr, DescriptorRing, RxDesc16, RxDesc32, IommuMapper, dma_cache_clean_inval, CACHELINE_SIZE};
+pub use ring::{
+    dma_cache_clean_inval, DescriptorRing, DmaAddr, IommuMapper, RxDesc16, RxDesc32, CACHELINE_SIZE,
+};
 
 pub const OS_MARKER: &str = "RINJANI_1_0_3";
 pub const MODULE_NAME: &str = "fastpath";

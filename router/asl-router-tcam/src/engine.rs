@@ -100,6 +100,22 @@ impl<const MAX_RULES: usize> TcamEngine<MAX_RULES> {
         Err("TCAM table full")
     }
 
+    /// Jumlah aturan yang benar-benar terpasang (bukan kapasitas tabel).
+    pub fn rule_count(&self) -> usize {
+        let mut n = 0usize;
+        for slot in self.rules.iter() {
+            if slot.is_some() {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Kapasitas maksimum tabel MAX_RULES.
+    pub const fn capacity(&self) -> usize {
+        MAX_RULES
+    }
+
     pub fn classify(&self, packet: &Packet5T) -> RuleAction {
         let mut best_match: Option<TcamRule> = None;
         let mut i = 0;
