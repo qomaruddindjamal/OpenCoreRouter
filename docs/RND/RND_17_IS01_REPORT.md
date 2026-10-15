@@ -42,6 +42,7 @@ Bukti serial & layar:
 | Boot dari disk terpasang (DVD kosong) | `Analysis/reports/is01_disk_boot.log` | `[R1]`–`[R23]` + `disk print` + `config show`, 1.859 B |
 | Failure pertama (diperbaiki) | `Analysis/reports/is01_screen.png` | Screenshot panic Limine "Stage 3 file not found" |
 | Sukses akhir disk boot | `Analysis/reports/is01_disk_screen.png` | Screenshot banner Rinjani dari disk |
+| Re-check boot disk (reproduksibilitas) | `Analysis/reports/is01_final_boot.log`, `is01_final_screen.png` | Serial identik `[R1]`–`[R23]` pada boot kedua |
 | Log uji workspace | `Analysis/reports/is01_test_log.txt` | 196 passed / 0 failed (60 suite `ok`) |
 
 ---
@@ -95,6 +96,10 @@ rinjani-cli> disk print
 ```
 
 Perintah `disk print` mengeksekusi **parser GPT in-kernel terhadap disk yang baru saja di-install**, dan output LBA cocok persis dengan layout yang ditulis `opcr-mkdisk`. Uptime stabil > 70 detik sebelum power-off bersih.
+
+**Re-check reproduksibilitas (`VERIFIED`, 2026-10-15 12:20):** VM di-boot ulang sekali lagi dari disk yang sama; tangkapan serial baru `Analysis/reports/is01_final_boot.log` (1.859 B, identik `[R1]`–`[R23]`) dan screenshot `is01_final_screen.png` membuktikan boot-from-disk determinis, bukan keberuntungan sekali jalan. Catatan jujur: `acpipowerbutton` diabaikan kernel (belum ada handler power-off ACPI/PMTimer), sehingga padam dilakukan via `controlvm poweroff` pada loop idle tanpa tulis disk — kandidat perbaikan sprint berikutnya.
+
+Verifikasi final sesi (12:2x): `cargo test --workspace` → **196 passed / 0 failed**; `cargo check --target x86_64-unknown-none` → `Finished`.
 
 ---
 
