@@ -32,6 +32,7 @@ dependencies = [
  "asl-router-fastpath",
  "asl-router-gpt",
  "asl-router-hwinv",
+ "asl-router-installer",
  "asl-router-lpm",
  "asl-router-nat",
  "asl-router-netbuf",
@@ -109,6 +110,15 @@ name = "asl-router-hwinv"
 version = "0.1.0"
 dependencies = [
  "asl-router-pci",
+]
+
+[[package]]
+name = "asl-router-installer"
+version = "0.1.0"
+dependencies = [
+ "asl-router-fat32",
+ "asl-router-gpt",
+ "asl-router-persistence",
 ]
 
 [[package]]

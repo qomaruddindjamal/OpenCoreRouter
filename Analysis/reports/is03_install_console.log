@@ -1,0 +1,614 @@
+=== listener start 2026-10-15T08:58:47.251Z ===
+=== [console] host connected 2026-10-15T08:58:47.274Z ===
+[R1] RINJANI 1.0.0 Ã¢ÂÂ Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF800000053000 rx_pa=0x0000000000053000 rx_pfn=0x0000000000000053 tx_pfn=0x000000000000005B
+[R9] ETH0 VIRTIO-NET DMA UP mac=08:00:27:5E:08:33
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF80000006A000 rx_pa=0x000000000006A000 rx_pfn=0x000000000000006A tx_pfn=0x0000000000000072
+[R24] ETH1-LAN VIRTIO DMA UP mac=08:00:27:DD:48:91 ip=192.168.56.100 qsz=1024 (arp+icmp responder armed, GARP periodic)
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 Ã¢ÂÂ WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] ATA post-reset st=0x50 err=0x01
+[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R22] ATA post-reset st=0x50 err=0x01
+[R22b] ATA SLAVE PROBE: IDENTIFY: floating bus Ã¢ÂÂ channel IDE tidak ada Ã¢ÂÂ disk target install tidak tersedia
+[R23] DISK CAPACITY VERIFIED: 2 GiB (layout aligned)
+[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)
+[R23] GPT header disk: entry_lba=2 num_entries=44 entry_size=128 usable=34..4194270 crc_ok=YA
+  (DISK) part1: EFI System Partition lba=34..262177
+  (DISK) part2: RJCFG01 lba=262178..278561
+  (DISK) part3: RJDATA lba=278562..4194270
+[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA 262178) Ã¢ÂÂ jalur persistence on-disk diaktifkan
+[R26] RJCFG01 journal DIBACA DARI DISK: slot 1 seq=2 (CRC slot + header terverifikasi, PIO nyata)
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 2 GiB (2048 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=4194270)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot B (seq=2)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+=== [console] host disconnected 2026-10-15T08:59:39.288Z ===
+=== [console] host disconnected 2026-10-15T08:59:40.293Z ===
+=== [console] host disconnected 2026-10-15T08:59:41.295Z ===
+=== [console] host disconnected 2026-10-15T08:59:42.298Z ===
+=== [console] host disconnected 2026-10-15T08:59:43.299Z ===
+=== [console] host disconnected 2026-10-15T08:59:44.300Z ===
+=== [console] host disconnected 2026-10-15T08:59:45.301Z ===
+=== [console] host disconnected 2026-10-15T08:59:46.302Z ===
+=== [console] host disconnected 2026-10-15T08:59:47.304Z ===
+=== [console] host disconnected 2026-10-15T08:59:48.305Z ===
+=== [console] host disconnected 2026-10-15T08:59:49.306Z ===
+=== [console] host disconnected 2026-10-15T08:59:50.307Z ===
+=== [console] host connected 2026-10-15T08:59:51.310Z ===
+[R1] RINJANI 1.0.0 Ã¢ÂÂ Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF800000053000 rx_pa=0x0000000000053000 rx_pfn=0x0000000000000053 tx_pfn=0x000000000000005B
+[R9] ETH0 VIRTIO-NET DMA UP mac=08:00:27:5E:08:33
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF80000006A000 rx_pa=0x000000000006A000 rx_pfn=0x000000000000006A tx_pfn=0x0000000000000072
+[R24] ETH1-LAN VIRTIO DMA UP mac=08:00:27:DD:48:91 ip=192.168.56.100 qsz=1024 (arp+icmp responder armed, GARP periodic)
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 Ã¢ÂÂ WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] ATA post-reset st=0x50 err=0x01
+[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R22] ATA post-reset st=0x50 err=0x01
+[R22b] ATA/IDE SLAVE UP (PIO nyata, drive 1) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R23] DISK CAPACITY VERIFIED: 2 GiB (layout aligned)
+[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)
+[R23] GPT header disk: entry_lba=2 num_entries=44 entry_size=128 usable=34..4194270 crc_ok=YA
+  (DISK) part1: EFI System Partition lba=34..262177
+  (DISK) part2: RJCFG01 lba=262178..278561
+  (DISK) part3: RJDATA lba=278562..4194270
+[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA 262178) Ã¢ÂÂ jalur persistence on-disk diaktifkan
+[R26] RJCFG01 journal DIBACA DARI DISK: slot 1 seq=2 (CRC slot + header terverifikasi, PIO nyata)
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 2 GiB (2048 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=4194270)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot B (seq=2)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+[host->guest] helphelp
+Available commands:
+  show version     - Display kernel and OS distribution version
+  show interface   - Display network interfaces, IPs and status
+  show hardware    - Display detected PCI and CPU inventory
+  show tcam        - Display TCAM classification table status
+  show route       - Display LPM Routing Table (FIB)
+  show nat         - Display NAT rules and active Conntrack sessions
+  show counter     - Display per-interface packet counters
+  disk print       - Display GPT disk partition layout and capacity
+  disk adopt       - Adopt physical disk expansion into RJDATA
+  config show      - Display RJCFG01 active configuration and slot
+  config save      - Persist configuration via atomic A/B slot switch
+  hostname set <s> - Update and persist hostname to RJCFG01
+  ping <ip>        - Send ICMP echo request
+  install disk     - Inspeksi src+tgt utk self-install (NOL tulis)
+  install confirm YES-INSTALL - Eksekusi instalasi ke primary slave
+  install cancel   - Batalkan (menegaskan nol sektor ditulis)
+  clear            - Clear terminal screen
+  reboot           - Triple-fault hardware reboot (real)
+  shutdown         - ACPI PM1_CNT power-off probe (real)
+[host->guest] install diskinstall disk
+install disk: INSPEKSI SAJA (nol tulis) src=drive0 -> tgt=drive1
+[R27] PREFLIGHT kapasitas src==tgt=4194304
+[R27] INSTALL FAILED stage=PREFLIGHT reason=CRC32 array entri GPT sumber tidak cocok
+=== [console] host disconnected 2026-10-15T09:04:35.144Z ===
+=== [console] host disconnected 2026-10-15T09:04:36.146Z ===
+=== [console] host disconnected 2026-10-15T09:04:37.148Z ===
+=== [console] host disconnected 2026-10-15T09:04:38.150Z ===
+=== [console] host disconnected 2026-10-15T09:04:39.152Z ===
+=== [console] host disconnected 2026-10-15T09:04:40.154Z ===
+=== [console] host disconnected 2026-10-15T09:04:41.156Z ===
+=== [console] host disconnected 2026-10-15T09:04:42.160Z ===
+=== [console] host disconnected 2026-10-15T09:04:43.163Z ===
+=== [console] host disconnected 2026-10-15T09:04:44.164Z ===
+=== [console] host disconnected 2026-10-15T09:04:45.166Z ===
+=== [console] host disconnected 2026-10-15T09:04:46.168Z ===
+=== [console] host disconnected 2026-10-15T09:04:47.170Z ===
+=== [console] host disconnected 2026-10-15T09:04:48.170Z ===
+=== [console] host disconnected 2026-10-15T09:04:49.171Z ===
+=== [console] host disconnected 2026-10-15T09:04:50.172Z ===
+=== [console] host disconnected 2026-10-15T09:04:51.173Z ===
+=== [console] host disconnected 2026-10-15T09:04:52.175Z ===
+=== [console] host disconnected 2026-10-15T09:04:53.177Z ===
+=== [console] host disconnected 2026-10-15T09:04:54.178Z ===
+=== [console] host disconnected 2026-10-15T09:04:56.374Z ===
+=== [console] host disconnected 2026-10-15T09:04:57.389Z ===
+=== [console] host disconnected 2026-10-15T09:04:58.391Z ===
+=== [console] host disconnected 2026-10-15T09:04:59.392Z ===
+=== [console] host disconnected 2026-10-15T09:05:03.214Z ===
+=== [console] host disconnected 2026-10-15T09:05:04.216Z ===
+=== [console] host disconnected 2026-10-15T09:05:05.218Z ===
+=== [console] host disconnected 2026-10-15T09:05:06.219Z ===
+=== [console] host disconnected 2026-10-15T09:05:07.220Z ===
+=== [console] host disconnected 2026-10-15T09:05:08.220Z ===
+=== [console] host disconnected 2026-10-15T09:05:13.386Z ===
+=== [console] host disconnected 2026-10-15T09:05:14.386Z ===
+=== [console] host disconnected 2026-10-15T09:05:15.388Z ===
+=== [console] host disconnected 2026-10-15T09:05:16.390Z ===
+=== [console] host disconnected 2026-10-15T09:05:17.391Z ===
+=== [console] host disconnected 2026-10-15T09:05:18.391Z ===
+=== [console] host disconnected 2026-10-15T09:05:19.393Z ===
+=== [console] host disconnected 2026-10-15T09:05:20.394Z ===
+=== [console] host disconnected 2026-10-15T09:05:21.395Z ===
+=== [console] host disconnected 2026-10-15T09:05:22.396Z ===
+=== [console] host disconnected 2026-10-15T09:05:23.397Z ===
+=== [console] host disconnected 2026-10-15T09:05:24.398Z ===
+=== [console] host disconnected 2026-10-15T09:05:25.400Z ===
+=== [console] host disconnected 2026-10-15T09:05:26.402Z ===
+=== [console] host disconnected 2026-10-15T09:05:27.403Z ===
+=== [console] host disconnected 2026-10-15T09:05:28.404Z ===
+=== [console] host disconnected 2026-10-15T09:05:29.405Z ===
+=== [console] host disconnected 2026-10-15T09:05:30.407Z ===
+=== [console] host disconnected 2026-10-15T09:05:31.408Z ===
+=== [console] host disconnected 2026-10-15T09:05:32.410Z ===
+=== [console] host disconnected 2026-10-15T09:05:33.411Z ===
+=== [console] host disconnected 2026-10-15T09:05:34.412Z ===
+=== [console] host disconnected 2026-10-15T09:05:35.413Z ===
+=== [console] host disconnected 2026-10-15T09:05:36.415Z ===
+=== [console] host disconnected 2026-10-15T09:05:37.416Z ===
+=== [console] host disconnected 2026-10-15T09:05:38.417Z ===
+=== [console] host disconnected 2026-10-15T09:05:39.419Z ===
+=== [console] host disconnected 2026-10-15T09:05:40.421Z ===
+=== [console] host disconnected 2026-10-15T09:05:41.423Z ===
+=== [console] host disconnected 2026-10-15T09:05:42.424Z ===
+=== [console] host disconnected 2026-10-15T09:05:43.425Z ===
+=== [console] host disconnected 2026-10-15T09:05:44.427Z ===
+=== [console] host disconnected 2026-10-15T09:05:45.427Z ===
+=== [console] host disconnected 2026-10-15T09:05:46.429Z ===
+=== [console] host disconnected 2026-10-15T09:05:47.430Z ===
+=== [console] host disconnected 2026-10-15T09:05:48.431Z ===
+=== [console] host disconnected 2026-10-15T09:05:49.432Z ===
+=== [console] host disconnected 2026-10-15T09:05:50.433Z ===
+=== [console] host connected 2026-10-15T09:05:51.434Z ===
+[R1] RINJANI 1.0.0 Ã¢ÂÂ Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF800000053000 rx_pa=0x0000000000053000 rx_pfn=0x0000000000000053 tx_pfn=0x000000000000005B
+[R9] ETH0 VIRTIO-NET DMA UP mac=08:00:27:5E:08:33
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF80000006A000 rx_pa=0x000000000006A000 rx_pfn=0x000000000000006A tx_pfn=0x0000000000000072
+[R24] ETH1-LAN VIRTIO DMA UP mac=08:00:27:DD:48:91 ip=192.168.56.100 qsz=1024 (arp+icmp responder armed, GARP periodic)
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 Ã¢ÂÂ WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] ATA post-reset st=0x50 err=0x01
+[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R22] ATA post-reset st=0x50 err=0x01
+[R22b] ATA/IDE SLAVE UP (PIO nyata, drive 1) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R23] DISK CAPACITY VERIFIED: 2 GiB (layout aligned)
+[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)
+[R23] GPT header disk: entry_lba=2 num_entries=44 entry_size=128 usable=34..4194270 crc_ok=YA
+  (DISK) part1: EFI System Partition lba=34..262177
+  (DISK) part2: RJCFG01 lba=262178..278561
+  (DISK) part3: RJDATA lba=278562..4194270
+[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA 262178) Ã¢ÂÂ jalur persistence on-disk diaktifkan
+[R26] RJCFG01 belum ada di disk (RJCFG01: magic tidak valid) Ã¢ÂÂ boot bersih dengan konfigurasi default
+[R26c] RJCFG01 belum ada di disk Ã¢ÂÂ auto-commit + tulis (bukti write path persisten)...
+[R26] RJCFG01 READBACK VERIFIED: slot 1 seq=2 (CRC header + slot cocok dari disk, PIO nyata)
+[R26c] RJCFG01 TERSIMPAN DI DISK (VERIFIED) Ã¢ÂÂ reboot akan memuat dari disk.
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 2 GiB (2048 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=4194270)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot B (seq=2)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+[host->guest] install diskinstall disk
+install disk: INSPEKSI SAJA (nol tulis) src=drive0 -> tgt=drive1
+[R27] PREFLIGHT kapasitas src==tgt=4194304
+[R27] PREFLIGHT PASS Ã¢ÂÂ sumber valid, target blank terproteksi
+[R27] TARGET_IDENTIFIED kapasitas_sektor=4194304 backup_header_lba=4194303 entry_lba=2
+[R27] PARTITION_PLAN_VALIDATED ESP=34..262177 esp_terpakai=8579 RJCFG01=262178..278561 RJDATA=278562..4194270
+Rencana instalasi terverifikasi:
+  capacity_sectors = 4194304  esp = 34..262177 (salin 0..8579)
+  RJCFG01 = 262178..278561  RJDATA = 278562..4194270  entry_lba = 2
+Eksekusi destruktif: install confirm YES-INSTALL
+[host->guest] install cancelytes)
+install cancel
+install cancel: installer TIDAK dipanggil Ã¢ÂÂ nol sektor ditulis ke drive 1 (tidak ada perubahan pada target).
+[host->guest] install confirm NOPEinstall confirm NOPE
+install confirm: token dari UART RX = NOPE
+[R27] INSTALL START source=ATA primary master (drive 0) target=ATA primary slave (drive 1)
+[R27] PREFLIGHT kapasitas src==tgt=4194304
+[R27] PREFLIGHT PASS Ã¢ÂÂ sumber valid, target blank terproteksi
+[R27] TARGET_IDENTIFIED kapasitas_sektor=4194304 backup_header_lba=4194303 entry_lba=2
+[R27] PARTITION_PLAN_VALIDATED ESP=34..262177 esp_terpakai=8579 RJCFG01=262178..278561 RJDATA=278562..4194270
+[R27] INSTALL FAILED stage=TARGET_CONFIRMATION reason=token konfirmasi tidak cocok Ã¢ÂÂ TIDAK ADA sektor yang ditulis
+[R24] GARP announ
+=== [console] host disconnected 2026-10-15T09:07:19.099Z ===
+=== [console] host disconnected 2026-10-15T09:07:20.099Z ===
+=== [console] host disconnected 2026-10-15T09:07:21.101Z ===
+=== [console] host disconnected 2026-10-15T09:07:22.102Z ===
+=== [console] host disconnected 2026-10-15T09:07:23.103Z ===
+=== [console] host disconnected 2026-10-15T09:07:24.103Z ===
+=== [console] host disconnected 2026-10-15T09:07:25.104Z ===
+=== [console] host disconnected 2026-10-15T09:07:26.105Z ===
+=== [console] host disconnected 2026-10-15T09:07:27.107Z ===
+=== [console] host disconnected 2026-10-15T09:07:28.108Z ===
+=== [console] host disconnected 2026-10-15T09:07:29.110Z ===
+=== [console] host disconnected 2026-10-15T09:07:30.111Z ===
+=== [console] host disconnected 2026-10-15T09:07:31.112Z ===
+=== [console] host disconnected 2026-10-15T09:07:32.422Z ===
+=== [console] host disconnected 2026-10-15T09:07:33.424Z ===
+=== [console] host disconnected 2026-10-15T09:07:39.843Z ===
+=== [console] host disconnected 2026-10-15T09:07:40.844Z ===
+=== [console] host disconnected 2026-10-15T09:07:41.846Z ===
+=== [console] host disconnected 2026-10-15T09:07:42.847Z ===
+=== [console] host disconnected 2026-10-15T09:07:43.848Z ===
+=== [console] host disconnected 2026-10-15T09:07:44.850Z ===
+=== [console] host disconnected 2026-10-15T09:07:45.851Z ===
+=== [console] host disconnected 2026-10-15T09:07:46.853Z ===
+=== [console] host disconnected 2026-10-15T09:07:47.855Z ===
+=== [console] host disconnected 2026-10-15T09:07:48.855Z ===
+=== [console] host disconnected 2026-10-15T09:07:49.857Z ===
+=== [console] host disconnected 2026-10-15T09:07:50.858Z ===
+=== [console] host disconnected 2026-10-15T09:07:51.859Z ===
+=== [console] host disconnected 2026-10-15T09:07:52.861Z ===
+=== [console] host disconnected 2026-10-15T09:07:53.861Z ===
+=== [console] host disconnected 2026-10-15T09:07:54.862Z ===
+=== [console] host disconnected 2026-10-15T09:08:04.747Z ===
+=== [console] host disconnected 2026-10-15T09:08:05.749Z ===
+=== [console] host disconnected 2026-10-15T09:08:06.751Z ===
+=== [console] host disconnected 2026-10-15T09:08:07.752Z ===
+=== [console] host disconnected 2026-10-15T09:08:08.754Z ===
+=== [console] host disconnected 2026-10-15T09:08:09.754Z ===
+=== [console] host disconnected 2026-10-15T09:08:10.757Z ===
+=== [console] host disconnected 2026-10-15T09:08:11.758Z ===
+=== [console] host disconnected 2026-10-15T09:08:12.759Z ===
+=== [console] host disconnected 2026-10-15T09:08:13.760Z ===
+=== [console] host disconnected 2026-10-15T09:08:14.761Z ===
+=== [console] host disconnected 2026-10-15T09:08:15.762Z ===
+=== [console] host disconnected 2026-10-15T09:08:16.763Z ===
+=== [console] host disconnected 2026-10-15T09:08:17.765Z ===
+=== [console] host disconnected 2026-10-15T09:08:18.766Z ===
+=== [console] host disconnected 2026-10-15T09:08:19.768Z ===
+=== [console] host disconnected 2026-10-15T09:08:20.768Z ===
+=== [console] host disconnected 2026-10-15T09:08:21.769Z ===
+=== [console] host disconnected 2026-10-15T09:08:22.771Z ===
+=== [console] host disconnected 2026-10-15T09:08:23.772Z ===
+=== [console] host disconnected 2026-10-15T09:08:24.774Z ===
+=== [console] host disconnected 2026-10-15T09:08:25.776Z ===
+=== [console] host disconnected 2026-10-15T09:08:26.777Z ===
+=== [console] host disconnected 2026-10-15T09:08:27.779Z ===
+=== [console] host disconnected 2026-10-15T09:08:28.781Z ===
+=== [console] host disconnected 2026-10-15T09:08:29.783Z ===
+=== [console] host disconnected 2026-10-15T09:08:30.784Z ===
+=== [console] host disconnected 2026-10-15T09:08:31.785Z ===
+=== [console] host disconnected 2026-10-15T09:08:32.787Z ===
+=== [console] host disconnected 2026-10-15T09:08:33.788Z ===
+=== [console] host disconnected 2026-10-15T09:08:34.789Z ===
+=== [console] host disconnected 2026-10-15T09:08:35.790Z ===
+=== [console] host disconnected 2026-10-15T09:08:36.790Z ===
+=== [console] host disconnected 2026-10-15T09:08:37.791Z ===
+=== [console] host disconnected 2026-10-15T09:08:38.793Z ===
+=== [console] host disconnected 2026-10-15T09:08:39.794Z ===
+=== [console] host disconnected 2026-10-15T09:08:40.796Z ===
+=== [console] host disconnected 2026-10-15T09:08:41.798Z ===
+=== [console] host disconnected 2026-10-15T09:08:42.800Z ===
+=== [console] host disconnected 2026-10-15T09:08:44.004Z ===
+=== [console] host disconnected 2026-10-15T09:08:45.006Z ===
+=== [console] host disconnected 2026-10-15T09:08:46.007Z ===
+=== [console] host disconnected 2026-10-15T09:08:47.008Z ===
+=== [console] host disconnected 2026-10-15T09:08:48.255Z ===
+=== [console] host disconnected 2026-10-15T09:08:49.516Z ===
+=== [console] host disconnected 2026-10-15T09:08:50.827Z ===
+=== [console] host disconnected 2026-10-15T09:08:51.828Z ===
+=== [console] host disconnected 2026-10-15T09:08:52.830Z ===
+=== [console] host disconnected 2026-10-15T09:08:53.832Z ===
+=== [console] host disconnected 2026-10-15T09:08:54.832Z ===
+=== [console] host disconnected 2026-10-15T09:08:57.023Z ===
+=== [console] host disconnected 2026-10-15T09:08:58.024Z ===
+=== [console] host disconnected 2026-10-15T09:08:59.026Z ===
+=== [console] host disconnected 2026-10-15T09:09:00.027Z ===
+=== [console] host disconnected 2026-10-15T09:09:01.028Z ===
+=== [console] host disconnected 2026-10-15T09:09:02.029Z ===
+=== [console] host disconnected 2026-10-15T09:09:03.031Z ===
+=== [console] host disconnected 2026-10-15T09:09:04.031Z ===
+=== [console] host disconnected 2026-10-15T09:09:05.033Z ===
+=== [console] host disconnected 2026-10-15T09:09:06.034Z ===
+=== [console] host disconnected 2026-10-15T09:09:07.035Z ===
+=== [console] host disconnected 2026-10-15T09:09:08.036Z ===
+=== [console] host disconnected 2026-10-15T09:09:09.038Z ===
+=== [console] host disconnected 2026-10-15T09:09:10.039Z ===
+=== [console] host disconnected 2026-10-15T09:09:11.041Z ===
+=== [console] host disconnected 2026-10-15T09:09:12.041Z ===
+=== [console] host disconnected 2026-10-15T09:09:13.043Z ===
+=== [console] host disconnected 2026-10-15T09:09:14.045Z ===
+=== [console] host disconnected 2026-10-15T09:09:15.046Z ===
+=== [console] host disconnected 2026-10-15T09:09:16.047Z ===
+=== [console] host disconnected 2026-10-15T09:09:17.048Z ===
+=== [console] host disconnected 2026-10-15T09:09:18.050Z ===
+=== [console] host disconnected 2026-10-15T09:09:19.051Z ===
+=== [console] host disconnected 2026-10-15T09:09:20.053Z ===
+=== [console] host disconnected 2026-10-15T09:09:21.055Z ===
+=== [console] host disconnected 2026-10-15T09:09:22.058Z ===
+=== [console] host disconnected 2026-10-15T09:09:23.059Z ===
+=== [console] host disconnected 2026-10-15T09:09:24.059Z ===
+=== [console] host disconnected 2026-10-15T09:09:25.061Z ===
+=== [console] host disconnected 2026-10-15T09:09:26.062Z ===
+=== [console] host disconnected 2026-10-15T09:09:27.063Z ===
+=== [console] host disconnected 2026-10-15T09:09:28.064Z ===
+=== [console] host disconnected 2026-10-15T09:09:29.065Z ===
+=== [console] host disconnected 2026-10-15T09:09:30.067Z ===
+=== [console] host disconnected 2026-10-15T09:09:31.069Z ===
+=== [console] host disconnected 2026-10-15T09:09:32.070Z ===
+=== [console] host disconnected 2026-10-15T09:09:33.071Z ===
+=== [console] host disconnected 2026-10-15T09:09:34.072Z ===
+=== [console] host disconnected 2026-10-15T09:09:35.074Z ===
+=== [console] host disconnected 2026-10-15T09:09:36.074Z ===
+=== [console] host disconnected 2026-10-15T09:09:37.076Z ===
+=== [console] host disconnected 2026-10-15T09:09:38.077Z ===
+=== [console] host disconnected 2026-10-15T09:09:39.078Z ===
+=== [console] host disconnected 2026-10-15T09:09:40.080Z ===
+=== [console] host disconnected 2026-10-15T09:09:41.081Z ===
+=== [console] host disconnected 2026-10-15T09:09:42.083Z ===
+=== [console] host disconnected 2026-10-15T09:09:43.085Z ===
+=== [console] host connected 2026-10-15T09:09:44.086Z ===
+[R1] RINJANI 1.0.0 Ã¢ÂÂ Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF800000053000 rx_pa=0x0000000000053000 rx_pfn=0x0000000000000053 tx_pfn=0x000000000000005B
+[R9] ETH0 VIRTIO-NET DMA UP mac=08:00:27:5E:08:33
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF80000006A000 rx_pa=0x000000000006A000 rx_pfn=0x000000000000006A tx_pfn=0x0000000000000072
+[R24] ETH1-LAN VIRTIO DMA UP mac=08:00:27:DD:48:91 ip=192.168.56.100 qsz=1024 (arp+icmp responder armed, GARP periodic)
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 Ã¢ÂÂ WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] ATA post-reset st=0x50 err=0x01
+[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R22] ATA post-reset st=0x50 err=0x01
+[R22b] ATA/IDE SLAVE UP (PIO nyata, drive 1) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R23] DISK CAPACITY VERIFIED: 2 GiB (layout aligned)
+[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)
+[R23] GPT header disk: entry_lba=2 num_entries=44 entry_size=128 usable=34..4194270 crc_ok=YA
+  (DISK) part1: EFI System Partition lba=34..262177
+  (DISK) part2: RJCFG01 lba=262178..278561
+  (DISK) part3: RJDATA lba=278562..4194270
+[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA 262178) Ã¢ÂÂ jalur persistence on-disk diaktifkan
+[R26] RJCFG01 journal DIBACA DARI DISK: slot 1 seq=2 (CRC slot + header terverifikasi, PIO nyata)
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 2 GiB (2048 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=4194270)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot B (seq=2)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+[host->guest] install confirm YES-INSTALLinstall confirm YES-INSTALL
+install confirm: token dari UART RX = YES-INSTALL
+[R27] INSTALL START source=ATA primary master (drive 0) target=ATA primary slave (drive 1)
+[R27] PREFLIGHT kapasitas src==tgt=4194304
+[R27] PREFLIGHT PASS Ã¢ÂÂ sumber valid, target blank terproteksi
+[R27] TARGET_IDENTIFIED kapasitas_sektor=4194304 backup_header_lba=4194303 entry_lba=2
+[R27] PARTITION_PLAN_VALIDATED ESP=34..262177 esp_terpakai=8579 RJCFG01=262178..278561 RJDATA=278562..4194270
+[R27] TARGET CONFIRMED (token benar) Ã¢ÂÂ operasi destruktif DIMULAI
+[R27] GPT WRITE START head LBA 0..33
+[R27] GPT READBACK VERIFIED (head + backup, byte-per-byte)
+[R27] ARTIFACT WRITE START ESP LBA 34 span=8579
+[R27] ARTIFACT READBACK VERIFIED per-sektor (ESP terpakai)
+[R27] RJCFG01 INIT on target LBA 262178
+[R27] RJCFG01 INITIALIZED (seq=1 Slot A, CRC tervalidasi dari bacaan target)
+[R27] INSTALL VERIFICATION Ã¢ÂÂ hash ulang wilayah target...
+[R27] INSTALL VERIFICATION PASSED sektor_tulis=8670 sha256=6a75d88c08d60551b0c471d955277950eb926c553d8a622fe53fb9b5e0ad6f49
+[R27] INSTALL DONE
+[R27] INSTALL DONE sectors_written=8670 esp_sectors=8579 sha256_w==sha256_rb=OK
+  capacity_sectors = 4194304  esp = 34..262177 (salin 0..8579)
+  RJCFG01 = 262178..278561  RJDATA = 278562..4194270  entry_lba = 2
+Jurnal RJCFG01 SUMBER tidak pernah disentuh. shutdown, lepas disk sumber, boot dari disk target.
+=== [console] host disconnected 2026-10-15T09:14:43.630Z ===
+=== [console] host disconnected 2026-10-15T09:14:44.630Z ===
+=== [console] host disconnected 2026-10-15T09:14:45.632Z ===
+=== [console] host disconnected 2026-10-15T09:14:46.633Z ===
+=== [console] host disconnected 2026-10-15T09:14:47.635Z ===
+=== [console] host disconnected 2026-10-15T09:14:48.636Z ===
+=== [console] host connected 2026-10-15T09:14:49.638Z ===
+[R1] RINJANI 1.0.0 Ã¢ÂÂ Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF800000053000 rx_pa=0x0000000000053000 rx_pfn=0x0000000000000053 tx_pfn=0x000000000000005B
+[R9] ETH0 VIRTIO-NET DMA UP mac=08:00:27:5E:08:33
+[R24] queue size device q0=1024 q1=1024
+[R24] hhdm=0xFFFF800000000000 rx_va=0xFFFF80000006A000 rx_pa=0x000000000006A000 rx_pfn=0x000000000000006A tx_pfn=0x0000000000000072
+[R24] ETH1-LAN VIRTIO DMA UP mac=08:00:27:DD:48:91 ip=192.168.56.100 qsz=1024 (arp+icmp responder armed, GARP periodic)
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 Ã¢ÂÂ WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] ATA post-reset st=0x50 err=0x01
+[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=VBOX HARDDISK capacity=2 GiB sectors=4194304
+[R22] ATA post-reset st=0x50 err=0x01
+[R22b] ATA SLAVE PROBE: IDENTIFY: floating bus Ã¢ÂÂ channel IDE tidak ada Ã¢ÂÂ disk target install tidak tersedia
+[R23] DISK CAPACITY VERIFIED: 2 GiB (layout aligned)
+[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)
+[R23] GPT header disk: entry_lba=2 num_entries=44 entry_size=128 usable=34..4194270 crc_ok=YA
+  (DISK) part1: EFI System Partition lba=34..262177
+  (DISK) part2: RJCFG01 lba=262178..278561
+  (DISK) part3: RJDATA lba=278562..4194270
+[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA 262178) Ã¢ÂÂ jalur persistence on-disk diaktifkan
+[R26] RJCFG01 journal DIBACA DARI DISK: slot 0 seq=1 (CRC slot + header terverifikasi, PIO nyata)
+[R12] NET POLL LOOP
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 2 GiB (2048 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=4194270)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot A (seq=1)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+[host->guest] config showconfig show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot A (seq=1)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+[host->guest] show versionshow version
+Rinjani 1.0.0 (Powered by ASL Core Kernel v1.0.0)
+Target: x86_64-unknown-none | Standard: DO-178C DAL-A
+[host->guest] config saveconfig save
+Configuration committed to slot 1 (atomic switch ok).
+[R26] RJCFG01 READBACK VERIFIED: slot 1 seq=2 (CRC header + slot cocok dari disk, PIO nyata)
+=== [console] host disconnected 2026-10-15T09:16:47.102Z ===
+=== [console] host disconnected 2026-10-15T09:16:48.104Z ===
+=== [console] host disconnected 2026-10-15T09:16:49.105Z ===
+=== [console] host disconnected 2026-10-15T09:16:50.106Z ===
+=== [console] host disconnected 2026-10-15T09:16:51.108Z ===
+=== [console] host disconnected 2026-10-15T09:16:52.109Z ===
+=== [console] host disconnected 2026-10-15T09:16:53.110Z ===
+=== [console] host disconnected 2026-10-15T09:16:54.112Z ===
+=== [console] host disconnected 2026-10-15T09:16:55.113Z ===
+=== [console] host disconnected 2026-10-15T09:16:56.115Z ===
+=== [console] host disconnected 2026-10-15T09:16:57.116Z ===
+=== [console] host disconnected 2026-10-15T09:16:58.119Z ===
+=== [console] host disconnected 2026-10-15T09:16:59.120Z ===
+=== [console] host disconnected 2026-10-15T09:17:00.122Z ===
+=== [console] host disconnected 2026-10-15T09:17:01.124Z ===
+=== [console] host disconnected 2026-10-15T09:17:02.125Z ===
+=== [console] host disconnected 2026-10-15T09:17:03.125Z ===
+=== [console] host disconnected 2026-10-15T09:17:04.127Z ===
+=== [console] host disconnected 2026-10-15T09:17:05.128Z ===
+=== [console] host disconnected 2026-10-15T09:17:06.129Z ===
+=== [console] host disconnected 2026-10-15T09:17:07.131Z ===
+=== [console] host disconnected 2026-10-15T09:17:08.132Z ===
+=== [console] host disconnected 2026-10-15T09:17:09.133Z ===
+=== [console] host disconnected 2026-10-15T09:17:10.134Z ===
+=== [console] host disconnected 2026-10-15T09:17:11.136Z ===
+=== [console] host disconnected 2026-10-15T09:17:12.137Z ===
+=== [console] host disconnected 2026-10-15T09:17:13.138Z ===
+=== [console] host disconnected 2026-10-15T09:17:14.140Z ===
+=== [console] host disconnected 2026-10-15T09:17:15.142Z ===
+=== [console] host disconnected 2026-10-15T09:17:16.142Z ===
+=== [console] host disconnected 2026-10-15T09:17:17.143Z ===

@@ -121,10 +121,29 @@ impl AtaIdentity {
 pub struct AtaDevice {
     pub identity: AtaIdentity,
     pub ready: bool,
+    /// 0 = primary master, 1 = primary slave (bit DEV 0x10 pada register 0x1F6).
+    pub drive: u8,
+}
+
+/// Hitung register DRIVE/HEAD mode LBA: 0xE0 | (drive<<4) | 28-bit sector high.
+/// Murni & teruji unit — kesalahan bit DEV = salah sasaran antar drive.
+#[inline]
+pub const fn drive_head_lba(drive: u8, sector_hi: u8) -> u8 {
+    0xE0 | (((drive & 1) << 4) | (sector_hi & 0x0F))
+}
+
+/// Register select mode CHS untuk IDENTIFY (tanpa bit LBA), per drive.
+#[inline]
+pub const fn drive_head_chs(drive: u8) -> u8 {
+    0xA0 | ((drive & 1) << 4)
 }
 
 impl AtaDevice {
     pub const fn empty() -> Self {
+        Self::empty_drive(0)
+    }
+
+    pub const fn empty_drive(drive: u8) -> Self {
         Self {
             identity: AtaIdentity {
                 model: [0u8; 40],
@@ -133,6 +152,7 @@ impl AtaDevice {
                 lba_supported: false,
             },
             ready: false,
+            drive,
         }
     }
 
@@ -163,7 +183,7 @@ impl AtaDevice {
             outb(ATA_LBA0, 0);
             outb(ATA_LBA1, 0);
             outb(ATA_LBA2, 0);
-            outb(ATA_DRIVE_HEAD, 0xA0); // CHS select (drive 0) — IDENTIFY tak butuh bit LBA
+            outb(ATA_DRIVE_HEAD, drive_head_chs(self.drive)); // CHS select per drive — IDENTIFY tak butuh bit LBA
             for _ in 0..4 {
                 ata_delay_400ns();
             }
@@ -197,7 +217,7 @@ impl AtaDevice {
                 self.poll(|s| s & ST_BSY == 0, "retry-BSY", log)?;
                 self.poll(|s| s & (ST_BSY | ST_DRDY) == ST_DRDY, "retry-DRDY", log)?;
                 let _ = inb(ATA_ERR);
-                outb(ATA_DRIVE_HEAD, 0xE0);
+                outb(ATA_DRIVE_HEAD, drive_head_lba(self.drive, 0));
                 for _ in 0..4 {
                     ata_delay_400ns();
                 }
@@ -331,7 +351,7 @@ impl AtaDevice {
             outb(ATA_LBA0, sector as u8);
             outb(ATA_LBA1, (sector >> 8) as u8);
             outb(ATA_LBA2, (sector >> 16) as u8);
-            outb(ATA_DRIVE_HEAD, 0xE0 | ((sector >> 24) as u8 & 0x0F));
+            outb(ATA_DRIVE_HEAD, drive_head_lba(self.drive, (sector >> 24) as u8));
             outb(ATA_STATUS_CMD, cmd);
             ata_delay_400ns();
             Ok(())
@@ -462,5 +482,24 @@ mod tests {
         assert_eq!(ST_DRDY, 0x40);
         assert_eq!(ST_DRQ, 0x08);
         assert_eq!(ST_ERR, 0x01);
+    }
+
+    #[test]
+    fn test_05_drive_head_lba_bit_dev() {
+        // master: bit 4 = 0; slave: bit DEV 0x10 = 1; 4 bit low sector Hi tetap.
+        assert_eq!(drive_head_lba(0, 0x00), 0xE0);
+        assert_eq!(drive_head_lba(1, 0x00), 0xF0);
+        assert_eq!(drive_head_lba(1, 0x0F), 0xFF);
+        assert_eq!(drive_head_lba(0, 0x0F), 0xEF);
+        // sector hi > 4 bit harus di-mask (tidak boleh menyetel bit lain)
+        assert_eq!(drive_head_lba(1, 0xFF), 0xFF);
+        assert_eq!(drive_head_chs(0), 0xA0);
+        assert_eq!(drive_head_chs(1), 0xB0);
+    }
+
+    #[test]
+    fn test_06_empty_drive_default_master() {
+        assert_eq!(AtaDevice::empty().drive, 0);
+        assert_eq!(AtaDevice::empty_drive(1).drive, 1);
     }
 }

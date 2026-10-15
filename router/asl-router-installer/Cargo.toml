@@ -1,0 +1,13 @@
+[package]
+name = "asl-router-installer"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+
+[dependencies]
+asl-router-gpt = { path = "../asl-router-gpt" }
+asl-router-persistence = { path = "../asl-router-persistence" }
+
+[dev-dependencies]
+asl-router-fat32 = { path = "../asl-router-fat32" }

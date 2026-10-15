@@ -52,7 +52,15 @@ pub const fn make_unique_guid(partition_no: u8) -> [u8; 16] {
 }
 
 pub fn compute_crc32(data: &[u8]) -> u32 {
-    let mut crc: u32 = 0xFFFF_FFFF;
+    crc32_update(0xFFFF_FFFF, data)
+}
+
+/// CRC32 inkremental: `prev` = hasil (ternegasi) chunk sebelumnya; untuk chunk
+/// pertama pakai 0xFFFF_FFFF. Hasil akhir sudah ternegasi — untuk meneruskan,
+/// un-negasi dulu: crc32_update(!prev_state, next). Dipakai installer utk
+/// memverifikasi CRC array entri GPT (16 KiB) tanpa buffer penuh di stack.
+pub fn crc32_update(state: u32, data: &[u8]) -> u32 {
+    let mut crc = state;
     for &byte in data {
         crc ^= byte as u32;
         for _ in 0..8 {
@@ -689,5 +697,19 @@ mod tests {
         let e5 = parse_gpt_entry(&arr[5 * 128..6 * 128]).unwrap();
         assert!(!e5.used);
         assert_eq!(e5.start_lba, 0);
+    }
+
+    #[test]
+    fn test_16_crc32_update_streaming_equals_one_shot() {
+        let data: std::vec::Vec<u8> = (0..4200u32).map(|i| (i * 31 % 251) as u8).collect();
+        let one_shot = compute_crc32(&data);
+        // Pola streaming yang dipakai installer: internal register, negasi tiap chunk.
+        let mut internal = 0xFFFF_FFFFu32;
+        for chunk in data.chunks(512) {
+            internal = !crc32_update(internal, chunk);
+        }
+        assert_eq!(crc32_update(internal, &[]), one_shot);
+        // Chunk tunggal = compute_crc32 biasa.
+        assert_eq!(crc32_update(0xFFFF_FFFF, &data), one_shot);
     }
 }

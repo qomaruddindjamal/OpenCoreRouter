@@ -79,7 +79,9 @@ fn rsdp_signature_at(p: *const u8) -> bool {
         return false;
     }
     // Validasi checksum ACPI 1.0 (20 byte pertama) untuk menolak false positive.
-    let sum: u8 = unsafe { core::slice::from_raw_parts(p, 20) }.iter().fold(0u8, |a, b| a.wrapping_add(*b));
+    let sum: u8 = unsafe { core::slice::from_raw_parts(p, 20) }
+        .iter()
+        .fold(0u8, |a, b| a.wrapping_add(*b));
     sum == 0
 }
 
@@ -229,7 +231,10 @@ pub fn locate_pm1_cnt(log: &dyn Fn(&str)) -> Option<Pm1CntInfo> {
                 log("[R25] PM1a_CNT di luar IO16 space.\n");
                 return None;
             }
-            return Some(Pm1CntInfo { port: addr as u16, width });
+            return Some(Pm1CntInfo {
+                port: addr as u16,
+                width,
+            });
         }
     }
     log("[R25] FACP tidak ditemukan pada root table.\n");
@@ -246,12 +251,36 @@ pub struct Pcand {
 }
 
 pub const CANDIDATES: [Pcand; 6] = [
-    Pcand { name: "PIIX4 base 0x4000 PM1_CNT=0x4002", port: 0x4002, val: S5_VAL },
-    Pcand { name: "ICH PMBASE 0x4000 PM1_CNT=0x4004", port: 0x4004, val: S5_VAL },
-    Pcand { name: "ICH9 PMBASE 0xB000 PM1_CNT=0xB002", port: 0xB002, val: S5_VAL },
-    Pcand { name: "ICH9 PMBASE 0xB000 PM1_CNT=0xB004", port: 0xB004, val: S5_VAL },
-    Pcand { name: "0x4002 SLP_EN only", port: 0x4002, val: 0x2000 },
-    Pcand { name: "0x4002 S5 legacy 0x2007", port: 0x4002, val: 0x2007 },
+    Pcand {
+        name: "PIIX4 base 0x4000 PM1_CNT=0x4002",
+        port: 0x4002,
+        val: S5_VAL,
+    },
+    Pcand {
+        name: "ICH PMBASE 0x4000 PM1_CNT=0x4004",
+        port: 0x4004,
+        val: S5_VAL,
+    },
+    Pcand {
+        name: "ICH9 PMBASE 0xB000 PM1_CNT=0xB002",
+        port: 0xB002,
+        val: S5_VAL,
+    },
+    Pcand {
+        name: "ICH9 PMBASE 0xB000 PM1_CNT=0xB004",
+        port: 0xB004,
+        val: S5_VAL,
+    },
+    Pcand {
+        name: "0x4002 SLP_EN only",
+        port: 0x4002,
+        val: 0x2000,
+    },
+    Pcand {
+        name: "0x4002 S5 legacy 0x2007",
+        port: 0x4002,
+        val: 0x2007,
+    },
 ];
 
 /// Coba seluruh kandidat power-off. Tidak pernah return bila sukses (VM mati).

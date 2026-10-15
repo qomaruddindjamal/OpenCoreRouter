@@ -32,6 +32,7 @@ members = [
     "router/asl-router-gpt",
     "router/asl-router-persistence",
     "router/asl-router-fat32",
+    "router/asl-router-installer",
 ]
 
 [workspace.package]

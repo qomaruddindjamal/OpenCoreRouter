@@ -26,6 +26,7 @@ asl-router-drivers-virtio-blk = { path = "../../router/asl-router-drivers-virtio
 asl-router-drivers-ata = { path = "../../router/asl-router-drivers-ata" }
 asl-router-gpt = { path = "../../router/asl-router-gpt" }
 asl-router-persistence = { path = "../../router/asl-router-persistence" }
+asl-router-installer = { path = "../../router/asl-router-installer" }
 
 [lib]
 crate-type = ["rlib"]
