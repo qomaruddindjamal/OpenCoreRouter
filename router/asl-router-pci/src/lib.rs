@@ -127,6 +127,12 @@ pub fn pci_config_write_u32(bus: u8, device: u8, function: u8, offset: u8, val: 
     }
 }
 
+/// Aktifkan IO Space, Memory Space & Bus Master DMA pada PCI Command register.
+pub fn pci_enable_bus_master(bus: u8, device: u8, function: u8) {
+    let cmd = pci_config_read_u32(bus, device, function, 0x04);
+    pci_config_write_u32(bus, device, function, 0x04, cmd | 0x0007);
+}
+
 pub fn pci_config_read_u16(bus: u8, device: u8, function: u8, offset: u8) -> u16 {
     let dword = pci_config_read_u32(bus, device, function, offset);
     let shift = (offset & 2) * 8;

@@ -17,6 +17,18 @@ use serial::SerialPort;
 #[cfg(target_os = "none")]
 static SERIAL: SerialPort = SerialPort::new();
 
+#[cfg(target_os = "none")]
+fn write_mac_hex(mac: [u8; 6]) {
+    const HEX: &[u8; 16] = b"0123456789ABCDEF";
+    for (i, b) in mac.iter().enumerate() {
+        SERIAL.write_byte(HEX[(*b >> 4) as usize]);
+        SERIAL.write_byte(HEX[(*b & 0x0F) as usize]);
+        if i < 5 {
+            SERIAL.write_str(":");
+        }
+    }
+}
+
 // -----------------------------------------------------------------------------
 // LIMINE BOOT PROTOCOL REQUESTS
 // -----------------------------------------------------------------------------
@@ -37,6 +49,87 @@ static HHDM_REQUEST: [u64; 6] = [
     0,                                      // revision
     0,                                      // response (diisi bootloader)
 ];
+
+// Limine memory map request — sumber RAM USABLE untuk DMA ring virtio.
+#[cfg(target_os = "none")]
+#[used]
+#[link_section = ".limine_requests"]
+static MEMMAP_REQUEST: [u64; 6] = [
+    0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, // LIMINE_COMMON_MAGIC
+    0x67cf3d9d378a806f, 0xe304acdfc50c3c62, // LIMINE_MEMMAP_REQUEST
+    0,                                      // revision
+    0,                                      // response (diisi bootloader)
+];
+
+/// Bump allocator PA 4K-aligned dari region USABLE hasil Limine memmap.
+/// Ring DMA virtio WAJIB berada di RAM yang dipetakan HHDM (VA = hhdm + PA);
+/// statis/stack kernel berada pada link VA tetap 0xffffffff8... yang mana
+/// VA-hhdm BUKAN physical address-nya.
+#[cfg(target_os = "none")]
+struct DmaArena {
+    idx: usize,
+    cur: u64,
+    end: u64,
+}
+
+#[cfg(target_os = "none")]
+impl DmaArena {
+    fn new() -> Self {
+        Self { idx: 0, cur: 0, end: 0 }
+    }
+
+    fn entry_at(i: usize) -> Option<(u64, u64, u64)> {
+        let resp = unsafe { core::ptr::read_volatile(&MEMMAP_REQUEST[5]) };
+        if resp == 0 {
+            return None;
+        }
+        // struct limine_memmap_response { revision; entry_count; entries* }
+        let count = unsafe { *(resp as *const u64).add(1) } as usize;
+        if i >= count {
+            return None;
+        }
+        let entries = unsafe { *(resp as *const u64).add(2) } as *const *const u64;
+        let e = unsafe { *entries.add(i) };
+        // struct limine_memmap_entry { base; length; type }
+        Some(unsafe { (*e, *e.add(1), *e.add(2)) })
+    }
+
+    fn alloc_pages(&mut self, pages: usize) -> Option<u64> {
+        let size = (pages as u64) * 4096;
+        if self.end - self.cur < size {
+            loop {
+                let (base, len, typ) = Self::entry_at(self.idx)?;
+                self.idx += 1;
+                if typ != 0 {
+                    continue; // hanya MEMMAP_USABLE
+                }
+                let b = (base + 4095) & !4095u64;
+                let mut e = (base + len) & !4095u64;
+                if e > 0x1_0000_0000 {
+                    e = 0x1_0000_0000; // jendela PFN 32-bit virtio legacy (<16 GiB)
+                }
+                if e <= b || e - b < size {
+                    continue;
+                }
+                self.cur = b;
+                self.end = e;
+                break;
+            }
+        }
+        let p = self.cur;
+        self.cur += size;
+        Some(p)
+    }
+}
+
+#[cfg(target_os = "none")]
+fn hhdm_place<T>(hhdm: u64, pa: u64, val: T) -> &'static mut T {
+    unsafe {
+        let p = (hhdm.wrapping_add(pa)) as *mut T;
+        core::ptr::write(p, val);
+        &mut *p
+    }
+}
 
 // -----------------------------------------------------------------------------
 // DEDICATED ASSEMBLY ENTRY STUB & 512KB STACK
@@ -175,6 +268,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str("\n");
 
     let mut virtio_dev: Option<asl_router_pci::PciDevice> = None;
+    let mut virtio_dev_lan: Option<asl_router_pci::PciDevice> = None;
     let mut virtio_blk_dev: Option<asl_router_pci::PciDevice> = None;
     let mut e1000_dev: Option<asl_router_pci::PciDevice> = None;
 
@@ -187,6 +281,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             SERIAL.write_str("\n");
             if virtio_dev.is_none() {
                 virtio_dev = Some(dev);
+            } else if virtio_dev_lan.is_none() {
+                virtio_dev_lan = Some(dev);
             }
         } else if dev.is_virtio_blk() {
             SERIAL.write_str("  -> Found VirtIO-Blk at BDF ");
@@ -209,32 +305,63 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         }
     });
 
-    // [R9]: DRIVER INITIALIZATION
+    // [R9]: DRIVER INITIALIZATION (legacy virtio split-ring DMA nyata)
+    let hhdm = power::hhdm_offset().unwrap_or(0);
     let mut our_mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33]; // Fallback MAC
+    type VNet = asl_router_drivers_virtio::VirtioNetDevice;
+    let mut arena = DmaArena::new();
+    let vnet_pages = (core::mem::size_of::<VNet>() + 4095) / 4096;
+    let mut eth0 = arena.alloc_pages(vnet_pages).map(|pa| hhdm_place(hhdm, pa, VNet::empty()));
+    let mut eth1 = arena.alloc_pages(vnet_pages).map(|pa| hhdm_place(hhdm, pa, VNet::empty()));
+    if eth0.is_none() || eth1.is_none() {
+        SERIAL.write_str("[R9] DMA ARENA ALLOC FAILED (memmap usable <16GiB habis)\n");
+    }
     let mut _virtio_io_port: u16 = 0;
 
     if let Some(pci) = virtio_dev {
-        if let Ok(vnet) = asl_router_drivers_virtio::VirtioNetDevice::new(&pci) {
-            our_mac = vnet.mac_address;
-            _virtio_io_port = vnet.io_base;
-            SERIAL.write_str("[R9] VIRTIO-NET UP mac=");
-            for i in 0..6 {
-                let byte = our_mac[i];
-                let hex_chars = b"0123456789ABCDEF";
-                SERIAL.write_byte(hex_chars[(byte >> 4) as usize]);
-                SERIAL.write_byte(hex_chars[(byte & 0x0F) as usize]);
-                if i < 5 {
-                    SERIAL.write_str(":");
+        if let Some(eth0) = eth0.as_mut() {
+            match eth0.probe(&pci, hhdm, &|s| SERIAL.write_str(s)) {
+                Ok(()) => {
+                    our_mac = eth0.mac_address;
+                    _virtio_io_port = eth0.io_base;
+                    SERIAL.write_str("[R9] ETH0 VIRTIO-NET DMA UP mac=");
+                    write_mac_hex(eth0.mac_address);
+                    SERIAL.write_str("\n");
+                }
+                Err(_) => {
+                    SERIAL.write_str("[R9] VIRTIO-NET INIT FAILED (Fallback to virtual stack)\n");
                 }
             }
-            SERIAL.write_str("\n");
-        } else {
-            SERIAL.write_str("[R9] VIRTIO-NET INIT FAILED (Fallback to virtual stack)\n");
         }
     } else if let Some(_pci) = e1000_dev {
         SERIAL.write_str("[R9] E1000 UP mac=08:00:27:5E:08:33 (fallback active)\n");
     } else {
         SERIAL.write_str("[R9] NET DRIVER ACTIVE (Simulated interface active)\n");
+    }
+
+    // [R24]: ETH1 LAN (host-only VBox 192.168.56.0/24) — jalur DMA nyata kedua
+    let lan_ip_real = [192u8, 168u8, 56u8, 100u8];
+    let mut lan_mac = our_mac;
+    if let Some(pci) = virtio_dev_lan {
+        if let Some(eth1) = eth1.as_mut() {
+            match eth1.probe(&pci, hhdm, &|s| SERIAL.write_str(s)) {
+                Ok(()) => {
+                    lan_mac = eth1.mac_address;
+                    SERIAL.write_str("[R24] ETH1-LAN VIRTIO DMA UP mac=");
+                    write_mac_hex(eth1.mac_address);
+                    SERIAL.write_str(" ip=192.168.56.100 qsz=");
+                    SERIAL.write_u32(eth1.qsz as u32);
+                    SERIAL.write_str(" (arp+icmp responder armed, GARP periodic)\n");
+                }
+                Err(e) => {
+                    SERIAL.write_str("[R24] ETH1-LAN VIRTIO PROBE FAILED: ");
+                    SERIAL.write_str(e);
+                    SERIAL.write_str("\n");
+                }
+            }
+        }
+    } else {
+        SERIAL.write_str("[R24] ETH1-LAN tidak tersedia (satu NIC terdeteksi)\n");
     }
 
     // [R10]: NETSTACK INIT
@@ -378,6 +505,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut rjcfg_journal = asl_router_persistence::RjcfgJournal::new_default();
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
+    let netstack_lan = asl_router_netstack::NetStackEngine::new(lan_mac, lan_ip_real);
 
     // [R12]: NET POLL LOOP & SERIAL CLI
     SERIAL.write_str("[R12] NET POLL LOOP\n");
@@ -387,6 +515,9 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut tx_packet_buffer = [0u8; 1518];
     let mut cli_line = [0u8; 256];
     let mut cli_len: usize = 0;
+    let mut lan_frame = [0u8; 1536];
+    let mut lan_reply = [0u8; 1536];
+    let mut garp_buf = [0u8; 64];
 
     // Interface Counters
     let mut lan_rx_packets: u32 = 0;
@@ -394,11 +525,52 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut wan_rx_packets: u32 = 0;
     let mut wan_tx_packets: u32 = 0;
     let mut fwd_packets: u32 = 0;
-    let drop_packets: u32 = 0;
+    let mut drop_packets: u32 = 0;
 
     let mut loop_count: u32 = 0;
     loop {
         loop_count = loop_count.wrapping_add(1);
+
+        // [R24] JALUR LAN NYATA: poll RX eth1 (DMA), ARP/ICMP responder, GARP
+        if let Some(eth1) = eth1.as_mut() {
+        if eth1.ready {
+            let mut serviced = 0u32;
+            while serviced < 8 {
+                match eth1.poll_rx(&mut lan_frame) {
+                    Some(n) => {
+                        serviced += 1;
+                        lan_rx_packets += 1;
+                        match netstack_lan.process_packet(&lan_frame[..n], &mut lan_reply) {
+                            Ok(Some(rlen)) => {
+                                if eth1.transmit(&lan_reply[..rlen]).is_ok() {
+                                    lan_tx_packets += 1;
+                                    SERIAL.write_str("[R24] LAN REPLY TX (");
+                                    SERIAL.write_u32(rlen as u32);
+                                    SERIAL.write_str(" bytes) lan_rx=");
+                                    SERIAL.write_u32(lan_rx_packets);
+                                    SERIAL.write_str(" lan_tx=");
+                                    SERIAL.write_u32(lan_tx_packets);
+                                    SERIAL.write_str("\n");
+                                }
+                            }
+                            Ok(None) => {}
+                            Err(_) => drop_packets += 1,
+                        }
+                    }
+                    None => break,
+                }
+            }
+            if loop_count == 10 || (loop_count > 10 && (loop_count - 10) % 150 == 0) {
+                if let Ok(gl) = asl_router_netstack::build_arp_gratuitous(lan_mac, lan_ip_real, &mut garp_buf) {
+                    if eth1.transmit(&garp_buf[..gl]).is_ok() {
+                        SERIAL.write_str("[R24] GARP announced 192.168.56.100 broadcast (");
+                        SERIAL.write_u32(gl as u32);
+                        SERIAL.write_str(" bytes)\n");
+                    }
+                }
+            }
+        }
+        }
 
         // Periodic ICMP / Forwarding Self-Test & Ping Proof on Bridged Network
         if loop_count == 100 {

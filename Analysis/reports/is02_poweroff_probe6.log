@@ -1,0 +1,401 @@
+[R1] RINJANI 1.0.0 — Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R3] CORE INIT
+[R4] SCHED TICK
+[R5] FASTPATH RING SELFTEST PASS
+[R6] TCAM SELFTEST PASS
+[R7] IDLE LOOP
+[R8] PCI ENUM & HWINV: scanning bus 0..3
+  -> Devices detected: 11, NICs: 2
+  -> Found VirtIO-Net at BDF 0:3
+  -> Found VirtIO-Net at BDF 0:8
+[R9] VIRTIO-NET UP mac=08:00:27:5E:08:33
+[R10] NETSTACK INIT arp=ok ipv4=ok icmp=ok udp=ok dhcp=ok
+[R11b] ETH0 TX PATH armed (virtio io_port=53280 tx_ring=ready)
+[R13] DHCP LEASE: discover sent seq=1 xid=0x52494E4A (opt12=rinjani, len=295 bytes)
+[R11] DHCP FAILED: no offer on eth0 — WAN DOWN (fail-closed, lease tidak dikarang)
+[R11] IP ADDR: eth0 WAN DOWN (no lease), 192.168.56.1/24 (LAN eth1)
+[R14] APIC TIMER CALIBRATED (10ms tick window = 1000000 ticks, periodic=armed)
+[R15] FORWARD ENGINE ACTIVE (LPM FIB loaded: 3 routes, fastpath ring binding ok)
+[R18] TCP ENGINE: smoltcp (facade active :80)
+[R20] DHCP SERVER POOL READY (eth1 only 192.168.56.100-150)
+[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)
+[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)
+[R23] DISK CAPACITY VERIFIED: 20 GiB (layout aligned)
+[R12] NET POLL LOOP
+rinjani-cli> 
+[NET] INGRESS ICMP ECHO REQUEST from 192.0.2.254
+[NET] ICMP ECHO REPLY SENT (42 bytes)
+[FORWARD-SNAT] LAN 192.168.56.2 -> WAN 192.0.2.254 | Translated to 0.0.0.0 (id=40000)
+[R19] TCP SESSION OK (SYN/ACK 3-way handshake + HTTP 200 payload 118 bytes transmitted)
+
+rinjani-cli> disk print
+Disk Layout (GPT Partition Table):
+  Total Capacity: 20 GiB (20480 MiB)
+  Partition 1: ESP (128 MiB, start=34, end=262177)
+  Partition 2: RJCFG01 (8 MiB, start=262178, end=278561)
+  Partition 3: RJDATA (Elastic, start=278562, end=41943006)
+rinjani-cli> config show
+RJCFG01 Configuration Journal:
+  Active Slot : Slot A (seq=1)
+  Hostname    : rinjani
+  LAN Gateway : 192.168.56.1/24
+  DHCP Pool   : 192.168.56.100 - 192.168.56.150
+rinjani-cli> 
+[R25] SELFTEST: ACPI PM1_CNT power-off probe (auto)
+[R25] HHDM offset resmi bootloader = 0xFFFF800000000000
+[R25] RSDP ditemukan via HHDM.
+[R25] RSDP rev=2 len=36 XSDT_pa=0x0000000003FF0030 RSDT_pa=0x0000000003FF0000
+[R25] Root table = XSDT entries=3
+[R25] entri 0 pa=0x0000000003FF00F0 sig=FACP
+[R25] FACP: PM1a_CNT space_id=0 width=0 addr=0x0000000000004004
+[R25] PM1a_CNT bukan SystemIo — tidak didukung probe IO.
+[R25] ACPI discovery gagal — fallback kandidat statis.
+[R25] PM1_CNT try: port=0x4002 val=0x3C00 (PIIX4 base 0x4000 PM1_CNT=0x4002)
+[R25]   -> still alive, candidate rejected
+[R25] PM1_CNT try: port=0x4004 val=0x3C00 (ICH PMBASE 0x4000 PM1_CNT=0x4004)
+[R25]   -> still alive, candidate rejected
+[R25] PM1_CNT try: port=0xB002 val=0x3C00 (ICH9 PMBASE 0xB000 PM1_CNT=0xB002)
+[R25]   -> still alive, candidate rejected
+[R25] PM1_CNT try: port=0xB004 val=0x3C00 (ICH9 PMBASE 0xB000 PM1_CNT=0xB004)
+[R25]   -> still alive, candidate rejected
+[R25] PM1_CNT try: port=0x4002 val=0x2000 (0x4002 SLP_EN only)
+[R25]   -> still alive, candidate rejected
+[R25] PM1_CNT try: port=0x4002 val=0x2007 (0x4002 S5 legacy 0x2007)
+[R25]   -> still alive, candidate rejected
+[R25] SELFTEST: semua kandidat ditolak hardware — heartbeat post-probe dimulai.
+[HB] post-probe alive #1
+[HB] post-probe alive #2
+[HB] post-probe alive #3
+[HB] post-probe alive #4
+[HB] post-probe alive #5
+[HB] post-probe alive #6
+[HB] post-probe alive #7
+[HB] post-probe alive #8
+[HB] post-probe alive #9
+[HB] post-probe alive #10
+[HB] post-probe alive #11
+[HB] post-probe alive #12
+[HB] post-probe alive #13
+[HB] post-probe alive #14
+[HB] post-probe alive #15
+[HB] post-probe alive #16
+[HB] post-probe alive #17
+[HB] post-probe alive #18
+[HB] post-probe alive #19
+[HB] post-probe alive #20
+[HB] post-probe alive #21
+[HB] post-probe alive #22
+[HB] post-probe alive #23
+[HB] post-probe alive #24
+[HB] post-probe alive #25
+[HB] post-probe alive #26
+[HB] post-probe alive #27
+[HB] post-probe alive #28
+[HB] post-probe alive #29
+[HB] post-probe alive #30
+[HB] post-probe alive #31
+[HB] post-probe alive #32
+[HB] post-probe alive #33
+[HB] post-probe alive #34
+[HB] post-probe alive #35
+[HB] post-probe alive #36
+[HB] post-probe alive #37
+[HB] post-probe alive #38
+[HB] post-probe alive #39
+[HB] post-probe alive #40
+[HB] post-probe alive #41
+[HB] post-probe alive #42
+[HB] post-probe alive #43
+[HB] post-probe alive #44
+[HB] post-probe alive #45
+[HB] post-probe alive #46
+[HB] post-probe alive #47
+[HB] post-probe alive #48
+[HB] post-probe alive #49
+[HB] post-probe alive #50
+[HB] post-probe alive #51
+[HB] post-probe alive #52
+[HB] post-probe alive #53
+[HB] post-probe alive #54
+[HB] post-probe alive #55
+[HB] post-probe alive #56
+[HB] post-probe alive #57
+[HB] post-probe alive #58
+[HB] post-probe alive #59
+[HB] post-probe alive #60
+[HB] post-probe alive #61
+[HB] post-probe alive #62
+[HB] post-probe alive #63
+[HB] post-probe alive #64
+[HB] post-probe alive #65
+[HB] post-probe alive #66
+[HB] post-probe alive #67
+[HB] post-probe alive #68
+[HB] post-probe alive #69
+[HB] post-probe alive #70
+[HB] post-probe alive #71
+[HB] post-probe alive #72
+[HB] post-probe alive #73
+[HB] post-probe alive #74
+[HB] post-probe alive #75
+[HB] post-probe alive #76
+[HB] post-probe alive #77
+[HB] post-probe alive #78
+[HB] post-probe alive #79
+[HB] post-probe alive #80
+[HB] post-probe alive #81
+[HB] post-probe alive #82
+[HB] post-probe alive #83
+[HB] post-probe alive #84
+[HB] post-probe alive #85
+[HB] post-probe alive #86
+[HB] post-probe alive #87
+[HB] post-probe alive #88
+[HB] post-probe alive #89
+[HB] post-probe alive #90
+[HB] post-probe alive #91
+[HB] post-probe alive #92
+[HB] post-probe alive #93
+[HB] post-probe alive #94
+[HB] post-probe alive #95
+[HB] post-probe alive #96
+[HB] post-probe alive #97
+[HB] post-probe alive #98
+[HB] post-probe alive #99
+[HB] post-probe alive #100
+[HB] post-probe alive #101
+[HB] post-probe alive #102
+[HB] post-probe alive #103
+[HB] post-probe alive #104
+[HB] post-probe alive #105
+[HB] post-probe alive #106
+[HB] post-probe alive #107
+[HB] post-probe alive #108
+[HB] post-probe alive #109
+[HB] post-probe alive #110
+[HB] post-probe alive #111
+[HB] post-probe alive #112
+[HB] post-probe alive #113
+[HB] post-probe alive #114
+[HB] post-probe alive #115
+[HB] post-probe alive #116
+[HB] post-probe alive #117
+[HB] post-probe alive #118
+[HB] post-probe alive #119
+[HB] post-probe alive #120
+[HB] post-probe alive #121
+[HB] post-probe alive #122
+[HB] post-probe alive #123
+[HB] post-probe alive #124
+[HB] post-probe alive #125
+[HB] post-probe alive #126
+[HB] post-probe alive #127
+[HB] post-probe alive #128
+[HB] post-probe alive #129
+[HB] post-probe alive #130
+[HB] post-probe alive #131
+[HB] post-probe alive #132
+[HB] post-probe alive #133
+[HB] post-probe alive #134
+[HB] post-probe alive #135
+[HB] post-probe alive #136
+[HB] post-probe alive #137
+[HB] post-probe alive #138
+[HB] post-probe alive #139
+[HB] post-probe alive #140
+[HB] post-probe alive #141
+[HB] post-probe alive #142
+[HB] post-probe alive #143
+[HB] post-probe alive #144
+[HB] post-probe alive #145
+[HB] post-probe alive #146
+[HB] post-probe alive #147
+[HB] post-probe alive #148
+[HB] post-probe alive #149
+[HB] post-probe alive #150
+[HB] post-probe alive #151
+[HB] post-probe alive #152
+[HB] post-probe alive #153
+[HB] post-probe alive #154
+[HB] post-probe alive #155
+[HB] post-probe alive #156
+[HB] post-probe alive #157
+[HB] post-probe alive #158
+[HB] post-probe alive #159
+[HB] post-probe alive #160
+[HB] post-probe alive #161
+[HB] post-probe alive #162
+[HB] post-probe alive #163
+[HB] post-probe alive #164
+[HB] post-probe alive #165
+[HB] post-probe alive #166
+[HB] post-probe alive #167
+[HB] post-probe alive #168
+[HB] post-probe alive #169
+[HB] post-probe alive #170
+[HB] post-probe alive #171
+[HB] post-probe alive #172
+[HB] post-probe alive #173
+[HB] post-probe alive #174
+[HB] post-probe alive #175
+[HB] post-probe alive #176
+[HB] post-probe alive #177
+[HB] post-probe alive #178
+[HB] post-probe alive #179
+[HB] post-probe alive #180
+[HB] post-probe alive #181
+[HB] post-probe alive #182
+[HB] post-probe alive #183
+[HB] post-probe alive #184
+[HB] post-probe alive #185
+[HB] post-probe alive #186
+[HB] post-probe alive #187
+[HB] post-probe alive #188
+[HB] post-probe alive #189
+[HB] post-probe alive #190
+[HB] post-probe alive #191
+[HB] post-probe alive #192
+[HB] post-probe alive #193
+[HB] post-probe alive #194
+[HB] post-probe alive #195
+[HB] post-probe alive #196
+[HB] post-probe alive #197
+[HB] post-probe alive #198
+[HB] post-probe alive #199
+[HB] post-probe alive #200
+[HB] post-probe alive #201
+[HB] post-probe alive #202
+[HB] post-probe alive #203
+[HB] post-probe alive #204
+[HB] post-probe alive #205
+[HB] post-probe alive #206
+[HB] post-probe alive #207
+[HB] post-probe alive #208
+[HB] post-probe alive #209
+[HB] post-probe alive #210
+[HB] post-probe alive #211
+[HB] post-probe alive #212
+[HB] post-probe alive #213
+[HB] post-probe alive #214
+[HB] post-probe alive #215
+[HB] post-probe alive #216
+[HB] post-probe alive #217
+[HB] post-probe alive #218
+[HB] post-probe alive #219
+[HB] post-probe alive #220
+[HB] post-probe alive #221
+[HB] post-probe alive #222
+[HB] post-probe alive #223
+[HB] post-probe alive #224
+[HB] post-probe alive #225
+[HB] post-probe alive #226
+[HB] post-probe alive #227
+[HB] post-probe alive #228
+[HB] post-probe alive #229
+[HB] post-probe alive #230
+[HB] post-probe alive #231
+[HB] post-probe alive #232
+[HB] post-probe alive #233
+[HB] post-probe alive #234
+[HB] post-probe alive #235
+[HB] post-probe alive #236
+[HB] post-probe alive #237
+[HB] post-probe alive #238
+[HB] post-probe alive #239
+[HB] post-probe alive #240
+[HB] post-probe alive #241
+[HB] post-probe alive #242
+[HB] post-probe alive #243
+[HB] post-probe alive #244
+[HB] post-probe alive #245
+[HB] post-probe alive #246
+[HB] post-probe alive #247
+[HB] post-probe alive #248
+[HB] post-probe alive #249
+[HB] post-probe alive #250
+[HB] post-probe alive #251
+[HB] post-probe alive #252
+[HB] post-probe alive #253
+[HB] post-probe alive #254
+[HB] post-probe alive #255
+[HB] post-probe alive #256
+[HB] post-probe alive #257
+[HB] post-probe alive #258
+[HB] post-probe alive #259
+[HB] post-probe alive #260
+[HB] post-probe alive #261
+[HB] post-probe alive #262
+[HB] post-probe alive #263
+[HB] post-probe alive #264
+[HB] post-probe alive #265
+[HB] post-probe alive #266
+[HB] post-probe alive #267
+[HB] post-probe alive #268
+[HB] post-probe alive #269
+[HB] post-probe alive #270
+[HB] post-probe alive #271
+[HB] post-probe alive #272
+[HB] post-probe alive #273
+[HB] post-probe alive #274
+[HB] post-probe alive #275
+[HB] post-probe alive #276
+[HB] post-probe alive #277
+[HB] post-probe alive #278
+[HB] post-probe alive #279
+[HB] post-probe alive #280
+[HB] post-probe alive #281
+[HB] post-probe alive #282
+[HB] post-probe alive #283
+[HB] post-probe alive #284
+[HB] post-probe alive #285
+[HB] post-probe alive #286
+[HB] post-probe alive #287
+[HB] post-probe alive #288
+[HB] post-probe alive #289
+[HB] post-probe alive #290
+[HB] post-probe alive #291
+[HB] post-probe alive #292
+[HB] post-probe alive #293
+[HB] post-probe alive #294
+[HB] post-probe alive #295
+[HB] post-probe alive #296
+[HB] post-probe alive #297
+[HB] post-probe alive #298
+[HB] post-probe alive #299
+[HB] post-probe alive #300
+[HB] post-probe alive #301
+[HB] post-probe alive #302
+[HB] post-probe alive #303
+[HB] post-probe alive #304
+[HB] post-probe alive #305
+[HB] post-probe alive #306
+[HB] post-probe alive #307
+[HB] post-probe alive #308
+[HB] post-probe alive #309
+[HB] post-probe alive #310
+[HB] post-probe alive #311
+[HB] post-probe alive #312
+[HB] post-probe alive #313
+[HB] post-probe alive #314
+[HB] post-probe alive #315
+[HB] post-probe alive #316
+[HB] post-probe alive #317
+[HB] post-probe alive #318
+[HB] post-probe alive #319
+[HB] post-probe alive #320
+[HB] post-probe alive #321
+[HB] post-probe alive #322
+[HB] post-probe alive #323
+[HB] post-probe alive #324
+[HB] post-probe alive #325
+[HB] post-probe alive #326
+[HB] post-probe alive #327
+[HB] post-probe alive #328
+[HB] post-probe alive #329
+[HB] post-probe alive #330
+[HB] post-probe alive #331
+[HB] post-probe alive #332
+[HB] post-probe alive #333
+[HB] post-probe alive #334
+[HB] post-probe alive #335

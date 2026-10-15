@@ -1062,6 +1062,31 @@ pub fn build_arp_reply(
     Ok(42)
 }
 
+/// Gratuitous ARP reply broadcast: mengumumkan (ip, mac) kita agar table ARP
+/// host/switch tetap segar tanpa menunggu request.
+pub fn build_arp_gratuitous(
+    our_mac: [u8; 6],
+    our_ip: [u8; 4],
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    if out.len() < 42 {
+        return Err("Buffer too small for Ethernet+ARP gratuitous");
+    }
+    out[0..6].copy_from_slice(&[0xFF; 6]);
+    out[6..12].copy_from_slice(&our_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_ARP.to_be_bytes());
+    out[14..16].copy_from_slice(&ARP_HTYPE_ETHERNET.to_be_bytes());
+    out[16..18].copy_from_slice(&ARP_PTYPE_IPV4.to_be_bytes());
+    out[18] = 6;
+    out[19] = 4;
+    out[20..22].copy_from_slice(&ARP_OP_REPLY.to_be_bytes());
+    out[22..28].copy_from_slice(&our_mac);
+    out[28..32].copy_from_slice(&our_ip);
+    out[32..38].copy_from_slice(&[0xFF; 6]);
+    out[38..42].copy_from_slice(&our_ip);
+    Ok(42)
+}
+
 pub fn build_icmp_echo_reply(
     eth_req: &EthernetHeader,
     ip_req: &Ipv4Header,
@@ -2622,6 +2647,22 @@ mod tests {
 
         client.on_tick(500);
         assert!(client.is_halted());
+    }
+
+    #[test]
+    fn test_45_build_arp_gratuitous_broadcast() {
+        let mac = [0x52, 0x54, 0x00, 0x12, 0x34, 0x56];
+        let ip = [192, 168, 56, 100];
+        let mut out = [0u8; 64];
+        let n = build_arp_gratuitous(mac, ip, &mut out).unwrap();
+        assert_eq!(n, 42);
+        assert_eq!(&out[0..6], &[0xFF; 6]);
+        assert_eq!(&out[6..12], &mac);
+        assert_eq!(&out[12..14], &0x0806u16.to_be_bytes());
+        assert_eq!(&out[20..22], &ARP_OP_REPLY.to_be_bytes());
+        assert_eq!(&out[22..28], &mac);
+        assert_eq!(&out[28..32], &ip);
+        assert_eq!(&out[38..42], &ip);
     }
 }
 
