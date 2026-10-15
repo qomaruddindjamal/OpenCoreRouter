@@ -1,0 +1,11 @@
+[workspace]
+
+[package]
+name = "opcr-mkdisk"
+version = "0.1.0"
+edition = "2021"
+description = "OpenCR host-side disk image installer (GPT + FAT32 ESP + Rinjani kernel + Limine artifacts)"
+
+[dependencies]
+asl-router-gpt = { path = "../../router/asl-router-gpt" }
+asl-router-fat32 = { path = "../../router/asl-router-fat32" }
