@@ -467,7 +467,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new(lan_ip, wan_gw);
     SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)\n");
 
-    // [R22]: VIRTIO-BLK STORAGE SUBSYSTEM
+    // [R22]: BLOCK STORAGE SUBSYSTEM — virtio-blk PCI (bila ada di hardware),
+    // selain itu ATA/IDE PIO nyata pada PIIX4 (VBox tidak meng-emulasi virtio-blk).
     let mut blk_device = if let Some(pci) = virtio_blk_dev {
         if let Ok(dev) = asl_router_drivers_virtio_blk::VirtioBlkDevice::new(&pci) {
             SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=");
@@ -475,15 +476,43 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             SERIAL.write_str(" GiB (real hardware probed)\n");
             dev
         } else {
-            let dev = asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(20 * 1024 * 1024 * 2);
-            SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)\n");
+            let dev = asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(0);
+            SERIAL.write_str("[R22] VIRTIO-BLK PROBE FAILED (capacity 0 — menunggu jalur block lain)\n");
             dev
         }
     } else {
-        let dev = asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(20 * 1024 * 1024 * 2);
-        SERIAL.write_str("[R22] VIRTIO-BLK UP capacity=20 GiB (simulated fallback)\n");
-        dev
+        asl_router_drivers_virtio_blk::VirtioBlkDevice::new_simulated(0)
     };
+
+    // PROBE ATA/IDE nyata (primary channel, drive 0 master) — driver native ASL.
+    let mut ata_dev = asl_router_drivers_ata::AtaDevice::empty();
+    let mut block_is_ata = false;
+    if virtio_blk_dev.is_none() {
+        match ata_dev.probe(&|s| SERIAL.write_str(s)) {
+            Ok(()) => {
+                block_is_ata = true;
+                blk_device.capacity_sectors = ata_dev.capacity_sectors();
+                blk_device.block_size = asl_router_drivers_ata::SECTOR_SIZE as u32;
+                SERIAL.write_str("[R22] ATA/IDE PRIMARY UP (PIO nyata, drive 0 master) model=");
+                SERIAL.write_str(core::str::from_utf8(ata_dev.model_bytes()).unwrap_or("?"));
+                SERIAL.write_str(" capacity=");
+                SERIAL.write_u32(ata_dev.capacity_gib() as u32);
+                SERIAL.write_str(" GiB sectors=");
+                SERIAL.write_u32(ata_dev.capacity_sectors() as u32);
+                SERIAL.write_str("\n");
+            }
+            Err(e) => {
+                SERIAL.write_str("[R22] ATA PROBE FAILED: ");
+                SERIAL.write_str(e);
+                if blk_device.capacity_sectors == 0 {
+                    blk_device.capacity_sectors = 20 * 1024 * 1024 * 2;
+                    SERIAL.write_str(" — block subsystem fallback ke simulated 20 GiB (TANPA disk nyata)\n");
+                } else {
+                    SERIAL.write_str("\n");
+                }
+            }
+        }
+    }
 
     // [R23]: REAL CAPACITY ADOPTION ENGINE (OPCR-25..27) & GPT PARSER
     let mut gpt_layout = asl_router_gpt::GptDiskLayout::create_default_layout(blk_device.capacity_sectors)
@@ -501,8 +530,168 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         SERIAL.write_str(" GiB (layout aligned)\n");
     }
 
+    // [R23b]: VERIFIKASI GPT HEADER NYATA DARI DISK (baca LBA1 via driver block)
+    // [R23c]: parse header + array entri GPT DARI DISK; temukan partisi RJCFG01 nyata.
+    let mut rjcfg01_lba: Option<u64> = None;
+    if block_is_ata {
+        let mut sec_lba1 = [0u8; 512];
+        match ata_dev.read_sector(1, &mut sec_lba1, &|s| SERIAL.write_str(s)) {
+            Ok(()) => {
+                if asl_router_drivers_ata::is_gpt_header(&sec_lba1) {
+                    SERIAL.write_str("[R23] GPT PRIMARY HEADER (LBA1) DIBACA DARI DISK: signature 'EFI PART' OK (PIO nyata)\n");
+                    if let Some(hinfo) = asl_router_gpt::parse_gpt_header_lba1(&sec_lba1) {
+                        SERIAL.write_str("[R23] GPT header disk: entry_lba=");
+                        SERIAL.write_u32(hinfo.entry_lba as u32);
+                        SERIAL.write_str(" num_entries=");
+                        SERIAL.write_u32(hinfo.num_entries);
+                        SERIAL.write_str(" entry_size=");
+                        SERIAL.write_u32(hinfo.entry_size);
+                        SERIAL.write_str(" usable=");
+                        SERIAL.write_u32(hinfo.first_usable_lba as u32);
+                        SERIAL.write_str("..");
+                        SERIAL.write_u32(hinfo.last_usable_lba as u32);
+                        SERIAL.write_str(" crc_ok=");
+                        SERIAL.write_str(if hinfo.header_crc_ok { "YA" } else { "TIDAK" });
+                        SERIAL.write_str("\n");
+                        if hinfo.header_crc_ok && hinfo.entry_lba <= 0x0FFF_FFFF {
+                            let mut ent_sec = [0u8; 512];
+                            match ata_dev.read_sector(hinfo.entry_lba, &mut ent_sec, &|s| SERIAL.write_str(s)) {
+                                Ok(()) => {
+                                    for i in 0..4usize {
+                                        let off = i * 128;
+                                        match asl_router_gpt::parse_gpt_entry(&ent_sec[off..off + 128]) {
+                                            Some(e) if e.used => {
+                                                SERIAL.write_str("  (DISK) part");
+                                                SERIAL.write_u32(i as u32 + 1);
+                                                SERIAL.write_str(": ");
+                                                SERIAL.write_str(core::str::from_utf8(&e.name[..e.name_len]).unwrap_or("?"));
+                                                SERIAL.write_str(" lba=");
+                                                SERIAL.write_u32(e.start_lba as u32);
+                                                SERIAL.write_str("..");
+                                                SERIAL.write_u32(e.end_lba as u32);
+                                                SERIAL.write_str("\n");
+                                                if e.name_len == 7 && &e.name[..7] == b"RJCFG01" {
+                                                    rjcfg01_lba = Some(e.start_lba);
+                                                }
+                                            }
+                                            _ => {}
+                                        }
+                                    }
+                                    if rjcfg01_lba.is_some() {
+                                        SERIAL.write_str("[R23] RJCFG01 partisi NYATA terdeteksi di disk (LBA ");
+                                        SERIAL.write_u32(rjcfg01_lba.unwrap_or(0) as u32);
+                                        SERIAL.write_str(") — jalur persistence on-disk diaktifkan\n");
+                                    } else {
+                                        SERIAL.write_str("[R23] WARNING: partisi RJCFG01 tidak ada pada array entri disk\n");
+                                    }
+                                }
+                                Err(e) => {
+                                    SERIAL.write_str("[R23] ENTRY ARRAY READ FAILED: ");
+                                    SERIAL.write_str(e);
+                                    SERIAL.write_str("\n");
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    SERIAL.write_str("[R23] WARNING: LBA1 tidak mengandung signature GPT — disk belum di-install?\n");
+                }
+            }
+            Err(e) => {
+                SERIAL.write_str("[R23] GPT HEADER READ FAILED: ");
+                SERIAL.write_str(e);
+                SERIAL.write_str("\n");
+            }
+        }
+    }
+
     // PERSISTENCE JOURNAL (RJCFG01 A/B Slot)
     let mut rjcfg_journal = asl_router_persistence::RjcfgJournal::new_default();
+
+    // [R26]: BACA journal RJCFG01 DARI DISK (header sektor 0 partisi + slot aktif).
+    let serial_log = |s: &str| SERIAL.write_str(s);
+    let mut journal_from_disk = false;
+    if block_is_ata {
+        if let Some(base) = rjcfg01_lba {
+            let mut hdr_sec = [0u8; 512];
+            match ata_dev.read_sector(base, &mut hdr_sec, &serial_log) {
+                Ok(()) => {
+                    match asl_router_persistence::RjcfgJournal::deserialize_header_from_sector(&hdr_sec) {
+                        Ok(hdr) => {
+                            if let Some(fsec) = asl_router_persistence::slot_first_sector(hdr.active_slot) {
+                                let mut slot_buf = [0u8; 4096];
+                                let mut rd_err: Option<&'static str> = None;
+                                for i in 0..8u64 {
+                                    let mut sec = [0u8; 512];
+                                    match ata_dev.read_sector(base + fsec + i, &mut sec, &serial_log) {
+                                        Ok(()) => {
+                                            slot_buf[(i as usize) * 512..(i as usize + 1) * 512].copy_from_slice(&sec);
+                                        }
+                                        Err(e) => {
+                                            rd_err = Some(e);
+                                            break;
+                                        }
+                                    }
+                                }
+                                match rd_err {
+                                    Some(e) => {
+                                        SERIAL.write_str("[R26] RJCFG01 slot READ FAILED: ");
+                                        SERIAL.write_str(e);
+                                        SERIAL.write_str(" — pakai konfigurasi default\n");
+                                    }
+                                    None => match asl_router_persistence::RjcfgJournal::load_from_disk(&hdr, &slot_buf) {
+                                        Ok(j) => {
+                                            rjcfg_journal = j;
+                                            journal_from_disk = true;
+                                            SERIAL.write_str("[R26] RJCFG01 journal DIBACA DARI DISK: slot ");
+                                            SERIAL.write_u32(hdr.active_slot as u32);
+                                            SERIAL.write_str(" seq=");
+                                            SERIAL.write_u32(hdr.sequence_number);
+                                            SERIAL.write_str(" (CRC slot + header terverifikasi, PIO nyata)\n");
+                                        }
+                                        Err(e) => {
+                                            SERIAL.write_str("[R26] RJCFG01 load FAILED: ");
+                                            SERIAL.write_str(e);
+                                            SERIAL.write_str(" — pakai konfigurasi default\n");
+                                        }
+                                    },
+                                }
+                            } else {
+                                SERIAL.write_str("[R26] RJCFG01 header active_slot tidak valid — pakai default\n");
+                            }
+                        }
+                        Err(e) => {
+                            SERIAL.write_str("[R26] RJCFG01 belum ada di disk (");
+                            SERIAL.write_str(e);
+                            SERIAL.write_str(") — boot bersih dengan konfigurasi default\n");
+                        }
+                    }
+                }
+                Err(e) => {
+                    SERIAL.write_str("[R26] RJCFG01 header READ FAILED: ");
+                    SERIAL.write_str(e);
+                    SERIAL.write_str(" — pakai default\n");
+                }
+            }
+        }
+    }
+
+    // [R26c]: AUTO-PERSIST DEMO — disk nyata + partisi RJCFG01 ada tapi journal belum
+    // pernah ditulis: commit + tulis ke disk sekali sebagai bukti write-path persisten.
+    // Boot berikutnya [R26] memuat journal dari disk dan melewati demo ini.
+    if block_is_ata && !journal_from_disk {
+        if let Some(base) = rjcfg01_lba {
+            SERIAL.write_str("[R26c] RJCFG01 belum ada di disk — auto-commit + tulis (bukti write path persisten)...\n");
+            let active = rjcfg_journal.active_config;
+            if let Ok(slot) = rjcfg_journal.commit_update(active) {
+                if rjcfg_write_and_verify(&mut ata_dev, &rjcfg_journal, base, slot) {
+                    SERIAL.write_str("[R26c] RJCFG01 TERSIMPAN DI DISK (VERIFIED) — reboot akan memuat dari disk.\n");
+                } else {
+                    SERIAL.write_str("[R26c] RJCFG01 auto-persist GAGAL — lihat log READBACK di atas.\n");
+                }
+            }
+        }
+    }
 
     let netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
     let netstack_lan = asl_router_netstack::NetStackEngine::new(lan_mac, lan_ip_real);
@@ -799,6 +988,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             SERIAL.write_str("Configuration committed to slot ");
                             SERIAL.write_u32(slot as u32);
                             SERIAL.write_str(" (atomic switch ok).\r\n");
+                            let mut disk_done = false;
+                            if block_is_ata {
+                                if let Some(base) = rjcfg01_lba {
+                                    disk_done = rjcfg_write_and_verify(&mut ata_dev, &rjcfg_journal, base, slot);
+                                }
+                            }
+                            if !disk_done {
+                                SERIAL.write_str("% Konfigurasi hanya di RAM (tidak ada disk nyata / partisi RJCFG01 / tulis gagal).\r\n");
+                            }
                         } else {
                             SERIAL.write_str("% Error committing configuration.\r\n");
                         }
@@ -899,6 +1097,103 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     core::hint::spin_loop();
                 }
             }
+        }
+    }
+}
+
+// -----------------------------------------------------------------------------
+// [R26] RJCFG01 PERSISTENCE: tulis journal ke partisi di disk nyata + baca-balik
+// -----------------------------------------------------------------------------
+
+/// Tulis slot aktif lalu header (header LAST, atomic-switch style) ke partisi RJCFG01
+/// via PIO ATA nyata, kemudian baca-balik dan verifikasi CRC header + slot.
+/// Mengembalikan true hanya bila seluruh write DAN readback terverifikasi.
+fn rjcfg_write_and_verify(
+    ata_dev: &mut asl_router_drivers_ata::AtaDevice,
+    journal: &asl_router_persistence::RjcfgJournal,
+    base: u64,
+    slot: u8,
+) -> bool {
+    let fsec = match asl_router_persistence::slot_first_sector(slot) {
+        Some(f) => f,
+        None => {
+            SERIAL.write_str("[R26] slot tidak valid utk tulis disk\n");
+            return false;
+        }
+    };
+    let slot_bytes = if slot == 0 { &journal.slot_a } else { &journal.slot_b };
+    for i in 0..8u64 {
+        let mut sec = [0u8; 512];
+        sec.copy_from_slice(&slot_bytes[(i as usize) * 512..(i as usize + 1) * 512]);
+        if let Err(e) = ata_dev.write_sector(base + fsec + i, &sec, &|s| SERIAL.write_str(s)) {
+            SERIAL.write_str("[R26] slot sector WRITE FAILED: ");
+            SERIAL.write_str(e);
+            SERIAL.write_str("\n");
+            return false;
+        }
+    }
+    let mut hdr_sec = [0u8; 512];
+    journal.serialize_header_to_sector(&mut hdr_sec);
+    if let Err(e) = ata_dev.write_sector(base, &hdr_sec, &|s| SERIAL.write_str(s)) {
+        SERIAL.write_str("[R26] header WRITE FAILED: ");
+        SERIAL.write_str(e);
+        SERIAL.write_str("\n");
+        return false;
+    }
+    // Baca-balik header
+    let mut vhdr = [0u8; 512];
+    if let Err(e) = ata_dev.read_sector(base, &mut vhdr, &|s| SERIAL.write_str(s)) {
+        SERIAL.write_str("[R26] header READBACK READ FAILED: ");
+        SERIAL.write_str(e);
+        SERIAL.write_str("\n");
+        return false;
+    }
+    let hdr = match asl_router_persistence::RjcfgJournal::deserialize_header_from_sector(&vhdr) {
+        Ok(h) => h,
+        Err(e) => {
+            SERIAL.write_str("[R26] header READBACK INVALID: ");
+            SERIAL.write_str(e);
+            SERIAL.write_str("\n");
+            return false;
+        }
+    };
+    if hdr.sequence_number != journal.header.sequence_number || hdr.active_slot != slot {
+        SERIAL.write_str("[R26] header READBACK tidak konsisten dengan RAM journal\n");
+        return false;
+    }
+    let vfsec = match asl_router_persistence::slot_first_sector(hdr.active_slot) {
+        Some(f) => f,
+        None => {
+            SERIAL.write_str("[R26] active_slot readback tidak valid\n");
+            return false;
+        }
+    };
+    // Baca-balik slot + verifikasi CRC via load_from_disk
+    let mut vbuf = [0u8; 4096];
+    for i in 0..8u64 {
+        let mut sec = [0u8; 512];
+        if let Err(e) = ata_dev.read_sector(base + vfsec + i, &mut sec, &|s| SERIAL.write_str(s)) {
+            SERIAL.write_str("[R26] slot READBACK READ FAILED: ");
+            SERIAL.write_str(e);
+            SERIAL.write_str("\n");
+            return false;
+        }
+        vbuf[(i as usize) * 512..(i as usize + 1) * 512].copy_from_slice(&sec);
+    }
+    match asl_router_persistence::RjcfgJournal::load_from_disk(&hdr, &vbuf) {
+        Ok(_) => {
+            SERIAL.write_str("[R26] RJCFG01 READBACK VERIFIED: slot ");
+            SERIAL.write_u32(slot as u32);
+            SERIAL.write_str(" seq=");
+            SERIAL.write_u32(hdr.sequence_number);
+            SERIAL.write_str(" (CRC header + slot cocok dari disk, PIO nyata)\n");
+            true
+        }
+        Err(e) => {
+            SERIAL.write_str("[R26] slot READBACK load FAILED: ");
+            SERIAL.write_str(e);
+            SERIAL.write_str("\n");
+            false
         }
     }
 }

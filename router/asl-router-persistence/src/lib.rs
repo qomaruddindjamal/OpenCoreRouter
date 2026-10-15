@@ -251,6 +251,128 @@ impl RjcfgJournal {
     }
 }
 
+// ============================================================================
+// Layout On-Disk RJCFG01 (partisi GPT di atas disk ATA, sektor 512 B)
+// - Sektor 0 partisi = blok header journal
+// - Slot A = sektor 8..16 (8 sektor x 512 B = 4096 B)
+// - Slot B = sektor 16..24 (8 sektor x 512 B = 4096 B)
+// Serialisasi header on-disk eksplisit little-endian; TIDAK ada cast pointer
+// mentah pada kode baru (jalur lama new_default/commit_update tetap dipertahankan).
+// ============================================================================
+
+/// Ukuran satu sektor ATA pada layout RJCFG01.
+pub const RJCFG_SECTOR_SIZE: usize = 512;
+/// Nomor sektor blok header journal (sektor 0 partisi).
+pub const RJCFG_HEADER_SECTOR: u64 = 0;
+/// Jumlah sektor yang dihuni satu slot konfigurasi (8 x 512 B = 4096 B).
+pub const RJCFG_SLOT_SECTORS: usize = 8;
+/// Sektor pertama Slot A pada partisi RJCFG01.
+pub const RJCFG_SLOT_A_FIRST_SECTOR: u64 = 8;
+/// Sektor pertama Slot B pada partisi RJCFG01.
+pub const RJCFG_SLOT_B_FIRST_SECTOR: u64 = 16;
+/// Versi header on-disk yang dikenal (byte versi tunggal di offset 8).
+pub const RJCFG_ONDISK_VERSION: u8 = 1;
+
+/// Peta index slot (0 = A, 1 = B) ke nomor sektor pertama partisi RJCFG01.
+pub fn slot_first_sector(slot: u8) -> Option<u64> {
+    match slot {
+        0 => Some(RJCFG_SLOT_A_FIRST_SECTOR),
+        1 => Some(RJCFG_SLOT_B_FIRST_SECTOR),
+        _ => None,
+    }
+}
+
+impl RjcfgJournal {
+    /// Serialisasi header journal ke satu sektor 512 B, layout little-endian:
+    /// [0..8]=magic, [8]=version u8, [9]=active_slot u8, [10..14]=nol,
+    /// [14..16]=nol, [16..20]=sequence_number u32 LE, [20..24]=slot_a_crc32 LE,
+    /// [24..28]=slot_b_crc32 LE, [28..32]=header_crc32 LE, [32..512]=nol.
+    /// header_crc32 = compute_crc32(byte 0..28) — field CRC itu sendiri dikecualikan.
+    ///
+    /// Catatan pemetaan: `RjcfgHeader.version` bertipe u32 sedangkan layout
+    /// on-disk menyimpan versi sebagai satu byte; saat tulis hanya byte rendah
+    /// yang disimpan, dan saat baca versi direkonstruksi sebagai u32 dari byte
+    /// tersebut. `reserved: [u8;3]` tidak punya slot on-disk: ditulis nol dan
+    /// direkonstruksi sebagai default [0;3] saat baca.
+    pub fn serialize_header_to_sector(&self, out: &mut [u8; RJCFG_SECTOR_SIZE]) {
+        for b in out.iter_mut() {
+            *b = 0;
+        }
+        out[0..8].copy_from_slice(&self.header.magic);
+        out[8] = self.header.version as u8;
+        out[9] = self.header.active_slot;
+        // Byte 10..14 dan 14..16 tetap nol (padding/reserved on-disk).
+        out[16..20].copy_from_slice(&self.header.sequence_number.to_le_bytes());
+        out[20..24].copy_from_slice(&self.header.slot_a_crc32.to_le_bytes());
+        out[24..28].copy_from_slice(&self.header.slot_b_crc32.to_le_bytes());
+        // header_crc32 dihitung atas 28 byte pertama (field CRC dikecualikan).
+        let header_crc = compute_crc32(&out[0..28]);
+        out[28..32].copy_from_slice(&header_crc.to_le_bytes());
+    }
+
+    /// Deskripsi header 512 B on-disk menjadi RjcfgHeader dengan validasi
+    /// bertingkat: magic, versi dikenal, lalu CRC header.
+    pub fn deserialize_header_from_sector(
+        sec: &[u8; RJCFG_SECTOR_SIZE],
+    ) -> Result<RjcfgHeader, &'static str> {
+        if sec[0..8] != RJCFG_MAGIC {
+            return Err("RJCFG01: magic tidak valid");
+        }
+        let version = sec[8];
+        if version != RJCFG_ONDISK_VERSION {
+            return Err("RJCFG01: versi tidak dikenal");
+        }
+        let stored_header_crc = u32::from_le_bytes([sec[28], sec[29], sec[30], sec[31]]);
+        if compute_crc32(&sec[0..28]) != stored_header_crc {
+            return Err("RJCFG01: header CRC salah");
+        }
+        Ok(RjcfgHeader {
+            magic: RJCFG_MAGIC,
+            // Versi on-disk u8 direkonstruksi menjadi u32; reserved dipulihkan
+            // ke default [0;3] (tidak diwakili di layout on-disk).
+            version: version as u32,
+            active_slot: sec[9],
+            reserved: [0u8; 3],
+            sequence_number: u32::from_le_bytes([sec[16], sec[17], sec[18], sec[19]]),
+            slot_a_crc32: u32::from_le_bytes([sec[20], sec[21], sec[22], sec[23]]),
+            slot_b_crc32: u32::from_le_bytes([sec[24], sec[25], sec[26], sec[27]]),
+            header_crc32: stored_header_crc,
+        })
+    }
+
+    /// Bangun ulang journal dari disk: `slot_bytes` adalah 4096 B milik slot
+    /// AKTIF hasil baca partisi. CRC slot aktif diverifikasi terhadap header,
+    /// payload dideserialisasi, dan slot non-aktif diisi nol.
+    pub fn load_from_disk(
+        header: &RjcfgHeader,
+        slot_bytes: &[u8; RJCFG_SLOT_SIZE],
+    ) -> Result<Self, &'static str> {
+        if header.active_slot > 1 {
+            return Err("RJCFG01: active_slot tidak valid");
+        }
+        let expected_slot_crc = if header.active_slot == 0 {
+            header.slot_a_crc32
+        } else {
+            header.slot_b_crc32
+        };
+        if compute_crc32(slot_bytes) != expected_slot_crc {
+            return Err("RJCFG01: slot CRC salah");
+        }
+        let active_config = RjcfgConfigPayload::deserialize(slot_bytes)?;
+        let (slot_a, slot_b) = if header.active_slot == 0 {
+            (*slot_bytes, [0u8; RJCFG_SLOT_SIZE])
+        } else {
+            ([0u8; RJCFG_SLOT_SIZE], *slot_bytes)
+        };
+        Ok(Self {
+            header: *header,
+            slot_a,
+            slot_b,
+            active_config,
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,5 +444,101 @@ mod tests {
         journal.set_hostname("new-name").unwrap();
         let crc_b = journal.header.slot_b_crc32;
         assert_ne!(crc_a, crc_b);
+    }
+
+    #[test]
+    fn test_07_header_sector_roundtrip() {
+        let journal = RjcfgJournal::new_default();
+        let mut sector = [0u8; RJCFG_SECTOR_SIZE];
+        journal.serialize_header_to_sector(&mut sector);
+
+        let parsed =
+            RjcfgJournal::deserialize_header_from_sector(&sector).expect("header sector valid");
+        // Perbandingan struct utuh (hindari referensi ke field packed struct).
+        assert_eq!(parsed, journal.header);
+        // Byte di luar wilayah header harus nol.
+        assert!(sector[32..].iter().all(|&b| b == 0));
+    }
+
+    #[test]
+    fn test_08_header_magic_corruption() {
+        let journal = RjcfgJournal::new_default();
+        let mut sector = [0u8; RJCFG_SECTOR_SIZE];
+        journal.serialize_header_to_sector(&mut sector);
+
+        sector[2] ^= 0xFF; // flip satu byte di wilayah magic
+        assert_eq!(
+            RjcfgJournal::deserialize_header_from_sector(&sector),
+            Err("RJCFG01: magic tidak valid")
+        );
+    }
+
+    #[test]
+    fn test_09_header_version_corruption() {
+        let journal = RjcfgJournal::new_default();
+        let mut sector = [0u8; RJCFG_SECTOR_SIZE];
+        journal.serialize_header_to_sector(&mut sector);
+
+        sector[8] = 9; // versi tidak dikenal, dicek sebelum CRC
+        assert_eq!(
+            RjcfgJournal::deserialize_header_from_sector(&sector),
+            Err("RJCFG01: versi tidak dikenal")
+        );
+    }
+
+    #[test]
+    fn test_10_header_crc_corruption() {
+        let journal = RjcfgJournal::new_default();
+        let mut sector = [0u8; RJCFG_SECTOR_SIZE];
+        journal.serialize_header_to_sector(&mut sector);
+
+        sector[16] ^= 0x01; // byte tercakup CRC (sequence_number), magic/version utuh
+        assert_eq!(
+            RjcfgJournal::deserialize_header_from_sector(&sector),
+            Err("RJCFG01: header CRC salah")
+        );
+    }
+
+    #[test]
+    fn test_11_slot_first_sector_mapping() {
+        assert_eq!(slot_first_sector(0), Some(8));
+        assert_eq!(slot_first_sector(1), Some(16));
+        assert_eq!(slot_first_sector(2), None);
+        assert_eq!(slot_first_sector(255), None);
+        assert_eq!(RJCFG_SLOT_SECTORS * RJCFG_SECTOR_SIZE, RJCFG_SLOT_SIZE);
+    }
+
+    #[test]
+    fn test_12_load_from_disk_happy_path() {
+        let journal = RjcfgJournal::new_default();
+        // new_default sudah menyimpan CRC slot_a di header dan active_slot = 0.
+        let loaded = RjcfgJournal::load_from_disk(&journal.header, &journal.slot_a)
+            .expect("load from disk ok");
+        assert_eq!(loaded.header, journal.header);
+        assert_eq!(loaded.slot_a, journal.slot_a);
+        assert_eq!(loaded.slot_b, [0u8; RJCFG_SLOT_SIZE]);
+        assert_eq!(loaded.active_config, journal.active_config);
+    }
+
+    #[test]
+    fn test_13_load_from_disk_slot_crc_mismatch() {
+        let journal = RjcfgJournal::new_default();
+        let mut bad_slot = journal.slot_a;
+        bad_slot[5] ^= 0xAA; // ubah payload sehingga CRC slot tidak cocok header
+        let err = RjcfgJournal::load_from_disk(&journal.header, &bad_slot)
+            .err()
+            .expect("slot CRC harus menolak");
+        assert_eq!(err, "RJCFG01: slot CRC salah");
+    }
+
+    #[test]
+    fn test_14_load_from_disk_invalid_active_slot() {
+        let journal = RjcfgJournal::new_default();
+        let mut bad_header = journal.header;
+        bad_header.active_slot = 2;
+        let err = RjcfgJournal::load_from_disk(&bad_header, &journal.slot_a)
+            .err()
+            .expect("active_slot tidak valid harus menolak");
+        assert_eq!(err, "RJCFG01: active_slot tidak valid");
     }
 }

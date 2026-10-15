@@ -26,6 +26,7 @@ dependencies = [
  "asl-hal",
  "asl-kernel-core",
  "asl-memory",
+ "asl-router-drivers-ata",
  "asl-router-drivers-virtio",
  "asl-router-drivers-virtio-blk",
  "asl-router-fastpath",
@@ -60,6 +61,10 @@ dependencies = [
  "asl-router-tcam",
  "asl-router-webcore",
 ]
+
+[[package]]
+name = "asl-router-drivers-ata"
+version = "0.1.0"
 
 [[package]]
 name = "asl-router-drivers-virtio"

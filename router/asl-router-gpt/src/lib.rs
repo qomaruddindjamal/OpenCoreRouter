@@ -409,6 +409,87 @@ pub fn build_protective_mbr(total_sectors: u64, out_sector: &mut [u8; SECTOR_SIZ
     out_sector[511] = 0xAA;
 }
 
+// -----------------------------------------------------------------------------
+// PARSER READ-ONLY: GPT header & partition entry dari byte disk nyata
+// (untuk verifikasi round-trip driver block, mis. baca LBA1 via PIO ATA).
+// -----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GptHeaderInfo {
+    pub entry_lba: u64,
+    pub num_entries: u32,
+    pub entry_size: u32,
+    pub first_usable_lba: u64,
+    pub last_usable_lba: u64,
+    pub header_crc_ok: bool,
+}
+
+/// Parse header GPT dari satu sektor (512 B). None bila signature salah.
+/// header_crc32 dihitung atas header_size (92) byte pertama dgn field crc dinolkan.
+pub fn parse_gpt_header_lba1(sec: &[u8]) -> Option<GptHeaderInfo> {
+    if sec.len() < 92 || &sec[0..8] != b"EFI PART" {
+        return None;
+    }
+    let header_size = u32::from_le_bytes(sec[8..12].try_into().unwrap()) as usize;
+    let stored_crc = u32::from_le_bytes(sec[16..20].try_into().unwrap());
+    let first_usable_lba = u64::from_le_bytes(sec[40..48].try_into().unwrap());
+    let last_usable_lba = u64::from_le_bytes(sec[48..56].try_into().unwrap());
+    let entry_lba = u64::from_le_bytes(sec[72..80].try_into().unwrap());
+    let num_entries = u32::from_le_bytes(sec[80..84].try_into().unwrap());
+    let entry_size = u32::from_le_bytes(sec[84..88].try_into().unwrap());
+
+    let hs = if header_size >= 92 && header_size <= sec.len() { header_size } else { 92 };
+    let mut hdr_copy = [0u8; 92];
+    hdr_copy[..hs.min(92)].copy_from_slice(&sec[..hs.min(92)]);
+    hdr_copy[16..20].fill(0);
+    let calc = compute_crc32(&hdr_copy[..hs.min(92)]);
+    Some(GptHeaderInfo {
+        entry_lba,
+        num_entries,
+        entry_size,
+        first_usable_lba,
+        last_usable_lba,
+        header_crc_ok: calc == stored_crc,
+    })
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct GptEntryInfo {
+    pub start_lba: u64,
+    pub end_lba: u64,
+    /// Nama ASCII hasil konversi UTF-16LE (di-trim, max 36).
+    pub name: [u8; 36],
+    pub name_len: usize,
+    pub used: bool,
+    pub type_guid: [u8; 16],
+}
+
+/// Parse 1 entri partisi (128 B) dari buffer array entri.
+pub fn parse_gpt_entry(bytes: &[u8]) -> Option<GptEntryInfo> {
+    if bytes.len() < 128 {
+        return None;
+    }
+    let type_guid: [u8; 16] = bytes[0..16].try_into().unwrap();
+    let used = type_guid != [0u8; 16];
+    let start_lba = u64::from_le_bytes(bytes[32..40].try_into().unwrap());
+    let end_lba = u64::from_le_bytes(bytes[40..48].try_into().unwrap());
+    let mut name = [0u8; 36];
+    let mut nlen = 0usize;
+    if used {
+        for i in 0..36 {
+            let lo = bytes[56 + i * 2];
+            let hi = bytes[56 + i * 2 + 1];
+            let ch = (hi as u16) << 8 | lo as u16;
+            if ch == 0 {
+                break;
+            }
+            name[nlen] = if ch >= 0x20 && ch < 0x7F { ch as u8 } else { b'?' };
+            nlen += 1;
+        }
+    }
+    Some(GptEntryInfo { start_lba, end_lba, name, name_len: nlen, used, type_guid })
+}
+
 #[cfg(test)]
 extern crate std;
 
@@ -576,5 +657,37 @@ mod tests {
         }
         assert_ne!(layout.partitions[0].unique_partition_guid, layout.partitions[1].unique_partition_guid);
         assert_ne!(layout.partitions[1].unique_partition_guid, layout.partitions[2].unique_partition_guid);
+    }
+
+    #[test]
+    fn test_14_parse_gpt_header_roundtrip_from_layout() {
+        let total = 4_194_304u64; // 2 GiB — kapasitas nyata vdi
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let mut head = [0u8; 34 * SECTOR_SIZE];
+        layout.write_head(&mut head).unwrap();
+        let info = parse_gpt_header_lba1(&head[SECTOR_SIZE..2 * SECTOR_SIZE]).expect("header parse");
+        assert!(info.header_crc_ok, "CRC header harus cocok dgn to_bytes()");
+        assert_eq!(info.entry_lba, layout.primary_header.partition_entry_lba);
+        assert_eq!(info.num_entries, 128);
+        assert_eq!(info.entry_size, 128);
+        assert_eq!(info.first_usable_lba, layout.primary_header.first_usable_lba);
+        assert_eq!(info.last_usable_lba, layout.primary_header.last_usable_lba);
+    }
+
+    #[test]
+    fn test_15_parse_gpt_entries_roundtrip() {
+        let total = 4_194_304u64;
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let arr = layout.entry_array_bytes();
+        let e0 = parse_gpt_entry(&arr[0..128]).unwrap();
+        assert!(e0.used);
+        assert_eq!(&e0.name[..e0.name_len], b"EFI System Partition");
+        let e1 = parse_gpt_entry(&arr[128..256]).unwrap();
+        assert_eq!(&e1.name[..e1.name_len], b"RJCFG01");
+        let e2 = parse_gpt_entry(&arr[256..384]).unwrap();
+        assert_eq!(&e2.name[..e2.name_len], b"RJDATA");
+        let e5 = parse_gpt_entry(&arr[5 * 128..6 * 128]).unwrap();
+        assert!(!e5.used);
+        assert_eq!(e5.start_lba, 0);
     }
 }
