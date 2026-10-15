@@ -27,6 +27,7 @@
 | [`RND_15_DS01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_15_DS01_REPORT.md) | DHCP Server, DNS Proxy, WebUI Mitranet M0 & Gate Reconciliation | `VERIFIED` | Sprint DS-01 |
 | [`RND_16_V0RCI_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_16_V0RCI_REPORT.md) | Disk Image, Persistence, Real Capacity & Mitranet M1 Adoption | `VERIFIED` | Sprint V0-RCI |
 | [`RND_17_IS01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_17_IS01_REPORT.md) | Install to Disk: Boot via ISO & Boot from Installed Disk (VirtualBox) | `VERIFIED` | Sprint IS-01 |
+| [`RND_18_IS02_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_18_IS02_REPORT.md) | Block Device Nyata (ATA PIO), Persistensi RJCFG01 Lintas Boot & Gate ARP Host | `VERIFIED` | Sprint IS-02 |
 
 ---
 
