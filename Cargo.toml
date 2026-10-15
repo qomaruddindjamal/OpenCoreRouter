@@ -30,6 +30,7 @@ members = [
     "router/asl-router-drivers-virtio-blk",
     "router/asl-router-gpt",
     "router/asl-router-persistence",
+    "router/asl-router-fat32",
 ]
 
 [workspace.package]

@@ -39,6 +39,18 @@ pub const GUID_RINJANI_DATA: [u8; 16] = [
 // CRC32 UTILITY (IEEE 802.3 standard polynomial 0xEDB88320)
 // -----------------------------------------------------------------------------
 
+/// Deterministic unique partition GUID: 524A4E0<n>-0001-4E01-8000-524A4E000001
+/// ("RJN" flavored; images are reproducible byte-for-byte, no randomness).
+pub const fn make_unique_guid(partition_no: u8) -> [u8; 16] {
+    [
+        0x52, 0x4A, 0x4E, 0x30 + partition_no,
+        0x00, 0x01,
+        0x4E, 0x01,
+        0x80, 0x00,
+        0x52, 0x4A, 0x4E, 0x00, 0x00, 0x01,
+    ]
+}
+
 pub fn compute_crc32(data: &[u8]) -> u32 {
     let mut crc: u32 = 0xFFFF_FFFF;
     for &byte in data {
@@ -55,7 +67,7 @@ pub fn compute_crc32(data: &[u8]) -> u32 {
 // GPT HEADER STRUCTURE (LBA 1 / Backup LBA)
 // -----------------------------------------------------------------------------
 
-#[repr(C, packed)]
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GptHeader {
     pub signature: [u8; 8],
@@ -78,7 +90,7 @@ pub struct GptHeader {
 // GPT PARTITION ENTRY STRUCTURE (128 bytes)
 // -----------------------------------------------------------------------------
 
-#[repr(C, packed)]
+#[repr(C)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct GptPartitionEntry {
     pub partition_type_guid: [u8; 16],
@@ -158,6 +170,7 @@ impl GptDiskLayout {
         let esp_sectors = 262_144u64;
         let mut esp = GptPartitionEntry::empty();
         esp.partition_type_guid = GUID_ESP;
+        esp.unique_partition_guid = make_unique_guid(1);
         esp.starting_lba = first_usable;
         esp.ending_lba = esp.starting_lba + esp_sectors - 1;
         esp.set_name("EFI System Partition");
@@ -166,6 +179,7 @@ impl GptDiskLayout {
         let cfg_sectors = 16_384u64;
         let mut cfg = GptPartitionEntry::empty();
         cfg.partition_type_guid = GUID_RINJANI_CFG;
+        cfg.unique_partition_guid = make_unique_guid(2);
         cfg.starting_lba = esp.ending_lba + 1;
         cfg.ending_lba = cfg.starting_lba + cfg_sectors - 1;
         cfg.set_name("RJCFG01");
@@ -173,6 +187,7 @@ impl GptDiskLayout {
         // Partition 3: RJDATA elastic remainder up to last_usable
         let mut data = GptPartitionEntry::empty();
         data.partition_type_guid = GUID_RINJANI_DATA;
+        data.unique_partition_guid = make_unique_guid(3);
         data.starting_lba = cfg.ending_lba + 1;
         data.ending_lba = last_usable;
         data.set_name("RJDATA");
@@ -263,6 +278,106 @@ impl GptDiskLayout {
 }
 
 // -----------------------------------------------------------------------------
+// GPT SERIALIZER (LBA0 protective MBR, LBA1 header, LBA2..33 entries, backup)
+// -----------------------------------------------------------------------------
+
+impl GptPartitionEntry {
+    pub fn to_bytes(&self) -> [u8; GPT_PARTITION_ENTRY_SIZE as usize] {
+        let mut out = [0u8; GPT_PARTITION_ENTRY_SIZE as usize];
+        out[0..16].copy_from_slice(&self.partition_type_guid);
+        out[16..32].copy_from_slice(&self.unique_partition_guid);
+        out[32..40].copy_from_slice(&self.starting_lba.to_le_bytes());
+        out[40..48].copy_from_slice(&self.ending_lba.to_le_bytes());
+        out[48..56].copy_from_slice(&self.attributes.to_le_bytes());
+        for (i, u) in self.partition_name.iter().enumerate() {
+            out[56 + i * 2..58 + i * 2].copy_from_slice(&u.to_le_bytes());
+        }
+        out
+    }
+}
+
+impl GptHeader {
+    /// Serializes the 92-byte header, self-computing header_crc32 over the
+    /// header with that field zeroed (UEFI 2.8 / GPT spec requirement).
+    pub fn to_bytes(&mut self) -> [u8; GPT_HEADER_SIZE as usize] {
+        self.header_crc32 = 0;
+        let mut buf = [0u8; GPT_HEADER_SIZE as usize];
+        buf[0..8].copy_from_slice(&self.signature);
+        buf[8..12].copy_from_slice(&self.revision.to_le_bytes());
+        buf[12..16].copy_from_slice(&self.header_size.to_le_bytes());
+        buf[16..20].copy_from_slice(&0u32.to_le_bytes()); // crc field placeholder
+        buf[20..24].copy_from_slice(&self.reserved.to_le_bytes());
+        buf[24..32].copy_from_slice(&self.current_lba.to_le_bytes());
+        buf[32..40].copy_from_slice(&self.backup_lba.to_le_bytes());
+        buf[40..48].copy_from_slice(&self.first_usable_lba.to_le_bytes());
+        buf[48..56].copy_from_slice(&self.last_usable_lba.to_le_bytes());
+        buf[56..72].copy_from_slice(&self.disk_guid);
+        buf[72..80].copy_from_slice(&self.partition_entry_lba.to_le_bytes());
+        buf[80..84].copy_from_slice(&self.num_partition_entries.to_le_bytes());
+        buf[84..88].copy_from_slice(&self.size_of_partition_entry.to_le_bytes());
+        buf[88..92].copy_from_slice(&self.partition_array_crc32.to_le_bytes());
+        let crc = compute_crc32(&buf);
+        self.header_crc32 = crc;
+        buf[16..20].copy_from_slice(&crc.to_le_bytes());
+        buf
+    }
+}
+
+pub const GPT_ENTRY_ARRAY_SECTORS: usize = 32; // 128 entries x 128 bytes
+
+impl GptDiskLayout {
+    /// Builds the canonical 128-entry partition array bytes (entries beyond
+    /// the declared partitions are zero-filled) and refreshes both header CRCs.
+    pub fn entry_array_bytes(&mut self) -> [u8; GPT_MAX_PARTITIONS * GPT_PARTITION_ENTRY_SIZE as usize] {
+        let mut arr = [0u8; GPT_MAX_PARTITIONS * GPT_PARTITION_ENTRY_SIZE as usize];
+        for (i, p) in self.partitions.iter().enumerate() {
+            let bytes = p.to_bytes();
+            arr[i * GPT_PARTITION_ENTRY_SIZE as usize..(i + 1) * GPT_PARTITION_ENTRY_SIZE as usize]
+                .copy_from_slice(&bytes);
+        }
+        let arr_crc = compute_crc32(&arr);
+        self.primary_header.partition_array_crc32 = arr_crc;
+        self.backup_header.partition_array_crc32 = arr_crc;
+        self.primary_header.num_partition_entries = GPT_MAX_PARTITIONS as u32;
+        self.backup_header.num_partition_entries = GPT_MAX_PARTITIONS as u32;
+        arr
+    }
+
+    /// Writes the disk head: sector 0 = protective MBR, sector 1 = primary
+    /// header, sectors 2..34 = full 128-entry partition array.
+    /// Requires out.len() >= 34 * SECTOR_SIZE.
+    pub fn write_head(&mut self, out: &mut [u8]) -> Result<(), &'static str> {
+        if out.len() < 34 * SECTOR_SIZE {
+            return Err("write_head buffer smaller than 34 sectors");
+        }
+        let mut mbr = [0u8; SECTOR_SIZE];
+        build_protective_mbr(self.total_sectors, &mut mbr);
+        out[0..SECTOR_SIZE].copy_from_slice(&mbr);
+
+        let arr = self.entry_array_bytes();
+        let mut hdr = self.primary_header;
+        let hdr_bytes = hdr.to_bytes();
+        out[SECTOR_SIZE..SECTOR_SIZE + GPT_HEADER_SIZE as usize].copy_from_slice(&hdr_bytes);
+        out[2 * SECTOR_SIZE..2 * SECTOR_SIZE + arr.len()].copy_from_slice(&arr);
+        Ok(())
+    }
+
+    /// Writes the disk tail: 32 sectors of backup entry array then the backup
+    /// header as the final sector. Requires out.len() == last 33 sectors.
+    pub fn write_backup(&mut self, out: &mut [u8]) -> Result<(), &'static str> {
+        if out.len() != 33 * SECTOR_SIZE {
+            return Err("write_backup buffer must be exactly 33 sectors");
+        }
+        let arr = self.entry_array_bytes();
+        out[0..arr.len()].copy_from_slice(&arr);
+        let mut hdr = self.backup_header;
+        let hdr_bytes = hdr.to_bytes();
+        out[32 * SECTOR_SIZE..32 * SECTOR_SIZE + GPT_HEADER_SIZE as usize].copy_from_slice(&hdr_bytes);
+        Ok(())
+    }
+}
+
+// -----------------------------------------------------------------------------
 // PROTECTIVE MBR GENERATOR (LBA 0)
 // -----------------------------------------------------------------------------
 
@@ -295,8 +410,12 @@ pub fn build_protective_mbr(total_sectors: u64, out_sector: &mut [u8; SECTOR_SIZ
 }
 
 #[cfg(test)]
+extern crate std;
+
+#[cfg(test)]
 mod tests {
     use super::*;
+    use std::prelude::v1::*;
 
     #[test]
     fn test_01_crc32_standard_vector() {
@@ -390,5 +509,72 @@ mod tests {
         layout.resize_data_partition(total_sectors + 1000).unwrap();
         let crc2 = layout.primary_header.partition_array_crc32;
         assert_ne!(crc1, crc2);
+    }
+
+    #[test]
+    fn test_09_header_self_crc_roundtrip() {
+        let total = 2_097_152u64; // 1 GiB
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let _ = layout.entry_array_bytes();
+        let mut hdr = layout.primary_header;
+        let bytes = hdr.to_bytes();
+        assert_eq!(&bytes[0..8], b"EFI PART");
+        let stored = u32::from_le_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
+        assert_eq!(stored, hdr.header_crc32);
+        // Recompute: zero the crc field, CRC over 92 bytes must match
+        let mut probe = bytes;
+        probe[16..20].copy_from_slice(&0u32.to_le_bytes());
+        assert_eq!(compute_crc32(&probe), stored);
+    }
+
+    #[test]
+    fn test_10_write_head_layout() {
+        let total = 2_097_152u64;
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let mut head = vec![0u8; 34 * SECTOR_SIZE];
+        layout.write_head(&mut head).unwrap();
+        assert_eq!(head[510], 0x55);
+        assert_eq!(head[511], 0xAA);
+        assert_eq!(head[446 + 4], 0xEE);
+        assert_eq!(&head[512..520], b"EFI PART");
+        let n = u32::from_le_bytes([head[512 + 80], head[512 + 81], head[512 + 82], head[512 + 83]]);
+        assert_eq!(n, 128);
+        // ESP entry first bytes = GUID_ESP
+        assert_eq!(&head[2 * SECTOR_SIZE..2 * SECTOR_SIZE + 16], &GUID_ESP);
+    }
+
+    #[test]
+    fn test_11_write_backup_tail() {
+        let total = 2_097_152u64;
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let mut tail = vec![0u8; 33 * SECTOR_SIZE];
+        layout.write_backup(&mut tail).unwrap();
+        assert_eq!(&tail[32 * SECTOR_SIZE..32 * SECTOR_SIZE + 8], b"EFI PART");
+        let cur = u64::from_le_bytes(tail[32 * SECTOR_SIZE + 24..32 * SECTOR_SIZE + 32].try_into().unwrap());
+        assert_eq!(cur, total - 1);
+    }
+
+    #[test]
+    fn test_12_entry_array_crc_covers_128_slots() {
+        let total = 2_097_152u64;
+        let mut layout = GptDiskLayout::create_default_layout(total).unwrap();
+        let arr = layout.entry_array_bytes();
+        assert_eq!(arr.len(), 128 * 128);
+        assert_eq!(layout.primary_header.partition_array_crc32, compute_crc32(&arr));
+        // Slots 4..128 must be fully zero
+        for b in &arr[4 * 128..] {
+            assert_eq!(*b, 0);
+        }
+    }
+
+    #[test]
+    fn test_13_unique_partition_guids_nonzero_and_distinct() {
+        let total = 2_097_152u64;
+        let layout = GptDiskLayout::create_default_layout(total).unwrap();
+        for p in layout.partitions.iter().take(3) {
+            assert_ne!(p.unique_partition_guid, [0u8; 16]);
+        }
+        assert_ne!(layout.partitions[0].unique_partition_guid, layout.partitions[1].unique_partition_guid);
+        assert_ne!(layout.partitions[1].unique_partition_guid, layout.partitions[2].unique_partition_guid);
     }
 }
