@@ -338,6 +338,38 @@
     "distro_version": "1.0.0",
     "verified_date": "2026-10-14",
     "notes": "Kernel halts honestly if DHCP offers timeout on eth0; eliminates dev-static fallback"
+  },
+  {
+    "gate_id": "OPCR-73",
+    "name": "Native FAT32 ESP Formatter (no_std, LFN, MS-spec)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-15",
+    "notes": "asl-router-fat32: 7 unit tests PASS + external validation via Windows FAT32 driver byte-exact SHA256 read-back"
+  },
+  {
+    "gate_id": "OPCR-74",
+    "name": "Host-Side Disk Image Installer Pipeline (GPT + FAT32 ESP + Limine MBR)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-15",
+    "notes": "scripts/build-disk.ps1 + scripts/mkdisk (opcr-mkdisk); raw SHA256 AD3450AA...; limine bios-install verified PMBR-intact"
+  },
+  {
+    "gate_id": "OPCR-75",
+    "name": "Boot From Installed Disk Proof (VirtualBox, DVD Empty)",
+    "status": "PASS-LOCKED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-15",
+    "notes": "Analysis/reports/is01_disk_boot.log: [R1]..[R23] from VDI on IDE-0-0 with empty DVD; VM stable >70s; boot1=disk persistent"
+  },
+  {
+    "gate_id": "OPCR-76",
+    "name": "In-Kernel Self-Installer (ISO runtime -> target disk, zero host tools)",
+    "status": "REGISTERED-NOT-ATTEMPTED",
+    "distro_version": "1.0.0",
+    "verified_date": "2026-10-15",
+    "notes": "Deferred honestly: VirtualBox exposes no virtio-blk PCI device to guest ([R22] still simulated fallback); needs AHCI/ATA or real virtio-blk hardware path first"
   }
 ]
 

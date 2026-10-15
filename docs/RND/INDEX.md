@@ -23,6 +23,10 @@
 | [`RND_11_ROUTE01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_11_ROUTE01_REPORT.md) | Static Routing, LPM Trie, NAT/Conntrack & Forwarding | `VERIFIED` | Sprint ROUTE-01 |
 | [`RND_12_FWD01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_12_FWD01_REPORT.md) | Real Multi-Interface Forwarding Proof, NAT & Benchmark | `VERIFIED` | Sprint FWD-01 |
 | [`RND_13_EVAL01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_13_EVAL01_REPORT.md) | smoltcp Evaluation, 2-Sided Smoke Proof & ADR-011 Strategy | `VERIFIED` | Sprint EVAL-01 |
+| [`RND_14_NET03_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_14_NET03_REPORT.md) | TCP Facade, API v1, WebUI MVP & Hostname | `VERIFIED` | Sprint NET-03 |
+| [`RND_15_DS01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_15_DS01_REPORT.md) | DHCP Server, DNS Proxy, WebUI Mitranet M0 & Gate Reconciliation | `VERIFIED` | Sprint DS-01 |
+| [`RND_16_V0RCI_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_16_V0RCI_REPORT.md) | Disk Image, Persistence, Real Capacity & Mitranet M1 Adoption | `VERIFIED` | Sprint V0-RCI |
+| [`RND_17_IS01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_17_IS01_REPORT.md) | Install to Disk: Boot via ISO & Boot from Installed Disk (VirtualBox) | `VERIFIED` | Sprint IS-01 |
 
 ---
 

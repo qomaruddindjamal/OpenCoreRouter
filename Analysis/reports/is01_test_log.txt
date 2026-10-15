@@ -1,0 +1,653 @@
+warning: value assigned to `cap` is never read
+   --> router\asl-router-drivers-virtio-blk\src\lib.rs:178:28
+    |
+178 |         let mut cap: u64 = 0;
+    |                            ^ this value is reassigned later and never used
+...
+182 |             cap = (low as u64) | ((high as u64) << 32);
+    |             ------------------------------------------ `cap` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `inb` is never used
+  --> router\asl-router-drivers-virtio-blk\src\lib.rs:50:11
+   |
+50 | unsafe fn inb(port: u16) -> u8 {
+   |           ^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `inw` is never used
+  --> router\asl-router-drivers-virtio-blk\src\lib.rs:70:11
+   |
+70 | unsafe fn inw(port: u16) -> u16 {
+   |           ^^^
+
+warning: function `outd` is never used
+   --> router\asl-router-drivers-virtio-blk\src\lib.rs:102:11
+    |
+102 | unsafe fn outd(port: u16, val: u32) {
+    |           ^^^^
+
+warning: `asl-router-drivers-virtio-blk` (lib) generated 4 warnings
+warning: value assigned to `idx` is never read
+    --> router\asl-router-netstack\src\lib.rs:1649:13
+     |
+1649 |             idx += 1; // Terminating null
+     |             ^^^^^^^^
+     |
+     = help: maybe it is overwritten before being read?
+     = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `inw` is never used
+  --> router\asl-router-drivers-virtio\src\lib.rs:51:11
+   |
+51 | unsafe fn inw(port: u16) -> u16 {
+   |           ^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: function `ind` is never used
+  --> router\asl-router-drivers-virtio\src\lib.rs:71:11
+   |
+71 | unsafe fn ind(port: u16) -> u32 {
+   |           ^^^
+
+warning: function `outd` is never used
+  --> router\asl-router-drivers-virtio\src\lib.rs:83:11
+   |
+83 | unsafe fn outd(port: u16, val: u32) {
+   |           ^^^^
+
+warning: `asl-router-netstack` (lib) generated 1 warning
+warning: `asl-router-drivers-virtio` (lib) generated 3 warnings
+warning: unused import: `asl_router_netbuf::NetBufferPool`
+  --> router\asl-router-tcpstub\src\lib.rs:14:5
+   |
+14 | use asl_router_netbuf::NetBufferPool;
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: `asl-router-tcpstub` (lib) generated 1 warning (run `cargo fix --lib -p asl-router-tcpstub` to apply 1 suggestion)
+warning: `asl-router-drivers-virtio` (lib test) generated 3 warnings (3 duplicates)
+warning: `asl-router-netstack` (lib test) generated 1 warning (1 duplicate)
+warning: `asl-router-drivers-virtio-blk` (lib test) generated 4 warnings (4 duplicates)
+warning: `panic` is ambiguous
+   --> router\asl-router-fat32\src\lib.rs:888:26
+    |
+888 |                 other => panic!("unexpected file {}", other),
+    |                          ^^^^^ ambiguous name
+    |
+    = note: ambiguous because of a conflict between a name from a glob import and an outer scope during import or macro resolution
+note: `panic` could refer to the macro imported here
+   --> router\asl-router-fat32\src\lib.rs:731:9
+    |
+731 |     use std::prelude::v1::*;
+    |         ^^^^^^^^^^^^^^^^^^^
+    = help: consider adding an explicit import of `panic` to disambiguate
+    = help: or use `self::panic` to refer to this macro unambiguously
+note: `panic` could also refer to a macro from prelude
+   --> /rustc/b940084d7eb6a299eb4bfeb8e34901bc051e7ac4/library\core\src\prelude\mod.rs:41:12
+    = warning: this was previously accepted by the compiler but is being phased out; it will become a hard error in a future release!
+    = note: for more information, see issue #147319 <https://github.com/rust-lang/rust/issues/147319>
+    = note: `#[warn(ambiguous_panic_imports)]` (part of `#[warn(future_incompatible)]`) on by default
+
+warning: `asl-router-fat32` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.06s
+     Running unittests src\lib.rs (target\debug\deps\asl_afdx_ipc-6308294af2488c68.exe)
+
+running 3 tests
+test tests::test_afdx_frame_empty_defaults ... ok
+test tests::test_spsc_ring_buffer_fifo ... ok
+test tests::test_spsc_ring_buffer_full_saturation ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_bootloader-2e3732f117c9f714.exe)
+
+running 3 tests
+test tests::test_boot_info_validation ... ok
+test tests::test_boot_info_zero_size_fails ... ok
+test tests::test_boot_magic_constant ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_hal-aa2c2ee81517863b.exe)
+
+running 5 tests
+test tests::test_apic_timer_calibration_struct ... ok
+test tests::test_cpu_contract ... ok
+test tests::test_idt_entry_set_handler ... ok
+test tests::test_mmio_register_memory_semantics ... ok
+test tests::test_hal_marker_info ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_kernel_bin-0ec33b7f4df33714.exe)
+
+running 7 tests
+test tests::test_dev_fallback_when_strict_net_disabled ... ok
+test tests::test_kernel_handover_marker ... ok
+test tests::test_kernel_init_invalid_boot_fails ... ok
+test tests::test_strict_net_bound_when_offer_present ... ok
+test tests::test_kernel_init_flow ... ok
+test tests::test_strict_net_default_is_true ... ok
+test tests::test_strict_net_halt_when_no_offer ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_kernel_core-082bac143c4d72a2.exe)
+
+running 3 tests
+test tests::test_kernel_executive_capacity_limit ... ok
+test tests::test_kernel_executive_registration ... ok
+test tests::test_partition_descriptor_states ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_memory-b73e7b5a1bb0a917.exe)
+
+running 3 tests
+test tests::test_free_page_count_tracking ... ok
+test tests::test_static_page_allocator ... ok
+test tests::test_unaligned_or_invalid_free ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_api-e0746aabfa21837e.exe)
+
+running 8 tests
+test tests::test_01_rate_limiter_depletion_and_refill ... ok
+test tests::test_02_api_system_endpoint ... ok
+test tests::test_03_api_interfaces_endpoint ... ok
+test tests::test_05_api_services_endpoint ... ok
+test tests::test_06_api_not_found_endpoint ... ok
+test tests::test_04_api_firewall_rules_endpoint ... ok
+test tests::test_07_api_rate_limit_429 ... ok
+test tests::test_08_api_envelope_format ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_drivers_virtio-01925afbab846ddc.exe)
+
+running 4 tests
+test tests::test_e1000_device_creation ... ok
+test tests::test_virtio_status_constants ... ok
+test tests::test_virtio_tx_path_armed_and_pending_state ... ok
+test tests::test_virtio_tx_ring_push_advances_pending_count ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_drivers_virtio_blk-4e40f4b6ae001698.exe)
+
+running 6 tests
+test tests::test_01_simulated_capacity_and_size ... ok
+test tests::test_06_write_sector_out_of_bounds ... ok
+test tests::test_03_sector_buffer_pool_allocation ... ok
+test tests::test_04_sector_buffer_pool_exhaustion ... ok
+test tests::test_05_read_sector_out_of_bounds ... ok
+test tests::test_02_build_req_header ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_fastpath-2aa36ce1b2cc7c13.exe)
+
+running 6 tests
+test tests::test_align_01_cacheline_alignment ... ok
+test tests::test_dma_addr_01_zone_safety ... ok
+test tests::test_dma_cache_clean_inval_call ... ok
+test tests::test_ring_push_pop_fifo ... ok
+test tests::test_ring_saturation_full ... ok
+test tests::test_module_marker ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_fat32-d8059324c796e785.exe)
+
+running 7 tests
+test tests::fat_test_05_geometry_math ... ok
+test tests::fat_test_04_sfn_generation ... ok
+test tests::fat_test_03_lfn_checksum_microsoft_vector ... ok
+test tests::fat_test_06_bad_paths_rejected ... ok
+test tests::fat_test_07_multisector_file_chain ... ok
+test tests::fat_test_02_bpb_fields ... ok
+test tests::fat_test_01_roundtrip_three_files_with_lfn ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_gpon_ont-25062c390b88fc70.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_gpt-f80603b81c535e08.exe)
+
+running 13 tests
+test tests::test_01_crc32_standard_vector ... ok
+test tests::test_03_default_layout_partitions ... ok
+test tests::test_02_protective_mbr_structure ... ok
+test tests::test_04_disk_too_small_error ... ok
+test tests::test_06_resize_shrink_returns_err ... ok
+test tests::test_05_resize_data_partition_growth ... ok
+test tests::test_07_partition_name_setter ... ok
+test tests::test_08_gpt_header_crc_updates ... ok
+test tests::test_13_unique_partition_guids_nonzero_and_distinct ... ok
+test tests::test_09_header_self_crc_roundtrip ... ok
+test tests::test_10_write_head_layout ... ok
+test tests::test_11_write_backup_tail ... ok
+test tests::test_12_entry_array_crc_covers_128_slots ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_hwinv-cf585a73529f2f3a.exe)
+
+running 4 tests
+test tests::test_cpu_inventory_probe ... ok
+test tests::test_hardware_device_entry_conversion ... ok
+test tests::test_inventory_scan_capacity ... ok
+test tests::test_hardware_inventory_empty_init ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_lpm-434aafb0faa36ab1.exe)
+
+running 10 tests
+test tests::test_01_exact_and_default_match ... ok
+test tests::test_03_route_update_existing ... ok
+test tests::test_05_table_overflow_error ... ok
+test tests::test_02_longest_prefix_wins ... ok
+test tests::test_06_routing_engine_integration ... ok
+test tests::test_04_route_remove ... ok
+test tests::test_07_prefix_to_mask_boundaries ... ok
+test tests::test_08_metric_priority_on_tie ... ok
+test tests::test_09_forward_multihop_gateway ... ok
+test tests::test_10_drop_unreachable_when_no_default_route ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_nat-4e137bb36e9f5269.exe)
+
+running 10 tests
+test tests::test_02_dnat_port_forward ... ok
+test tests::test_06_unmatched_ingress_untouched ... ok
+test tests::test_04_timeout_eviction ... ok
+test tests::test_03_icmp_tracking ... ok
+test tests::test_01_snat_forward_and_reverse_path ... ok
+test tests::test_07_ephemeral_port_allocation_wrap ... ok
+test tests::test_08_set_wan_ip_dynamic ... ok
+test tests::test_05_conntrack_table_full_drop ... ok
+test tests::test_09_dnat_udp_bidirectional_flow ... ok
+test tests::test_10_multiple_parallel_connections_no_overflow ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_netbuf-fab071fbc5e6c0aa.exe)
+
+running 3 tests
+test tests::test_buffer_pool_double_free_guard ... ok
+test tests::test_buffer_pool_acquire_and_release ... ok
+test tests::test_buffer_pool_exhaustion ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_netstack-cec5a00f7d6f1b49.exe)
+
+running 44 tests
+test tests::test_01_checksum_simple ... ok
+test tests::test_02_parse_ethernet_header_valid ... ok
+test tests::test_03_parse_ethernet_too_short ... ok
+test tests::test_05_parse_arp_short_fails ... ok
+test tests::test_06_build_arp_reply ... ok
+test tests::test_04_parse_arp_request_valid ... ok
+test tests::test_07_parse_ipv4_valid ... ok
+test tests::test_08_parse_ipv4_checksum_corrupted ... ok
+test tests::test_09_parse_ipv4_fragment_dropped ... ok
+test tests::test_10_parse_icmp_echo_request_valid ... ok
+test tests::test_11_parse_icmp_bad_checksum ... ok
+test tests::test_12_build_icmp_echo_reply ... ok
+test tests::test_13_netstack_engine_arp_cycle ... ok
+test tests::test_14_netstack_engine_ignore_foreign_ip ... ok
+test tests::test_15_netstack_engine_unknown_ethertype_ignored ... ok
+test tests::test_16_parse_udp_header_valid ... ok
+test tests::test_17_parse_udp_short_fails ... ok
+test tests::test_18_build_and_parse_dhcp_discover ... ok
+test tests::test_19_build_and_parse_dhcp_request ... ok
+test tests::test_20_parse_dhcp_offer_message ... ok
+test tests::test_21_build_icmp_time_exceeded ... ok
+test tests::test_22_tcp_listener_facade_basic ... ok
+test tests::test_23_dhcp_option_12_hostname_rinjani ... ok
+test tests::test_24_mdns_responder_rinjani_local ... ok
+test tests::test_25_dhcp_server_pool_allocation_basic ... ok
+test tests::test_26_dhcp_server_pool_mac_binding_idempotent ... ok
+test tests::test_27_dhcp_server_pool_requested_ip_match ... ok
+test tests::test_28_dhcp_server_pool_exhaustion_error ... ok
+test tests::test_29_dhcp_server_pool_release_and_reclaim ... ok
+test tests::test_30_dhcp_server_pool_renewal ... ok
+test tests::test_31_dhcp_server_reply_offer_formatting ... ok
+test tests::test_32_dhcp_server_reply_ack_formatting ... ok
+test tests::test_33_parse_dns_query_valid_qname ... ok
+test tests::test_34_dns_proxy_static_host_lookup_rinjani_lan ... ok
+test tests::test_35_dns_proxy_custom_static_host_add_and_delete ... ok
+test tests::test_36_dns_proxy_cache_hit_and_miss ... ok
+test tests::test_37_dns_proxy_cache_ttl_expiry ... ok
+test tests::test_38_dns_proxy_cache_lru_eviction ... ok
+test tests::test_39_dns_proxy_cache_flush ... ok
+test tests::test_40_build_dns_a_reply_formatting ... ok
+test tests::test_41_dhcp_client_strict_mode_timeout_halts ... ok
+test tests::test_42_dhcp_client_dora_state_progression ... ok
+test tests::test_43_dhcp_client_nak_triggers_halt_in_strict_mode ... ok
+test tests::test_44_dhcp_client_requesting_timeout_halts ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_olt_carrier-2fd6c99bc576cc84.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_name ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_pci-6f6daf2b72a90667.exe)
+
+running 3 tests
+test tests::test_pci_bar_variants ... ok
+test tests::test_pci_device_helpers ... ok
+test tests::test_pci_empty_device_is_invalid ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_persistence-d15af540fdcad6d4.exe)
+
+running 6 tests
+test tests::test_04_serialization_roundtrip ... ok
+test tests::test_01_default_config_values ... ok
+test tests::test_02_atomic_slot_switch_a_to_b ... ok
+test tests::test_05_hostname_length_bounds ... ok
+test tests::test_03_atomic_slot_switch_b_to_a ... ok
+test tests::test_06_crc_recomputation_integrity ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_qos-5a3cca2b7ccef691.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_security_vault-fae57e122b3b93fc.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_switching-eaa91ea0632e1af1.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_name ... ok
+test tests::test_module_operational ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_tcam-1b1c4dc83c469e4a.exe)
+
+running 9 tests
+test tests::test_module_marker ... ok
+test tests::test_tcam_vector_1_exact_match ... ok
+test tests::test_tcam_vector_2_subnet_match ... ok
+test tests::test_tcam_vector_4_priority_conflict_resolution ... ok
+test tests::test_tcam_vector_5_default_deny ... ok
+test tests::test_tcam_vector_3_wildcard_match ... ok
+test tests::test_tcam_vector_6_port_range_boundary ... ok
+test tests::test_tcam_vector_7_protocol_mismatch ... ok
+test tests::test_tcam_vector_8_table_overflow_error ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_tcpstub-db4f03f118167f4c.exe)
+
+running 6 tests
+test tests::test_01_adapter_creation_and_zero_copy ... ok
+test tests::test_02_tx_token_direct_commit ... ok
+test tests::test_03_http_stub_handshake_and_banner ... ok
+test tests::test_05_pool_integration_with_adapter ... ok
+test tests::test_06_ring_full_tx_drop ... ok
+test tests::test_04_upstream_metadata_compliance ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_undi_npu-5f65774be9a9e33a.exe)
+
+running 3 tests
+test tests::test_module_marker ... ok
+test tests::test_module_operational ... ok
+test tests::test_module_name ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_webcore-958f589e1e59a84e.exe)
+
+running 6 tests
+test tests::test_01_parse_valid_get_request ... ok
+test tests::test_02_parse_post_with_body ... ok
+test tests::test_03_response_builder_security_headers ... ok
+test tests::test_05_etag_mismatch_returns_200 ... ok
+test tests::test_06_error_statuses ... ok
+test tests::test_04_etag_and_304_not_modified ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_router_webui-8e673826160d4c52.exe)
+
+running 6 tests
+test tests::test_01_modules_registry ... ok
+test tests::test_03_dispatch_shell_root ... ok
+test tests::test_04_dispatch_css_asset ... ok
+test tests::test_05_dispatch_vendor_htmx ... ok
+test tests::test_06_dispatch_logo_svg ... ok
+test tests::test_02_all_assets_present ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src\lib.rs (target\debug\deps\asl_sched-5e1d0b34188a7730.exe)
+
+running 3 tests
+test tests::test_preemptive_scheduling ... ok
+test tests::test_scheduler_budget_exhaustion ... ok
+test tests::test_scheduler_capacity_limit ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_afdx_ipc
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_bootloader
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_hal
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_kernel_bin
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_kernel_core
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_memory
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_api
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_drivers_virtio
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_drivers_virtio_blk
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_fastpath
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_fat32
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_gpon_ont
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_gpt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_hwinv
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_lpm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_nat
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_netbuf
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_netstack
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_olt_carrier
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_pci
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_persistence
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_qos
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_security_vault
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_switching
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_tcam
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_tcpstub
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_undi_npu
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_webcore
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_router_webui
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests asl_sched
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
