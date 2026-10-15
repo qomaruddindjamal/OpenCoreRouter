@@ -32,6 +32,7 @@ crate-type = ["rlib"]
 [features]
 default = []
 qemu-dev = []
+poweroff-selftest = []
 
 [[bin]]
 name = "asl-kernel"

@@ -9,6 +9,9 @@
 mod serial;
 
 #[cfg(target_os = "none")]
+mod power;
+
+#[cfg(target_os = "none")]
 use serial::SerialPort;
 
 #[cfg(target_os = "none")]
@@ -22,6 +25,18 @@ static SERIAL: SerialPort = SerialPort::new();
 #[used]
 #[link_section = ".limine_requests"]
 static BASE_REVISION: [u64; 3] = [0xf9562b2d5c86db6b, 0xa4f50de4325ac1d2, 2];
+
+// Limine HHDM (Higher Half Direct Memory Map) request — magic dari tools/limine/limine.h
+// struct limine_hhdm_request { id[4]; revision; response; }
+#[cfg(target_os = "none")]
+#[used]
+#[link_section = ".limine_requests"]
+static HHDM_REQUEST: [u64; 6] = [
+    0xc7b1dd30df4c8b88, 0x0a82e883a194f07b, // LIMINE_COMMON_MAGIC
+    0x48dcf1cb8ad2b852, 0x63984e959a98244b, // LIMINE_HHDM_REQUEST
+    0,                                      // revision
+    0,                                      // response (diisi bootloader)
+];
 
 // -----------------------------------------------------------------------------
 // DEDICATED ASSEMBLY ENTRY STUB & 512KB STACK
@@ -54,6 +69,16 @@ core::arch::global_asm!(
 #[no_mangle]
 pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.init();
+
+    // Resolusikan HHDM offset dari bootloader (wajib sebelum akses RAM fisik / ACPI scan)
+    let hhdm_resp = unsafe { core::ptr::read_volatile(&HHDM_REQUEST[5]) };
+    if hhdm_resp != 0 {
+        // struct limine_hhdm_response { revision; offset; } -> offset di slot[1]
+        let hhdm_offset = unsafe { *(hhdm_resp as *const u64).add(1) };
+        power::set_hhdm_offset(hhdm_offset);
+    } else {
+        power::set_hhdm_offset(0);
+    }
 
     // [R1] & [R2]: Boot Banner
     let (banner_r1, banner_r2) = asl_kernel_bin::kernel_boot_banner();
@@ -262,23 +287,22 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     {
         // OPCR-72: Strict No-Fallback Mode.
         // In live hardware / VirtualBox bridged mode without physical offer within 15s window,
-        // kernel must fail-closed honestly and not fabricate leases.
+        // kernel must fail-closed honestly: WAN marked DOWN, no fabricated lease.
+        // Control plane (LAN/CLI) tetap hidup agar operator dapat mendiagnosis (bukan halt total).
         if !dhcp_client.is_bound() {
-            SERIAL.write_str("[R11] DHCP FAILED: no offer on eth0 — HALTING (strict mode)\n");
-            SERIAL.write_str("[HALT] System entered safe idle halt. Awaiting LPS joint session.\n");
-            loop {
-                #[cfg(target_arch = "x86_64")]
-                unsafe {
-                    core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
-                }
-                #[cfg(not(target_arch = "x86_64"))]
-                core::hint::spin_loop();
-            }
+            SERIAL.write_str("[R11] DHCP FAILED: no offer on eth0 — WAN DOWN (fail-closed, lease tidak dikarang)\n");
         }
     }
 
     let our_ip = wan_ip;
-    SERIAL.write_str("[R11] IP ADDR: eth0 WAN acquired, 192.168.56.1/24 (LAN eth1)\n");
+    let wan_up = if dhcp_client.is_bound() || cfg!(feature = "qemu-dev") { true } else { false };
+    SERIAL.write_str("[R11] IP ADDR: eth0 WAN ");
+    if wan_up {
+        SERIAL.write_str("acquired, ");
+    } else {
+        SERIAL.write_str("DOWN (no lease), ");
+    }
+    SERIAL.write_str("192.168.56.1/24 (LAN eth1)\n");
 
     // [R14]: LOCAL APIC TIMER CALIBRATION
     let mut apic_timer = asl_hal::ApicTimer::new(asl_hal::LOCAL_APIC_DEFAULT_BASE);
@@ -496,7 +520,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("  hostname set <s> - Update and persist hostname to RJCFG01\r\n");
                         SERIAL.write_str("  ping <ip>        - Send ICMP echo request\r\n");
                         SERIAL.write_str("  clear            - Clear terminal screen\r\n");
-                        SERIAL.write_str("  reboot           - Trigger hardware system reboot\r\n");
+                        SERIAL.write_str("  reboot           - Triple-fault hardware reboot (real)\r\n");
+                        SERIAL.write_str("  shutdown         - ACPI PM1_CNT power-off probe (real)\r\n");
                     } else if cmd == b"show version" {
                         SERIAL.write_str("Rinjani 1.0.0 (Powered by ASL Core Kernel v1.0.0)\r\n");
                         SERIAL.write_str("Target: x86_64-unknown-none | Standard: DO-178C DAL-A\r\n");
@@ -645,7 +670,22 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     } else if cmd == b"clear" {
                         SERIAL.write_str("\x1B[2J\x1B[H");
                     } else if cmd == b"reboot" {
-                        SERIAL.write_str("Rebooting system via 8042 keyboard controller reset...\r\n");
+                        SERIAL.write_str("[R26] Reboot via triple fault (null IDT + int3)...\r\n");
+                        power::triple_fault_reboot();
+                    } else if cmd == b"shutdown" {
+                        SERIAL.write_str("[R25] SHUTDOWN REQUESTED — probing ACPI PM1_CNT candidates...\r\n");
+                        if power::try_poweroff_candidates(&|s| SERIAL.write_str(s)) {
+                            SERIAL.write_str("[R25] Power-off unexpected return.\r\n");
+                        }
+                        SERIAL.write_str("[R25] Semua kandidat PM1_CNT ditolak — entering safe halt (power-off TIDAK didukung platform ini).\r\n");
+                        loop {
+                            #[cfg(target_arch = "x86_64")]
+                            unsafe {
+                                core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+                            }
+                            #[cfg(not(target_arch = "x86_64"))]
+                            core::hint::spin_loop();
+                        }
                     } else {
                         SERIAL.write_str("% Unknown command. Type 'help' for command list.\r\n");
                     }
@@ -670,6 +710,24 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         for _ in 0..10_000 {
             core::hint::spin_loop();
         }
+
+        // [R25] POWER-OFF SELFTEST (build dengan --features poweroff-selftest)
+        #[cfg(feature = "poweroff-selftest")]
+        if loop_count == 400 {
+            SERIAL.write_str("\n[R25] SELFTEST: ACPI PM1_CNT power-off probe (auto)\n");
+            power::try_poweroff_candidates(&|s| SERIAL.write_str(s));
+            SERIAL.write_str("[R25] SELFTEST: semua kandidat ditolak hardware — heartbeat post-probe dimulai.\n");
+            let mut hb = 0u32;
+            loop {
+                hb = hb.wrapping_add(1);
+                SERIAL.write_str("[HB] post-probe alive #");
+                SERIAL.write_u32(hb);
+                SERIAL.write_str("\n");
+                for _ in 0..20_000_000u32 {
+                    core::hint::spin_loop();
+                }
+            }
+        }
     }
 }
 
@@ -679,8 +737,17 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
 
 #[cfg(target_os = "none")]
 #[panic_handler]
-fn panic(_info: &core::panic::PanicInfo) -> ! {
-    SERIAL.write_str("\n[RINJANI-PANIC] Fail-Safe Trap Invoked. Entering halt loop.\n");
+fn panic(info: &core::panic::PanicInfo) -> ! {
+    struct PanicWriter;
+    impl core::fmt::Write for PanicWriter {
+        fn write_str(&mut self, s: &str) -> core::fmt::Result {
+            SERIAL.write_str(s);
+            Ok(())
+        }
+    }
+    SERIAL.write_str("\n[RINJANI-PANIC] ");
+    let _ = core::fmt::write(&mut PanicWriter, format_args!("{}", info));
+    SERIAL.write_str("\n[RINJANI-PANIC] Halt loop.\n");
     loop {
         #[cfg(target_arch = "x86_64")]
         unsafe {
