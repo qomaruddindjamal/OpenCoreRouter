@@ -45,14 +45,16 @@ pub fn dispatch_static(
 // EMBEDDED TCP + HTTP SERVER (RFC 9293 / RFC 7230) — NATIVE ASL, NO SMOLTCP
 // -----------------------------------------------------------------------------
 
-/// Jumlah sesi TCP paralel yang dapat dilayani (browser membuka beberapa
-/// koneksi sekaligus untuk aset + polling API).
-pub const WEB_SESSIONS: usize = 4;
+/// Jumlah sesi TCP paralel yang dapat dilayani. WebUI modular membuka banyak
+/// aset sekaligus saat muat pertama (chrome + 3 CSS + 3 JS + logo + parsial
+/// view); dengan 4 slot browser harus menunggu SYN yang dijatuhkan diulang,
+/// sehingga halaman pertama terasa lambat.
+pub const WEB_SESSIONS: usize = 8;
 /// Batas bytes header permintaan yang dikumpulkan per sesi. Header browser
 /// modern (sec-ch-ua, Accept-Encoding, Range) bisa melewati 1 KiB.
 pub const WEB_REQ_MAX: usize = 2048;
-/// Batas bytes respons yang dibangun per sesi. Harus menampung aset terbesar
-/// yang di-embed (js/status.js) + header HTTP; Lihat gerbang konstan di bawah.
+/// Batas bytes respons yang dibangun per sesi. Harus menampung aset embedded
+/// terbesar (parsial view / CSS) + header HTTP; lihat gerbang konstan di bawah.
 pub const WEB_RESP_MAX: usize = 8192;
 /// Window size yang kita iklankan ke peer.
 pub const WEB_ANNOUNCED_WINDOW: u16 = 32768;
@@ -793,7 +795,7 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 9);
+        assert_eq!(registry::ALL_ASSETS.len(), 12);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
@@ -812,6 +814,9 @@ mod tests {
         assert!(resp.contains("HTTP/1.1 200 OK"));
         assert!(resp.contains("RINJANI 1.0.0"));
         assert!(resp.contains("Open Core Router Web Console"));
+        // Shell modular hanya berisi chrome; halaman dimuat sebagai parsial.
+        assert!(resp.contains("view-mount"));
+        assert!(resp.contains("/js/core/app.js"));
     }
 
     #[test]
@@ -827,15 +832,52 @@ mod tests {
     }
 
     #[test]
-    fn test_05_dispatch_vendor_htmx() {
-        let req = HttpRequest::parse(b"GET /vendor/htmx.js HTTP/1.1\r\n\r\n").unwrap();
-        let mut buf = [0u8; 4096];
-        let res = dispatch_static(&req, &mut buf).expect("Must find htmx asset");
+    fn test_05_dispatch_core_js_module() {
+        let req = HttpRequest::parse(b"GET /js/core/ui.js HTTP/1.1\r\n\r\n").unwrap();
+        // Buffer seukuran buffer respons server nyata: aset terbesar harus muat.
+        let mut buf = [0u8; WEB_RESP_MAX];
+        let res = dispatch_static(&req, &mut buf).expect("Must find core js asset");
         let len = res.unwrap();
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
 
         assert!(resp.contains("Content-Type: application/javascript"));
-        assert!(resp.contains("htmx = factory()"));
+        assert!(resp.contains("OPCR"));
+    }
+
+    #[test]
+    fn test_05b_dispatch_view_partial_is_declarative() {
+        for (raw, path, needle) in [
+            (
+                b"GET /views/system.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/system.html",
+                "data-source=\"/api/v1/system\"",
+            ),
+            (
+                b"GET /views/interfaces.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/interfaces.html",
+                "data-list=\"/api/v1/interfaces\"",
+            ),
+            (
+                b"GET /views/firewall.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/firewall.html",
+                "data-source=\"/api/v1/firewall/rules\"",
+            ),
+            (
+                b"GET /views/services.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/services.html",
+                "data-source=\"/api/v1/services\"",
+            ),
+        ] {
+            let req = HttpRequest::parse(raw).unwrap();
+            let mut buf = [0u8; 4096];
+            let len = dispatch_static(&req, &mut buf)
+                .unwrap_or_else(|| panic!("{path} tidak terdaftar"))
+                .expect("parsial terlalu besar");
+            let resp = core::str::from_utf8(&buf[..len]).unwrap();
+            assert!(resp.contains(needle), "{path} kehilangan pengikat {needle}");
+            // Parsial hanya berisi bentuk + atribut pengikat, tidak pernah data.
+            assert!(!resp.contains("192.168."), "{path} memuat alamat karangan");
+        }
     }
 
     #[test]
@@ -847,7 +889,7 @@ mod tests {
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
 
         assert!(resp.contains("Content-Type: image/svg+xml"));
-        assert!(resp.contains("MitraNet Logo"));
+        assert!(resp.contains("Open Core Router Rinjani Logo"));
     }
 
     // -------------------------------------------------------------------------

@@ -1,0 +1,51 @@
+// OpenCR WebUI Core — klien API kernel (XHR + unwrap sampul {ok,data}).
+// Tidak memakai library pihak ketiga dan tidak memakai fetch/promise agar
+// tetap jalan pada browser lama; semua nilai masuk ke DOM lewat textContent.
+window.OPCR = window.OPCR || {};
+
+(function (api) {
+    "use strict";
+
+    // Satu permintaan per panggilan: server kernel memakai Connection: close.
+    api.get = function (path, done) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", path, true);
+        xhr.timeout = 8000;
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            if (xhr.status !== 200) {
+                done(false, null, xhr.status || 0);
+                return;
+            }
+            var parsed;
+            try {
+                parsed = JSON.parse(xhr.responseText);
+            } catch (e) {
+                done(false, null, "json_parse_error");
+                return;
+            }
+            if (parsed && parsed.ok === true) {
+                done(true, parsed.data, 200);
+            } else {
+                done(false, null, parsed && parsed.error ? parsed.error : "api_not_ok");
+            }
+        };
+        xhr.ontimeout = function () { done(false, null, "timeout"); };
+        xhr.onerror = function () { done(false, null, "network_error"); };
+        xhr.send();
+    };
+
+    // Ambil markup parsial view (bukan JSON) apa adanya.
+    api.getText = function (path, done) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("GET", path, true);
+        xhr.timeout = 8000;
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            done(xhr.status === 200, xhr.status === 200 ? xhr.responseText : "", xhr.status || 0);
+        };
+        xhr.ontimeout = function () { done(false, "", "timeout"); };
+        xhr.onerror = function () { done(false, "", "network_error"); };
+        xhr.send();
+    };
+})((OPCR.api = OPCR.api || {}));

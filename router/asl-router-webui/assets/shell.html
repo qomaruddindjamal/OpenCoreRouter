@@ -1,48 +1,67 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="id">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>RINJANI 1.0.0 — Open Core Router Web Console</title>
+    <link rel="icon" href="/images/logo.svg" type="image/svg+xml">
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/layout.css">
     <link rel="stylesheet" href="/css/components.css">
-    <script src="/js/common/opcr.js"></script>
 </head>
 <body>
-    <header class="app-header">
+    <header class="chrome-header">
         <div class="brand">
-            <img src="/images/logo.svg" alt="MitraNet Logo" class="logo-img">
+            <img src="/images/logo.svg" alt="Logo Open Core Router" class="brand-logo">
             <div class="brand-text">
-                <h1>RINJANI 1.0.0</h1>
-                <span class="sub">Open Core Router / ASL Core Kernel v1.0.0</span>
+                <span class="brand-title">RINJANI 1.0.0</span>
+                <span class="brand-sub">Open Core Router</span>
             </div>
         </div>
-        <div class="system-badge">
-            <span class="status-indicator live"></span>
-            <span id="hostname-display">rinjani</span>
-            <span id="mgmt-bind">memuat alamat bind…</span>
+        <button id="nav-toggle" class="icon-btn" type="button" title="Ciutkan / lebarkan menu">&#9776;</button>
+        <div class="header-right">
+            <span class="chip" id="chip-hostname">memuat hostname&hellip;</span>
+            <span class="chip mono" id="chip-bind">memuat alamat bind&hellip;</span>
+            <span class="chip chip-badge">Community Edition</span>
         </div>
     </header>
 
-    <div class="app-layout">
-        <nav class="sidebar">
-            <ul class="nav-list">
-                <li><a href="#system" class="nav-item active" data-view="system">Dashboard</a></li>
-                <li><a href="#interfaces" class="nav-item" data-view="interfaces">Interfaces</a></li>
-                <li><a href="#firewall" class="nav-item" data-view="firewall">Firewall</a></li>
-                <li><a href="#services" class="nav-item" data-view="services">Services</a></li>
-            </ul>
-        </nav>
+    <div class="app-body">
+        <aside class="sidebar">
+            <p class="nav-group-title">Navigasi</p>
+            <nav>
+                <a href="#system" class="nav-item" data-view="system"><span class="nav-code">Db</span><span class="nav-txt">Dashboard</span></a>
+                <a href="#interfaces" class="nav-item" data-view="interfaces"><span class="nav-code">If</span><span class="nav-txt">Antarmuka</span></a>
+                <a href="#firewall" class="nav-item" data-view="firewall"><span class="nav-code">Fw</span><span class="nav-txt">Firewall</span></a>
+                <a href="#services" class="nav-item" data-view="services"><span class="nav-code">Sv</span><span class="nav-txt">Layanan</span></a>
+            </nav>
+            <p class="nav-group-title">Modul belum aktif di build ini</p>
+            <nav>
+                <span class="nav-item disabled" title="kernel belum punya endpoint /api/v1/routes">&#9679; Rute &amp; Gateway</span>
+                <span class="nav-item disabled" title="jalur RX pool dhcp_server_pool belum ada">&#9679; Lease DHCP</span>
+                <span class="nav-item disabled" title="tabel ARP kernel belum diekspos ke API">&#9679; Tabel ARP</span>
+                <span class="nav-item disabled" title="mesin tangkap paket belum diimplementasikan">&#9679; Jingkar Paket</span>
+                <span class="nav-item disabled" title="egress ICMP echo belum diimplementasikan">&#9679; Ping / Traceroute</span>
+                <span class="nav-item disabled" title="engine QoS ada di kernel, endpoint API belum ada">&#9679; QoS &amp; Shaper</span>
+                <span class="nav-item disabled" title="konfigurasi belum dapat ditulis dari WebUI (hanya-baca)">&#9679; Konfigurasi</span>
+            </nav>
+        </aside>
 
-        <main id="main-panel" class="content-area">
-            <div class="card">
-                <h2>System Overview</h2>
-                <p class="sub">memuat /api/v1/system …</p>
+        <main id="view-mount" class="main-area">
+            <div class="panel">
+                <div class="panel-head"><h2>Memuat modul</h2></div>
+                <p class="loading">memuat shell kernel &hellip;</p>
             </div>
         </main>
     </div>
 
-    <script src="/js/status.js"></script>
+    <footer class="chrome-footer">
+        <span>Rinjani 1.0.0 &mdash; Powered by ASL Core Kernel v1.0.0</span>
+        <span id="foot-status" class="mono">segarkan otomatis 5 s</span>
+    </footer>
+
+    <script src="/js/core/api.js"></script>
+    <script src="/js/core/ui.js"></script>
+    <script src="/js/core/app.js"></script>
 </body>
 </html>

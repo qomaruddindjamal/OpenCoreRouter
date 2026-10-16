@@ -5,7 +5,9 @@
 //! - Path & query string separation
 //! - Header parsing (Host, Content-Type, Content-Length, If-None-Match, Connection)
 //! - Security headers: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Cache-Control`
-//! - Static resource delivery with weak/strong ETag validation & HTTP 304 Not Modified
+//! - Static resource delivery with content-derived ETag validation & HTTP 304
+//!   Not Modified (validator = `"<label>-<panjang isi>"`, sehingga suntingan aset
+//!   selalu membatalkan cache browser walau URL dan label versi tetap)
 //! - Fixed-buffer response serialization (zero heap allocations)
 
 #![no_std]
@@ -204,6 +206,17 @@ impl<'a> HttpResponseBuilder<'a> {
         self.write_bytes(&tmp[idx..])
     }
 
+    /// Menulis `ETag: "<label>-<panjang isi>"`. Bagian kedua membuat validator
+    /// berubah otomatis setiap kali isi aset disunting, tanpa perlu menaikkan
+    /// label versi secara manual.
+    fn write_etag(&mut self, etag: &'static str, content_len: usize) -> Result<(), &'static str> {
+        self.write_str("ETag: \"")?;
+        self.write_str(etag)?;
+        self.write_bytes(b"-")?;
+        self.write_usize(content_len)?;
+        self.write_bytes(b"\"\r\n")
+    }
+
     pub fn finish_with_body(mut self, body: &[u8]) -> Result<usize, &'static str> {
         // Status line
         self.write_str("HTTP/1.1 ")?;
@@ -223,15 +236,13 @@ impl<'a> HttpResponseBuilder<'a> {
         self.write_str(self.content_type)?;
         self.write_str("\r\n")?;
 
-        // Optional ETag
+        // Validator: label sumber + panjang isi. Aset WebUI ter-embed di image
+        // kernel sehingga URL tidak pernah berubah; tanpa bagian panjang ini,
+        // suntingan isi aset tidak membatalkan cache browser (304 vs markup lama).
         if let Some(et) = self.etag {
-            self.write_str("ETag: \"")?;
-            self.write_str(et)?;
-            self.write_str("\"\r\n")?;
-            // no-cache (bukan max-age): aset WebUI ter-compile ke dalam image kernel,
-            // sehingga build baru mengubah isi tanpa mengubah URL. Dengan max-age,
-            // browser menyembunyikan UI lama hingga 1 jam meski ETag sudah berganti;
-            // di sini browser wajib revalidasi dan kita jawab 304 bila ETag sama.
+            self.write_etag(et, body.len())?;
+            // no-cache (bukan max-age): browser wajib revalidasi setiap load,
+            // dan kita jawab 304 hanya bila validator masih cocok persis.
             self.write_str("Cache-Control: no-cache, must-revalidate\r\n")?;
         } else {
             self.write_str("Cache-Control: no-cache, no-store, must-revalidate\r\n")?;
@@ -247,13 +258,15 @@ impl<'a> HttpResponseBuilder<'a> {
         Ok(self.offset)
     }
 
-    pub fn finish_not_modified(mut self, etag: &'static str) -> Result<usize, &'static str> {
+    pub fn finish_not_modified(
+        mut self,
+        etag: &'static str,
+        content_len: usize,
+    ) -> Result<usize, &'static str> {
         self.status = HttpStatus::NotModified;
         self.write_str("HTTP/1.1 304 Not Modified\r\n")?;
         self.write_str("Server: OpenCR-Rinjani/1.0.0\r\n")?;
-        self.write_str("ETag: \"")?;
-        self.write_str(etag)?;
-        self.write_str("\"\r\n")?;
+        self.write_etag(etag, content_len)?;
         self.write_str("Connection: close\r\n")?;
         self.write_str("Content-Length: 0\r\n\r\n")?;
         Ok(self.offset)
@@ -267,16 +280,58 @@ pub struct StaticAsset {
     pub content: &'static [u8],
 }
 
+/// Penyangga validator terkecil yang muat untuk label ETag proyek + 20 digit.
+const VALIDATOR_BUF: usize = 96;
+
+/// Susun validator `<etag>-<panjang isi>` di stack, tanpa heap. `None` bila
+/// label terlalu panjang: penganggil wajib melayani 200 penuh, bukan 304,
+/// supaya kegagalan penyusunan tidak pernah menyembunyikan konten baru.
+fn build_validator<'a>(
+    etag: &str,
+    content_len: usize,
+    buf: &'a mut [u8; VALIDATOR_BUF],
+) -> Option<&'a str> {
+    let label = etag.as_bytes();
+    let mut tmp = [0u8; 20];
+    let mut t = tmp.len();
+    let mut n = content_len;
+    if n == 0 {
+        t -= 1;
+        tmp[t] = b'0';
+    }
+    while n > 0 {
+        t -= 1;
+        tmp[t] = b'0' + (n % 10) as u8;
+        n /= 10;
+    }
+    let digits = &tmp[t..];
+    if label.len() + 1 + digits.len() > buf.len() {
+        return None;
+    }
+    buf[..label.len()].copy_from_slice(label);
+    buf[label.len()] = b'-';
+    buf[label.len() + 1..label.len() + 1 + digits.len()].copy_from_slice(digits);
+    core::str::from_utf8(&buf[..label.len() + 1 + digits.len()]).ok()
+}
+
+/// If-None-Match boleh berupa daftar koma (RFC 7232 §3.2); cocokkan tiap butir.
+fn validator_list_matches(inm: &str, validator: &str) -> bool {
+    inm.split(',')
+        .any(|cand| cand.trim().trim_matches('"') == validator)
+}
+
 pub fn serve_static(
     asset: &StaticAsset,
     req: &HttpRequest,
     out_buf: &mut [u8],
 ) -> Result<usize, &'static str> {
-    if let Some(inm) = req.if_none_match {
-        let clean_inm = inm.trim_matches('"');
-        if clean_inm == asset.etag {
+    let mut vbuf = [0u8; VALIDATOR_BUF];
+    let validator = build_validator(asset.etag, asset.content.len(), &mut vbuf);
+
+    if let (Some(v), Some(inm)) = (validator, req.if_none_match) {
+        if validator_list_matches(inm, v) {
             let builder = HttpResponseBuilder::new(out_buf, HttpStatus::NotModified);
-            return builder.finish_not_modified(asset.etag);
+            return builder.finish_not_modified(asset.etag, asset.content.len());
         }
     }
 
@@ -334,16 +389,64 @@ mod tests {
             content: b"<html>Rinjani</html>",
         };
 
-        // Request with matching ETag
-        let req_raw = b"GET /shell.html HTTP/1.1\r\nIf-None-Match: \"sha-abc\"\r\n\r\n";
+        // Request with matching validator (label + panjang isi = 20)
+        let req_raw = b"GET /shell.html HTTP/1.1\r\nIf-None-Match: \"sha-abc-20\"\r\n\r\n";
         let req = HttpRequest::parse(req_raw).unwrap();
         let mut out = [0u8; 512];
         let len = serve_static(&asset, &req, &mut out).unwrap();
         let resp = core::str::from_utf8(&out[..len]).unwrap();
 
         assert!(resp.contains("304 Not Modified"));
-        assert!(resp.contains("ETag: \"sha-abc\""));
+        assert!(resp.contains("ETag: \"sha-abc-20\""));
         assert!(resp.contains("Content-Length: 0"));
+    }
+
+    #[test]
+    fn test_04b_if_none_match_list_is_honoured() {
+        let asset = StaticAsset {
+            path: "/css/base.css",
+            content_type: "text/css",
+            etag: "css-base",
+            content: b"abcdef",
+        };
+        let req_raw =
+            b"GET /css/base.css HTTP/1.1\r\nIf-None-Match: \"lama-1\", \"css-base-6\"\r\n\r\n";
+        let req = HttpRequest::parse(req_raw).unwrap();
+        let mut out = [0u8; 512];
+        let len = serve_static(&asset, &req, &mut out).unwrap();
+        assert!(core::str::from_utf8(&out[..len])
+            .unwrap()
+            .contains("304 Not Modified"));
+    }
+
+    #[test]
+    fn test_04c_validator_changes_when_content_changes() {
+        // Guard regression: suntingan aset tidak boleh lagi dibalas 304 hanya
+        // karena label versinya tidak dinaikkan.
+        let small = StaticAsset {
+            path: "/ui.js",
+            content_type: "application/javascript",
+            etag: "js-ui-v1",
+            content: b"old",
+        };
+        let grown = StaticAsset {
+            content: b"old and much longer body",
+            ..small
+        };
+
+        let req_raw = b"GET /ui.js HTTP/1.1\r\nIf-None-Match: \"js-ui-v1-3\"\r\n\r\n";
+        let req = HttpRequest::parse(req_raw).unwrap();
+        let mut out = [0u8; 512];
+
+        let len = serve_static(&small, &req, &mut out).unwrap();
+        assert!(core::str::from_utf8(&out[..len])
+            .unwrap()
+            .contains("304 Not Modified"));
+
+        let len = serve_static(&grown, &req, &mut out).unwrap();
+        let resp = core::str::from_utf8(&out[..len]).unwrap();
+        assert!(resp.contains("200 OK"));
+        assert!(resp.contains("ETag: \"js-ui-v1-24\""));
     }
 
     #[test]
@@ -362,7 +465,7 @@ mod tests {
         let resp = core::str::from_utf8(&out[..len]).unwrap();
 
         assert!(resp.contains("200 OK"));
-        assert!(resp.contains("ETag: \"sha-abc\""));
+        assert!(resp.contains("ETag: \"sha-abc-20\""));
         assert!(resp.ends_with("<html>Rinjani</html>"));
     }
 

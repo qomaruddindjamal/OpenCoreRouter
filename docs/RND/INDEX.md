@@ -30,6 +30,8 @@
 | [`RND_18_IS02_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_18_IS02_REPORT.md) | Block Device Nyata (ATA PIO), Persistensi RJCFG01 Lintas Boot & Gate ARP Host | `VERIFIED` | Sprint IS-02 |
 | [`RND_19_IS03_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_19_IS03_REPORT.md) | Self-Installer Dalam Kernel (CLI `install`), Konsol Serial Dua-Arah & Boot dari Disk Hasil Instal | `VERIFIED` | Sprint IS-03 |
 | [`RND_20_WAN01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_20_WAN01_REPORT.md) | WebUI Terpasang & Dilayani dari Alamat WAN (satu NIC bridged), DORA Option 54, Gerbang Ukuran Aset | `VERIFIED` | Sprint WAN-01 |
+| [`RND_21_BOOT01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_21_BOOT01_REPORT.md) | Splash Boot Kernel Kontigu & Checklist `[ OK ]` Terikat Pemeriksaan Nyata, Temuan Jalur Power-Off | `VERIFIED` | Sprint BOOT-01 |
+| [`RND_22_UI01_REPORT.md`](file:///c:/OpenCR/docs/RND/RND_22_UI01_REPORT.md) | WebUI HTML Modular (shell + 4 parsial view) rupa konsol carrier, pengikat deklaratif tanpa `innerHTML`, validator ETag berbasis panjang isi | `VERIFIED` | Sprint UI-01 |
 
 ---
 

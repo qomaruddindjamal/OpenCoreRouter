@@ -1,0 +1,26 @@
+<section class="view" data-source="/api/v1/system">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>System Overview</h2>
+            <span class="panel-note" data-bind="status" data-fmt="pill"></span>
+        </div>
+        <div class="panel-body">
+            <div class="kpi-grid">
+                <div class="kpi"><span class="kpi-label">Kernel Base</span><span class="kpi-val" data-bind="kernel"></span></div>
+                <div class="kpi"><span class="kpi-label">Distribusi</span><span class="kpi-val" data-bind="distro"></span></div>
+                <div class="kpi"><span class="kpi-label">Hostname</span><span class="kpi-val" data-bind="hostname"></span></div>
+                <div class="kpi"><span class="kpi-label">Arsitektur</span><span class="kpi-val" data-bind="arch"></span></div>
+                <div class="kpi"><span class="kpi-label">Uptime (PIT 8254)</span><span class="kpi-val" data-bind="uptime_ms" data-fmt="uptime"></span></div>
+                <div class="kpi"><span class="kpi-label">Tautan WAN</span><span class="kpi-val" data-bind="wan_up" data-fmt="pill-up"></span></div>
+                <div class="kpi"><span class="kpi-label">Sumber Alamat</span><span class="kpi-val" data-bind="wan_source"></span></div>
+                <div class="kpi"><span class="kpi-label">HTTP Dilayani</span><span class="kpi-val accent" data-bind="requests_served" data-fmt="num"></span></div>
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-head"><h2>Cakupan Build Ini</h2></div>
+        <div class="panel-body">
+            <p class="note">Semua angka di halaman ini dibaca langsung dari memori kernel lewat <span class="mono">/api/v1/system</span> pada setiap segar 5 detik. Modul yang belum punya endpoint (rute, lease DHCP, tabel ARP, jingkar paket, QoS) sengaja ditandai abu-abu di menu dan tidak menampilkan data kosong yang seolah-olah valid.</p>
+        </div>
+    </div>
+</section>

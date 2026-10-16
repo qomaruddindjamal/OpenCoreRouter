@@ -1,0 +1,24 @@
+<section class="view" data-source="/api/v1/firewall/rules">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Kebijakan Firewall</h2>
+            <span class="panel-note" data-bind="wan_protected" data-fmt="pill-yes"></span>
+        </div>
+        <div class="panel-body">
+            <div class="kpi-grid">
+                <div class="kpi"><span class="kpi-label">Kebijakan Bawaan</span><span class="kpi-val" data-bind="default_policy" data-fmt="pill-policy"></span></div>
+                <div class="kpi"><span class="kpi-label">Aturan TCAM</span><span class="kpi-val accent" data-bind="tcam_rules" data-fmt="num"></span></div>
+                <div class="kpi"><span class="kpi-label">Aturan DNAT</span><span class="kpi-val accent" data-bind="dnat_rules" data-fmt="num"></span></div>
+                <div class="kpi"><span class="kpi-label">WAN Terlindungi</span><span class="kpi-val" data-bind="wan_protected" data-fmt="bool"></span></div>
+                <div class="kpi"><span class="kpi-label">Port Manajemen</span><span class="kpi-val" data-bind="http_port" data-fmt="num"></span></div>
+                <div class="kpi"><span class="kpi-label">Port Terbuka</span><span class="kpi-val" data-bind="http_port_open" data-fmt="pill-yes"></span></div>
+            </div>
+        </div>
+    </div>
+    <div class="panel">
+        <div class="panel-head"><h2>Catatan Hanya-Baca</h2></div>
+        <div class="panel-body">
+            <p class="note">WebUI ini membaca jumlah aturan dari mesin TCAM kernel dan tidak dapat menulis aturan: endpoint POST belum ada, dan server hanya menerima <span class="mono">GET</span>/<span class="mono">HEAD</span> (metode lain dijawab <span class="mono">405</span>). Daftar aturan per-baris belum diekspos API, jadi sengaja tidak ditampilkan daripada dikarang.</p>
+        </div>
+    </div>
+</section>

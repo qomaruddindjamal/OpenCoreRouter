@@ -1,26 +1,45 @@
 /* ==========================================================================
-   OpenCR Rinjani 1.0.0 Base Tokens & Typography (Mitranet Carrier Theme)
+   Rinjani 1.0.0 — Token, Reset & Tipografi (tema chrome-gelar / data-terang)
    ========================================================================== */
 
 :root {
-    --pf-bg-main: #0f1115;
+    --pf-bg-main: #f4f6f9;
     --pf-header-bg: #1e222b;
     --pf-header-border: #282d37;
     --pf-sidebar-bg: #181b20;
     --pf-sidebar-border: #252a35;
-    --pf-panel-bg: #1e222b;
-    --pf-panel-border: #2d3341;
-    --pf-accent-cyan: #00bcd4;
-    --pf-accent-hover: #00e5ff;
+    --pf-sidebar-hover: #222733;
+    --pf-sidebar-active: #262c3a;
+    --pf-panel-bg: #ffffff;
+    --pf-panel-border: #e2e8f0;
+    --pf-panel-head: #1e222b;
     --pf-accent-blue: #337ab7;
+    --pf-accent-hover: #4da3ff;
+    --pf-accent-cyan: #00bcd4;
     --pf-text-menu: #a4adbd;
     --pf-text-sub: #b4bccb;
     --pf-text-title: #6e788b;
-    --pf-text-primary: #e6edf3;
-    --pf-sidebar-w: 230px;
-    --pf-header-h: 56px;
-    --pf-font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --pf-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+    --pf-text-primary: #1e293b;
+    --pf-text-dim: #475569;
+    --pf-th-bg: #f8fafc;
+    --pf-row-line: #f1f5f9;
+    --pf-row-stripe: #fbfcfd;
+    --pf-row-hover: #f1f5f9;
+    --pf-ok: #2e7d32;
+    --pf-ok-bg: #e8f5e9;
+    --pf-warn: #f57f17;
+    --pf-warn-bg: #fff8e1;
+    --pf-err: #b71c1c;
+    --pf-err-bg: #fdecea;
+    --pf-neutral-bg: #eceff1;
+    --pf-up: #27ae60;
+    --pf-down: #c0392b;
+    --pf-sidebar-w: 220px;
+    --pf-sidebar-mini-w: 56px;
+    --pf-header-h: 50px;
+    --pf-footer-h: 38px;
+    --pf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --pf-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 }
 
 * {
@@ -29,10 +48,51 @@
     padding: 0;
 }
 
+html,
+body {
+    height: 100%;
+}
+
 body {
     background-color: var(--pf-bg-main);
     color: var(--pf-text-primary);
-    font-family: var(--pf-font-stack);
+    font-family: var(--pf-font);
+    font-size: 13px;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+}
+
+h2 {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+h3 {
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--pf-text-title);
+}
+
+a {
+    text-decoration: none;
+}
+
+.mono {
+    font-family: var(--pf-mono);
+    font-size: 12px;
+}
+
+.micro {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.7px;
+    font-weight: 600;
+    color: var(--pf-text-title);
+}
+
+button {
+    font-family: inherit;
+    cursor: pointer;
 }

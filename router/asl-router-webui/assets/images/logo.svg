@@ -1,14 +1,15 @@
-﻿<svg id="logo" role="img" aria-labelledby="mitranet-logo" x="0px" y="0px" viewBox="0 0 282.8 84.2">
-	<title id="mitranet-logo-svg">MitraNet Logo</title>
-	<defs>
-		<linearGradient id="rinjaniGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-			<stop offset="0%" stop-color="#00bcd4"/>
-			<stop offset="100%" stop-color="#00e5ff"/>
-		</linearGradient>
-	</defs>
-	<!-- Stylized Rinjani peak / shield icon on the left -->
-	<polygon points="12,65 42,15 72,65 52,65 42,45 32,65" fill="url(#rinjaniGrad)"/>
-	<polygon points="42,28 50,44 34,44" fill="#ffffff" opacity="0.9"/>
-	<!-- Wordmark: MITRANET -->
-	<text x="85" y="58" font-family="'Roboto', 'Helvetica Neue', Helvetica, Arial, sans-serif" font-weight="900" font-size="44" fill="#ffffff" letter-spacing="1.5">MITRA<tspan fill="#00bcd4">NET</tspan></text>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="logo" role="img" aria-labelledby="opencr-logo" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 62">
+    <title id="opencr-logo">Open Core Router Rinjani Logo</title>
+    <defs>
+        <linearGradient id="rinjaniGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#00bcd4"/>
+            <stop offset="100%" stop-color="#00e5ff"/>
+        </linearGradient>
+    </defs>
+    <!-- Puncak Rinjani: identitas distro, bukan wordmark pihak ketiga. -->
+    <polygon points="10,50 32,9 54,50 40,50 32,32 24,50" fill="url(#rinjaniGrad)"/>
+    <polygon points="32,21 39,32 25,32" fill="#ffffff" opacity="0.9"/>
+    <text x="64" y="34" font-family="'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="700" font-size="21" fill="#ffffff" letter-spacing="0.6">OPEN<tspan fill="#00bcd4">CR</tspan></text>
+    <text x="64" y="49" font-family="'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-weight="600" font-size="10" fill="#8b97ab" letter-spacing="2.4">RINJANI ROUTER</text>
 </svg>

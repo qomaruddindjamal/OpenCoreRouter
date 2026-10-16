@@ -1,0 +1,41 @@
+<section class="view">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Antarmuka Jaringan</h2>
+            <span class="panel-note">/api/v1/interfaces</span>
+        </div>
+        <table class="tbl">
+            <thead>
+                <tr>
+                    <th>Nama</th>
+                    <th>Mode</th>
+                    <th>Status</th>
+                    <th>MAC</th>
+                    <th>IPv4</th>
+                    <th>Netmask</th>
+                    <th>Gateway</th>
+                    <th>Sumber</th>
+                    <th class="num">RX</th>
+                    <th class="num">TX</th>
+                </tr>
+            </thead>
+            <tbody data-list="/api/v1/interfaces">
+                <tr data-row>
+                    <td class="row-name" data-bind="name"></td>
+                    <td class="row-mode" data-bind="mode"></td>
+                    <td data-bind="status" data-fmt="pill"></td>
+                    <td class="mono" data-bind="mac" data-fmt="dash"></td>
+                    <td class="mono" data-bind="ip" data-fmt="ip"></td>
+                    <td class="mono" data-bind="netmask" data-fmt="dash"></td>
+                    <td class="mono" data-bind="gateway" data-fmt="dash"></td>
+                    <td data-bind="source" data-fmt="dash"></td>
+                    <td class="num" data-bind="rx_packets" data-fmt="num"></td>
+                    <td class="num" data-bind="tx_packets" data-fmt="num"></td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="panel-body">
+            <p class="note">RX/TX adalah hitungan paket pada jalur DMA virtio-net nyata, bukan perkiraan. eth1 dilaporkan <span class="mono">absent</span> bila kernel hanya mendeteksi satu NIC &mdash; itu keadaan sebenarnya pada topologi satu adapter bridged, bukan kegagalan pembacaan.</p>
+        </div>
+    </div>
+</section>

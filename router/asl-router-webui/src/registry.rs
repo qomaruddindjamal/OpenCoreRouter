@@ -1,6 +1,12 @@
 //! `asl-router-webui::registry` — WebUI Static Asset Registry Table
 //!
-//! Exposes embedded static assets compiled into the kernel image via `include_str!` / `include_bytes!`.
+//! Exposes embedded static assets compiled into the kernel image via `include_bytes!`.
+//!
+//! Struktur aset bersifat MODULAR: `SHELL_HTML` hanya menyediakan chrome (header,
+//! sidebar, footer, tempat mount), sedangkan tiap halaman adalah parsial HTML
+//! deklaratif di `/views/*.html` yang diminta router client-side saat modulnya
+//! dibuka. Pemecahan ini menjaga setiap berkas jauh di bawah batas buffer
+//! respons TCP kernel (gerbang konstan `WEB_RESP_MAX` di `lib.rs`).
 
 use asl_router_webcore::StaticAsset;
 
@@ -33,77 +39,118 @@ pub const MODULES: [WebUiModule; 4] = [
     },
 ];
 
-pub const SHELL_HTML: StaticAsset = StaticAsset {
-    path: "/",
-    content_type: "text/html; charset=utf-8",
-    etag: "rinjani-shell-v102",
-    content: include_bytes!("../assets/shell.html"),
-};
+/// Satu berkas aset yang ter-embed. Label `$etag` adalah identitas revisi aset
+/// internal (`-ui01`), BUKAN versi produk: versi resmi tetap Rinjani 1.0.0 dan
+/// ASL Core Kernel v1.0.0. Validator yang dikirim ke browser disusun otomatis
+/// oleh `asl_router_webcore::serve_static` sebagai `"<label>-<panjang isi>"`,
+/// jadi suntingan sekecil apa pun membatalkan cache klien tanpa menaikkan label.
+macro_rules! asset {
+    ($name:ident, $path:literal, $ctype:literal, $etag:literal, $file:literal) => {
+        pub const $name: StaticAsset = StaticAsset {
+            path: $path,
+            content_type: $ctype,
+            etag: $etag,
+            content: include_bytes!(concat!("../assets/", $file)),
+        };
+    };
+}
 
-pub const CSS_BASE: StaticAsset = StaticAsset {
-    path: "/css/base.css",
-    content_type: "text/css; charset=utf-8",
-    etag: "rinjani-css-base-v100",
-    content: include_bytes!("../assets/css/base.css"),
-};
+asset!(
+    SHELL_HTML,
+    "/",
+    "text/html; charset=utf-8",
+    "rinjani-shell-ui01",
+    "shell.html"
+);
+asset!(
+    CSS_BASE,
+    "/css/base.css",
+    "text/css; charset=utf-8",
+    "rinjani-css-base-ui01",
+    "css/base.css"
+);
+asset!(
+    CSS_LAYOUT,
+    "/css/layout.css",
+    "text/css; charset=utf-8",
+    "rinjani-css-layout-ui01",
+    "css/layout.css"
+);
+asset!(
+    CSS_COMPONENTS,
+    "/css/components.css",
+    "text/css; charset=utf-8",
+    "rinjani-css-components-ui01",
+    "css/components.css"
+);
+asset!(
+    JS_API,
+    "/js/core/api.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-api-ui01",
+    "js/core/api.js"
+);
+asset!(
+    JS_UI,
+    "/js/core/ui.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-ui-ui01",
+    "js/core/ui.js"
+);
+asset!(
+    JS_APP,
+    "/js/core/app.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-app-ui01",
+    "js/core/app.js"
+);
+asset!(
+    VIEW_SYSTEM,
+    "/views/system.html",
+    "text/html; charset=utf-8",
+    "rinjani-view-system-ui01",
+    "views/system.html"
+);
+asset!(
+    VIEW_INTERFACES,
+    "/views/interfaces.html",
+    "text/html; charset=utf-8",
+    "rinjani-view-interfaces-ui01",
+    "views/interfaces.html"
+);
+asset!(
+    VIEW_FIREWALL,
+    "/views/firewall.html",
+    "text/html; charset=utf-8",
+    "rinjani-view-firewall-ui01",
+    "views/firewall.html"
+);
+asset!(
+    VIEW_SERVICES,
+    "/views/services.html",
+    "text/html; charset=utf-8",
+    "rinjani-view-services-ui01",
+    "views/services.html"
+);
+asset!(
+    LOGO_SVG,
+    "/images/logo.svg",
+    "image/svg+xml; charset=utf-8",
+    "rinjani-logo-svg-ui01",
+    "images/logo.svg"
+);
 
-pub const CSS_LAYOUT: StaticAsset = StaticAsset {
-    path: "/css/layout.css",
-    content_type: "text/css; charset=utf-8",
-    etag: "rinjani-css-layout-v100",
-    content: include_bytes!("../assets/css/layout.css"),
-};
-
-pub const CSS_COMPONENTS: StaticAsset = StaticAsset {
-    path: "/css/components.css",
-    content_type: "text/css; charset=utf-8",
-    etag: "rinjani-css-components-v100",
-    content: include_bytes!("../assets/css/components.css"),
-};
-
-pub const JS_COMMON_OPCR: StaticAsset = StaticAsset {
-    path: "/js/common/opcr.js",
-    content_type: "application/javascript; charset=utf-8",
-    etag: "rinjani-js-opcr-v100",
-    content: include_bytes!("../assets/js/common/opcr.js"),
-};
-
-pub const JS_COMMON_HTMX: StaticAsset = StaticAsset {
-    path: "/js/common/htmx-helpers.js",
-    content_type: "application/javascript; charset=utf-8",
-    etag: "rinjani-js-htmx-helpers-v100",
-    content: include_bytes!("../assets/js/common/htmx-helpers.js"),
-};
-
-pub const JS_STATUS: StaticAsset = StaticAsset {
-    path: "/js/status.js",
-    content_type: "application/javascript; charset=utf-8",
-    etag: "rinjani-js-status-v102",
-    content: include_bytes!("../assets/js/status.js"),
-};
-
-pub const VENDOR_HTMX: StaticAsset = StaticAsset {
-    path: "/vendor/htmx.js",
-    content_type: "application/javascript; charset=utf-8",
-    etag: "rinjani-htmx-stub-v1",
-    content: include_bytes!("../assets/vendor/htmx.js"),
-};
-
-pub const LOGO_SVG: StaticAsset = StaticAsset {
-    path: "/images/logo.svg",
-    content_type: "image/svg+xml; charset=utf-8",
-    etag: "mitranet-logo-svg",
-    content: include_bytes!("../assets/images/logo.svg"),
-};
-
-pub const ALL_ASSETS: [&StaticAsset; 9] = [
+pub const ALL_ASSETS: [&StaticAsset; 12] = [
     &SHELL_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
     &CSS_COMPONENTS,
-    &JS_COMMON_OPCR,
-    &JS_COMMON_HTMX,
-    &JS_STATUS,
-    &VENDOR_HTMX,
+    &JS_API,
+    &JS_UI,
+    &JS_APP,
+    &VIEW_SYSTEM,
+    &VIEW_INTERFACES,
+    &VIEW_FIREWALL,
+    &VIEW_SERVICES,
     &LOGO_SVG,
 ];
