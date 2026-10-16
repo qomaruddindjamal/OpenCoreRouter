@@ -20,6 +20,14 @@ use serial::SerialPort;
 #[cfg(target_os = "none")]
 static SERIAL: SerialPort = SerialPort::new();
 
+/// Satu baris checklist splash: `[ OK ]` hanya dicetak bila pemeriksaannya lulus.
+#[cfg(target_os = "none")]
+fn splash_check(label: &str, ok: bool) {
+    SERIAL.write_str(if ok { "   [ OK ] " } else { "   [FAIL] " });
+    SERIAL.write_str(label);
+    SERIAL.write_str("\r\n");
+}
+
 /// Cetak u16 sebagai 4 digit hex (keperluan inventori PCI).
 #[cfg(target_os = "none")]
 fn write_hex_u16(v: u16) {
@@ -245,6 +253,17 @@ core::arch::global_asm!(
 // BARE-METAL ENTRY LOGIC ([R1]..[R7] TELEMETRY)
 // -----------------------------------------------------------------------------
 
+/// Splash ASCII-art "ASL" untuk konsol serial. 7-bit ASCII saja: karakter
+/// box-drawing UTF-8 tampil sebagai mojibake pada log UART (lihat RND_19).
+#[cfg(target_os = "none")]
+const BOOT_ART: [&str; 5] = [
+    "  #   ####  #",
+    " # #  #     #",
+    "#####   ###  #",
+    " # #      #  #",
+    " # #   ####  #####",
+];
+
 #[cfg(target_os = "none")]
 #[no_mangle]
 pub extern "C" fn rinjani_kernel_main() -> ! {
@@ -286,7 +305,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut scheduler = asl_sched::PreemptiveScheduler::new();
     let task = asl_sched::TaskControlBlock::new(1, 10, 20_000);
     let _ = scheduler.add_task(task);
-    if let Some(_picked) = scheduler.pick_next_task() {
+    let sched_ok = scheduler.pick_next_task().is_some();
+    if sched_ok {
         SERIAL.write_str("[R4] SCHED TICK\n");
     } else {
         SERIAL.write_str("[R4] SCHED TICK FAILED\n");
@@ -313,7 +333,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         errors: 0,
         vlan_tag: 100,
     };
-    if ring.push(desc).is_ok() && ring.pop().is_some() {
+    let ring_ok = ring.push(desc).is_ok() && ring.pop().is_some();
+    if ring_ok {
         SERIAL.write_str("[R5] FASTPATH RING SELFTEST PASS\n");
     } else {
         SERIAL.write_str("[R5] FASTPATH RING SELFTEST FAILED\n");
@@ -326,6 +347,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         action: asl_router_tcam::engine::RuleAction::Permit,
         priority: 1,
     };
+    let mut tcam_ok = false;
     if tcam.add_rule(rule).is_ok() {
         let pkt = asl_router_tcam::engine::Packet5T {
             src_ip: 0x0A000001,
@@ -334,7 +356,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             dst_port: 8080,
             proto: 6,
         };
-        if tcam.classify(&pkt) == asl_router_tcam::engine::RuleAction::Permit {
+        tcam_ok = tcam.classify(&pkt) == asl_router_tcam::engine::RuleAction::Permit;
+        if tcam_ok {
             SERIAL.write_str("[R6] TCAM SELFTEST PASS\n");
         } else {
             SERIAL.write_str("[R6] TCAM SELFTEST FAILED\n");
@@ -410,6 +433,31 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     if eth0.is_none() || eth1.is_none() {
         SERIAL.write_str("[R9] DMA ARENA ALLOC FAILED (memmap usable <16GiB habis)\n");
     }
+
+    // Checklist splash — satu blok utuh. ASCII art + salam bersifat hiasan;
+    // setiap baris [ OK ] diikat pada pemeriksaan yang SUDAH selesai di atas,
+    // kegagalan dicetak [FAIL], tidak pernah [ OK ] buta. [R3] tidak perlu flag:
+    // bila core init gagal kernel sudah halt di spin loop.
+    let core_ready = sched_ok && ring_ok && tcam_ok;
+    let mem_ready = hhdm != 0 && eth0.is_some() && eth1.is_some();
+    let arch_ready = hwinv.cpu.max_standard_leaf > 0 && hwinv.cpu.has_tsc;
+    for line in BOOT_ART {
+        SERIAL.write_str("   ");
+        SERIAL.write_str(line);
+        SERIAL.write_str("\r\n");
+    }
+    SERIAL.write_str("   ASL Core Kernel v1.0.0\r\n");
+    SERIAL.write_str("   Selamat Datang Open Core Router\r\n");
+    SERIAL.write_str("\r\n");
+    splash_check("Kernel initialized", core_ready);
+    splash_check("Memory manager initialized", mem_ready);
+    splash_check("CPU architecture detected", arch_ready);
+    SERIAL.write_str("\r\n");
+    SERIAL.write_str(if core_ready && mem_ready && arch_ready {
+        "   ASL kernel booted successfully.\r\n"
+    } else {
+        "   BOOT TIDAK LENGKAP — periksa baris [FAIL] di atas\r\n"
+    });
     let mut _virtio_io_port: u16 = 0;
 
     if let Some(pci) = virtio_dev {
