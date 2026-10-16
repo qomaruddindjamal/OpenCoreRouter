@@ -1,43 +1,19 @@
-<section class="view" data-module="Terminal" data-module-ico="term">
-    <div class="panel">
-        <div class="panel-head">
-            <h2>Terminal</h2>
-            <span class="panel-note">desain saja &middot; tidak ada jalur perintah HTTP</span>
+<section class="view term-view" data-module="Terminal" data-module-ico="term">
+    <div class="term-win">
+        <div class="term-tabs" id="term-tabs"></div>
+        <div class="term-head">
+            <span class="term-hico" data-ico="term"></span>
+            <span class="term-title">Terminal</span>
+            <span class="term-host mono" id="term-host">menghubungkan&hellip;</span>
+            <span class="term-hspace"></span>
+            <button type="button" class="term-hbtn" id="term-new" title="Buka sesi terminal baru">&#43; New</button>
+            <button type="button" class="term-hbtn" id="term-close" title="Tutup sesi terminal ini">&times; Close</button>
         </div>
-
-        <div class="wf-tabs">
-            <button type="button" class="wf-tab active" data-tab="cmd">Konsol</button>
-            <button type="button" class="wf-tab" data-tab="facts">Fakta jalur</button>
+        <div class="term-screen mono" id="term-screen" tabindex="0" role="log" aria-live="polite"></div>
+        <div class="term-inputline">
+            <span class="term-prompt mono" id="term-prompt">[rinjani@OpenCoreRouter] &gt;</span>
+            <input type="text" class="term-input" id="term-input" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ketik perintah &mdash; help untuk daftar">
         </div>
-
-        <div class="wf-toolbar" data-tools="refresh"
-             data-hint="0 perintah terkirim: WebUI tidak punya jalur tulis perintah ke kernel"></div>
-
-        <div class="wf-panel active" data-panel="cmd">
-            <div class="wf-f">
-                <fieldset>
-                    <legend>Perintah</legend>
-                    <div class="f-row">
-                        <label for="f-cmd">Baris perintah</label>
-                        <input type="text" id="f-cmd" placeholder="config show" disabled>
-                    </div>
-                    <div class="f-row">
-                        <button type="button" class="wf-btn" disabled>Kirim</button>
-                    </div>
-                    <p class="f-hint">Kolom dan tombol ini sengaja dimatikan. Tidak ada satu karakter pun yang bisa dikirim ke kernel dari peramban pada build ini.</p>
-                </fieldset>
-            </div>
-        </div>
-
-        <div class="wf-panel" data-panel="facts">
-            <table class="wf-kv">
-                <tr><td>Konsol yang nyata</td><td><span class="mono">rinjani-cli</span> pada serial COM1 115200 &mdash; prompt-nya terlihat sebagai baris <span class="mono">rinjani-cli&gt;</span> di log boot</td></tr>
-                <tr><td>Permukaan tulis HTTP</td><td>hanya <span class="mono">POST /api/v1/interfaces/&lt;nama&gt;</span> (WAN) dan <span class="mono">POST /api/v1/power</span> (dua langkah arm)</td></tr>
-                <tr><td>Titik perintah umum</td><td>tidak ada <span class="mono">/api/v1/cli</span> maupun <span class="mono">/exec</span>; POST ke luar dua permukaan itu dibalas <span class="mono">405 method_not_allowed</span></td></tr>
-                <tr><td>Autentikasi WebUI</td><td>belum ada &mdash; modul User Manager masih rupa (<span class="mono">enabled:false</span>)</td></tr>
-            </table>
-        </div>
-
-        <p class="wf-note">Urutan yang harus dibalik agar halaman ini berfungsi: mesin autentikasi lebih dulu, baru saluran perintah berdaftar-putih (satu perintah terbaca pada satu waktu). Terminal HTTP tanpa kunci sama dengan cangkang terbuka pada NIC WAN. Yang tidak dilakukan halaman ini: menampilkan keluaran palsu, transkrip karangan, atau prompt yang tampak hidup.</p>
     </div>
+    <p class="term-note">Terminal ini bukan cangkang yang berjalan di dalam kernel. Setiap baris yang diketik dipetakan ke satu panggilan HTTP nyata ke <span class="mono">/api/v1/&hellip;</span>, dan yang tercetak adalah balasan kernel apa adanya. Perintah yang tidak punya jalur di kernel ditolak dengan sebab teknis, bukan dengan keluaran contoh. Scrollback hanya hidup di memori peramban: pindah modul atau muat ulang halaman membersihkannya.</p>
 </section>

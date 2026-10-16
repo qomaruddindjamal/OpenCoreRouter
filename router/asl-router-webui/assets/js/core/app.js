@@ -72,6 +72,34 @@
         OPCR.ui.refresh(node, function (ok, why) { stamp(ok, why); });
     }
 
+    // Terminal dan CSS-nya dimuat malas. shell.html adalah pemegang gerbang
+    // aset (7 882 B dari 7 936 B), jadi dua berkas itu sengaja tidak dipasang
+    // sebagai <script>/<link> di dokumen; halaman lain tidak pernah membayarnya.
+    var termLoading = false;
+    function loadJs(src, done) {
+        var sc = document.createElement("script");
+        sc.src = src;
+        sc.onload = done;
+        document.head.appendChild(sc);
+    }
+    function termHook() {
+        if (OPCR.term && OPCR.term.setup) {
+            OPCR.term.setup(mount.firstElementChild);
+            return;
+        }
+        if (termLoading) return;
+        termLoading = true;
+        var css = document.createElement("link");
+        css.rel = "stylesheet";
+        css.href = "/css/terminal.css";
+        document.head.appendChild(css);
+        loadJs("/js/core/termcmd.js", function () {
+            loadJs("/js/core/term.js", function () {
+                if (current === "terminal") OPCR.term.setup(mount.firstElementChild);
+            });
+        });
+    }
+
     function loadChips() {
         OPCR.api.get("/api/v1/system", function (ok, d) {
             var c = document.getElementById("chip-hostname");
@@ -111,6 +139,7 @@
             OPCR.wf.setup(node);
             OPCR.tbl.setup(node);
             OPCR.system.setup(node);
+            if (name === "terminal") termHook();
             refreshView();
             loadChips();
             timer = setInterval(function () { refreshView(); loadChips(); }, REFRESH_MS);

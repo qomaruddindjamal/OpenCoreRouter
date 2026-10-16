@@ -1,0 +1,245 @@
+/* OpenCR WebUI — jendela Terminal.
+   Satu-satunya halaman yang meniru jendela konsol WebFig: bar judul berisi
+   nama + tombol New/Close (tidak ada minimize/maximize), layar skrol monospace,
+   dan satu baris prompt di bawah. Warna diambil dari token tema supaya dark/dusk
+   ikut; tidak ada nilai yang dipatok ke putih-hitam murni. */
+
+.term-win {
+    display: flex;
+    flex-direction: column;
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 6px;
+    box-shadow: 0 10px 26px rgba(6, 44, 58, 0.14);
+    overflow: hidden;
+}
+
+/* Strip sesi: hanya muncul bila ada lebih dari satu terminal. */
+.term-tabs {
+    display: none;
+    gap: 4px;
+    padding: 6px 8px 0;
+    background: var(--pf-panel-bg);
+}
+
+.term-tabs.on {
+    display: flex;
+}
+
+.term-tab {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 11.5px;
+    color: var(--pf-text-sub);
+    background: var(--pf-neutral-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-bottom: none;
+    border-radius: 5px 5px 0 0;
+    cursor: pointer;
+}
+
+.term-tab.active {
+    color: var(--pf-text-primary);
+    background: var(--pf-input-bg);
+    font-weight: 600;
+}
+
+.term-tab .term-tab-x {
+    color: var(--pf-text-dim);
+    font-size: 13px;
+    line-height: 1;
+}
+
+.term-tab .term-tab-x:hover {
+    color: var(--pf-err);
+}
+
+/* Bar judul jendela. `--pf-panel-head` itu strip TERANG (aqua pucat), jadi teks
+   header wajib ikut --pf-panel-head-text yang dibaca ulang per tema. Cacat
+   UI-02I saat verifikasi live: memakai --pf-on-accent (putih) membuat judul,
+   chip host, dan tombol New/Close terrender putih di atas putih. */
+.term-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 10px;
+    background: var(--pf-panel-head);
+    color: var(--pf-panel-head-text);
+    border-bottom: 1px solid var(--pf-panel-border);
+}
+
+.term-hico {
+    width: 15px;
+    height: 15px;
+    background-color: var(--pf-accent-blue);
+}
+
+.term-title {
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.2px;
+}
+
+.term-host {
+    font-size: 10.5px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    background: var(--pf-chip-bg);
+    border: 1px solid var(--pf-panel-border);
+    color: var(--pf-text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 46%;
+}
+
+.term-hspace {
+    flex: 1 1 auto;
+}
+
+.term-hbtn {
+    padding: 3px 10px;
+    font-size: 11.5px;
+    font-family: var(--pf-font);
+    color: var(--pf-text-primary);
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.term-hbtn:hover {
+    color: var(--pf-accent-hover);
+    background: var(--pf-row-hover);
+    border-color: var(--pf-accent-blue);
+}
+
+/* Tombol penutup sesi memakai token galat, bukan token bahaya: `--pf-danger`
+   tidak ditimpa oleh tema gelap sehingga terukur hanya 2.6:1 di atas strip
+   header gelap, sedangkan `--pf-err` punya nilai terang untuk dark/dusk. */
+#term-close {
+    color: var(--pf-err);
+}
+
+#term-close:hover {
+    background: var(--pf-err-bg);
+    border-color: var(--pf-ring-warn);
+}
+
+.term-hbtn:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* Layar. */
+.term-screen {
+    height: clamp(280px, 48vh, 520px);
+    overflow-y: auto;
+    padding: 10px 12px;
+    background: var(--pf-input-bg);
+    color: var(--pf-text-primary);
+    font-family: var(--pf-mono);
+    font-size: 12.5px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+    cursor: text;
+}
+
+.term-screen > div + div {
+    margin-top: 1px;
+}
+
+.tl-art {
+    /* Cap "OPEN CORE ROUTER" adalah identitas, jadi tidak boleh pakai cyan
+       terang (--pf-accent-cyan terukur 2.4:1 di atas putih pada tema default).
+       accent-hover punya pasangan gelap yang tetap kontras di tema dark/dusk. */
+    color: var(--pf-accent-hover);
+    font-weight: 700;
+}
+
+.tl-cmd {
+    /* Baris yang baru diketik operator harus paling tegas di layar:
+       --pf-text-title hanya 3.1:1 di atas putih dan identik dengan .tl-head. */
+    color: var(--pf-text-primary);
+    font-weight: 700;
+    font-weight: 600;
+}
+
+.tl-head {
+    color: var(--pf-text-dim);
+    font-weight: 600;
+}
+
+.tl-ok {
+    color: var(--pf-ok);
+}
+
+.tl-err {
+    color: var(--pf-err);
+}
+
+.tl-info {
+    color: var(--pf-text-sub);
+}
+
+/* Baris perintah aktif. */
+.term-inputline {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: var(--pf-input-bg);
+    border-top: 1px solid var(--pf-panel-border);
+}
+
+.term-prompt {
+    color: var(--pf-ok);
+    font-size: 12.5px;
+    font-weight: 700;
+    white-space: nowrap;
+}
+
+.term-input {
+    flex: 1 1 auto;
+    min-width: 0;
+    padding: 3px 0;
+    font-family: var(--pf-mono);
+    font-size: 12.5px;
+    color: var(--pf-text-primary);
+    background: transparent;
+    border: none;
+    outline: none;
+}
+
+.term-input:disabled {
+    color: var(--pf-text-dim);
+}
+
+.term-note {
+    margin: 10px 2px 0;
+    font-size: 11.5px;
+    line-height: 1.6;
+    color: var(--pf-text-sub);
+}
+
+@media (max-width: 900px) {
+    .term-screen {
+        height: 52vh;
+        font-size: 11.5px;
+    }
+
+    .term-head {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .term-host {
+        order: 3;
+        max-width: 100%;
+        width: 100%;
+    }
+}
