@@ -1,0 +1,31 @@
+<section class="view" data-module="User Manager" data-module-ico="sys">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>User Manager</h2>
+            <span class="panel-note">desain saja &middot; WebUI tanpa autentikasi</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="users">Users</button>
+            <button type="button" class="wf-tab" data-tab="sect">Secrets</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="0 pengguna &middot; konsol ini belum meminta login"></div>
+
+        <div class="wf-panel active" data-panel="users">
+            <table class="wf-kv">
+                <tr><td>Tabel pengguna</td><td>tidak ada di state kernel</td></tr>
+                <tr><td>Akses saat ini</td><td>siapa pun yang dapat merute ke alamat bind boleh membaca API</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="sect">
+            <table class="wf-kv">
+                <tr><td>Kata sandi / kunci</td><td>tidak disimpan, tidak dikirim, dan tidak ditampilkan</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Halaman ini menandai pekerjaan yang belum dikerjakan, bukan fitur yang sudah ada. Menambahkan autentikasi berarti menambah state kredensial ke kernel dan jurnal RJCFG01; kebijakan repo melarang kredensial tampil di antarmuka maupun versi, jadi tab Secrets sengaja kosong.</p>
+    </div>
+</section>

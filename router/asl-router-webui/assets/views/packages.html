@@ -1,0 +1,31 @@
+<section class="view" data-module="Packages" data-module-ico="sys">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Packages</h2>
+            <span class="panel-note">desain saja &middot; tidak ada manajer paket</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="list">Loaded</button>
+            <button type="button" class="wf-tab" data-tab="check">Updates</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="daftar paket tidak dapat dibaca: kernel satu image"></div>
+
+        <div class="wf-panel active" data-panel="list">
+            <table class="wf-kv">
+                <tr><td>Bentuk perangkat lunak</td><td>satu biner <span class="mono">no_std</span> hasil <span class="mono">cargo build</span>, bukan paket terpisah</td></tr>
+                <tr><td>Perubahan versi</td><td>lewat build ulang kernel + disk, bukan <span class="mono">install/remove</span></td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="check">
+            <table class="wf-kv">
+                <tr><td>Sumber pembaruan</td><td>tidak ada &mdash; kernel tidak punya jaringan keluar untuk unduhan</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Doktrin platform melarang userland Linux dan manajer paket turunan distro. Versi resmi yang berlaku tetap tertulis di banner boot (<span class="mono">RINJANI 1.0.0</span> / <span class="mono">ASL Core Kernel v1.0.0</span>) dan tidak dapat diubah dari halaman ini.</p>
+    </div>
+</section>

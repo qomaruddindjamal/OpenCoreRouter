@@ -8,17 +8,22 @@
     <link rel="stylesheet" href="/css/base.css">
     <link rel="stylesheet" href="/css/layout.css">
     <link rel="stylesheet" href="/css/components.css">
+    <link rel="stylesheet" href="/css/webfig.css">
+    <link rel="stylesheet" href="/css/table.css">
+    <link rel="stylesheet" href="/css/icons.css">
+    <link rel="stylesheet" href="/css/icons-act.css">
+    <link rel="stylesheet" href="/css/mobile.css">
 </head>
 <body>
     <header class="chrome-header">
         <div class="brand">
-            <img src="/images/logo.svg" alt="Logo Open Core Router" class="brand-logo">
+            <img src="/images/logo.svg" alt="Logo OpenCR" class="brand-logo">
             <div class="brand-text">
                 <span class="brand-title">RINJANI 1.0.0</span>
                 <span class="brand-sub">Open Core Router</span>
             </div>
         </div>
-        <button id="nav-toggle" class="icon-btn" type="button" title="Ciutkan / lebarkan menu">&#9776;</button>
+        <button id="nav-toggle" class="icon-btn" type="button" title="Ciutkan / lebarkan menu (mobile: buka tutup navigasi)">&#9776;</button>
         <div class="header-right">
             <span class="chip" id="chip-hostname">memuat hostname&hellip;</span>
             <span class="chip mono" id="chip-bind">memuat alamat bind&hellip;</span>
@@ -30,30 +35,75 @@
         <aside class="sidebar">
             <p class="nav-group-title">Navigasi</p>
             <nav>
-                <a href="#system" class="nav-item" data-view="system"><span class="nav-code">Db</span><span class="nav-txt">Dashboard</span></a>
-                <a href="#interfaces" class="nav-item" data-view="interfaces"><span class="nav-code">If</span><span class="nav-txt">Antarmuka</span></a>
-                <a href="#firewall" class="nav-item" data-view="firewall"><span class="nav-code">Fw</span><span class="nav-txt">Firewall</span></a>
-                <a href="#services" class="nav-item" data-view="services"><span class="nav-code">Sv</span><span class="nav-txt">Layanan</span></a>
+                <a href="#system" class="nav-item" data-view="system"><span class="nav-ico" data-ico="dash"></span><span class="nav-txt">Dashboard</span></a>
+                <a href="#olt" class="nav-item" data-view="olt"><span class="nav-ico" data-ico="olt"></span><span class="nav-txt">vOlt</span></a>
+                <a href="#interfaces" class="nav-item" data-view="interfaces"><span class="nav-ico" data-ico="iface"></span><span class="nav-txt">Interfaces</span></a>
+                <a href="#wireless" class="nav-item" data-view="wireless"><span class="nav-ico" data-ico="wifi"></span><span class="nav-txt">Wireless</span></a>
+                <div class="nav-parent">
+                    <a href="#" class="nav-item" data-view="firewall"><span class="nav-ico" data-ico="fw"></span><span class="nav-txt">Firewall</span><span class="nav-caret">&#9656;</span></a>
+                    <div class="nav-sub">
+                        <p class="sub-head">Firewall</p>
+                        <a href="#firewall" data-view="firewall">Filter Rules</a>
+                        <a href="#nat" data-view="nat">NAT</a>
+                    </div>
+                </div>
+                <a href="#wireguard" class="nav-item" data-view="wireguard"><span class="nav-ico" data-ico="wg"></span><span class="nav-txt">WireGuard</span></a>
+                <a href="#vpn" class="nav-item" data-view="vpn"><span class="nav-ico" data-ico="vpn"></span><span class="nav-txt">VPN</span></a>
+                <a href="#xray" class="nav-item" data-view="xray"><span class="nav-ico" data-ico="xray"></span><span class="nav-txt">XRay-Core</span></a>
+                <a href="#qos" class="nav-item" data-view="qos"><span class="nav-ico" data-ico="qos"></span><span class="nav-txt">QoS Manager</span></a>
+                <div class="nav-parent">
+                    <a href="#" class="nav-item" data-view="services"><span class="nav-ico" data-ico="svc"></span><span class="nav-txt">Services</span><span class="nav-caret">&#9656;</span></a>
+                    <div class="nav-sub">
+                        <p class="sub-head">Services</p>
+                        <a href="#arp" data-view="arp">ARP Table</a>
+                        <a href="#services" data-view="serviceslist">Service List</a>
+                        <a href="#dnsserver" data-view="dnsserver">DNS Server</a>
+                        <a href="#gateway" data-view="gateway">Gateway</a>
+                        <a href="#dhcpserver" data-view="dhcpserver">DHCP Server</a>
+                    </div>
+                </div>
+                <a href="#terminal" class="nav-item" data-view="terminal"><span class="nav-ico" data-ico="term"></span><span class="nav-txt">Terminal</span></a>
+                <div class="nav-parent">
+                    <a href="#" class="nav-item" data-view="appearance"><span class="nav-ico" data-ico="sys"></span><span class="nav-txt">System</span><span class="nav-caret">&#9656;</span></a>
+                    <div class="nav-sub">
+                        <p class="sub-head">System</p>
+                        <a href="#appearance" data-view="appearance">Appearance</a>
+                        <a href="#packages" data-view="packages">Packages</a>
+                        <a href="#usermanager" data-view="usermanager">User Manager</a>
+                        <button type="button" class="nav-action" data-power="restart">Restart</button>
+                        <button type="button" class="nav-action" data-power="shutdown">Shutdown</button>
+                    </div>
+                </div>
+                <div class="nav-parent">
+                    <a href="#" class="nav-item" data-view="speedtest"><span class="nav-ico" data-ico="tools"></span><span class="nav-txt">Tools</span><span class="nav-caret">&#9656;</span></a>
+                    <div class="nav-sub">
+                        <p class="sub-head">Tools</p>
+                        <a href="#speedtest" data-view="speedtest">Speed Test</a>
+                        <a href="#telnet" data-view="telnet">Telnet</a>
+                        <a href="#traceroute" data-view="traceroute">Trace Route</a>
+                    </div>
+                </div>
             </nav>
-            <p class="nav-group-title">Modul belum aktif di build ini</p>
-            <nav>
-                <span class="nav-item disabled" title="kernel belum punya endpoint /api/v1/routes">&#9679; Rute &amp; Gateway</span>
-                <span class="nav-item disabled" title="jalur RX pool dhcp_server_pool belum ada">&#9679; Lease DHCP</span>
-                <span class="nav-item disabled" title="tabel ARP kernel belum diekspos ke API">&#9679; Tabel ARP</span>
-                <span class="nav-item disabled" title="mesin tangkap paket belum diimplementasikan">&#9679; Jingkar Paket</span>
-                <span class="nav-item disabled" title="egress ICMP echo belum diimplementasikan">&#9679; Ping / Traceroute</span>
-                <span class="nav-item disabled" title="engine QoS ada di kernel, endpoint API belum ada">&#9679; QoS &amp; Shaper</span>
-                <span class="nav-item disabled" title="konfigurasi belum dapat ditulis dari WebUI (hanya-baca)">&#9679; Konfigurasi</span>
-            </nav>
+            <div id="nav-offgroup">
+                <p class="nav-group-title">Modul belum aktif di build ini</p>
+                <nav>
+                <span class="nav-item disabled" title="belum ada endpoint /api/v1/routes">&#9679; Rute &amp; Gateway</span>
+                <span class="nav-item disabled" title="jalur RX dhcp_server_pool belum ada">&#9679; Lease DHCP</span>
+                <span class="nav-item disabled" title="kernel punya penjawab ARP, bukan tabel ARP; halaman ARP Table hanya rupa">&#9679; Tabel ARP</span>
+                <span class="nav-item disabled" title="mesin tangkap paket belum ada">&#9679; Jingkar Paket</span>
+                <span class="nav-item disabled" title="egress ICMP echo belum ada; halaman Trace Route hanya rupa">&#9679; Ping / Traceroute</span>
+                <span class="nav-item disabled" title="mesin shaper belum ada; halaman QoS Manager hanya rupa">&#9679; QoS &amp; Shaper</span>
+                <span class="nav-item disabled" title="penulisan config baru untuk WAN; LAN host-only">&#9679; Konfigurasi LAN</span>
+                </nav>
+            </div>
         </aside>
 
         <main id="view-mount" class="main-area">
-            <div class="panel">
-                <div class="panel-head"><h2>Memuat modul</h2></div>
-                <p class="loading">memuat shell kernel &hellip;</p>
-            </div>
+            <p class="loading">memuat modul &hellip;</p>
         </main>
     </div>
+
+    <div id="nav-scrim" class="nav-scrim"></div>
 
     <footer class="chrome-footer">
         <span>Rinjani 1.0.0 &mdash; Powered by ASL Core Kernel v1.0.0</span>
@@ -62,6 +112,15 @@
 
     <script src="/js/core/api.js"></script>
     <script src="/js/core/ui.js"></script>
+    <script src="/js/core/plot.js"></script>
+    <script src="/js/core/views.js"></script>
+    <script src="/js/core/theme.js"></script>
+    <script src="/js/core/webfig.js"></script>
+    <script src="/js/core/table.js"></script>
+    <script src="/js/core/tblcols.js"></script>
+    <script src="/js/core/ifedit.js"></script>
+    <script src="/js/core/system.js"></script>
+    <script src="/js/core/nav.js"></script>
     <script src="/js/core/app.js"></script>
 </body>
 </html>

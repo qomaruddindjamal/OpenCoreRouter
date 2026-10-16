@@ -1,0 +1,58 @@
+<section class="view" data-module="Appearance" data-module-ico="sys">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Appearance</h2>
+            <span class="panel-note">tema lokal browser &middot; belum ada /api/v1/themes</span>
+        </div>
+
+        <div class="wf-toolbar" data-tools="refresh">
+            <span class="wf-readout">memuat tema&hellip;</span>
+        </div>
+
+        <div class="wf-f">
+            <fieldset>
+                <legend>Themes</legend>
+                <div class="f-row">
+                    <label for="f-theme">Themes</label>
+                    <select id="f-theme">
+                        <option value="default">Default Themes</option>
+                        <option value="dark">Darkmode Themes</option>
+                        <option value="auto">Auto Themes</option>
+                    </select>
+                </div>
+                <p class="f-hint" id="theme-hint">Default Themes: putih cerah + biru aqua &mdash; rupa bawaan konsol.</p>
+            </fieldset>
+        </div>
+
+        <div class="th-prev" data-theme-picked="default">
+            <div class="th-card" data-theme="default">
+                <span class="th-bar"></span>
+                <span class="th-body"></span>
+                <p class="th-name">Default Themes</p>
+                <p class="th-desc">putih cerah &middot; aksen biru aqua</p>
+            </div>
+            <div class="th-card" data-theme="dark">
+                <span class="th-bar th-bar-dark"></span>
+                <span class="th-body th-body-dark"></span>
+                <p class="th-name">Darkmode Themes</p>
+                <p class="th-desc">seluruh token gelap, kontras dinaikkan</p>
+            </div>
+            <div class="th-card" data-theme="auto">
+                <span class="th-bar th-bar-split"></span>
+                <span class="th-body"></span>
+                <p class="th-name">Auto Themes</p>
+                <p class="th-desc">terang &rarr; senja oranye &rarr; gelap mengikuti jam</p>
+            </div>
+        </div>
+
+        <table class="wf-kv">
+            <tr><td>Tema tampil sekarang</td><td id="theme-now">memuat&hellip;</td></tr>
+            <tr><td>Pita Auto</td><td>06:00&ndash;16:59 terang &middot; 17:00&ndash;17:59 senja &middot; 18:00&ndash;05:59 gelap</td></tr>
+            <tr><td>Penyimpanan pilihan</td><td>localStorage browser (kunci rinjani-theme-mode)</td></tr>
+            <tr><td>Endpoint tema</td><td>tidak ada &mdash; kernel tidak melayani /api/v1/themes</td></tr>
+            <tr><td>Efek ke token --pf-*</td><td>atribut data-theme pada &lt;html&gt;: dark / dusk, tanpa atribut = terang</td></tr>
+        </table>
+
+        <p class="wf-note">Pilihan tema hanya berlaku di browser ini dan tidak pernah dikirim ke kernel: jam yang dipakai adalah jam perangkat tempat konsol dibuka, bukan waktu router. RJCFG01 belum punya blok tema, jadi tercih tidak ikut tersimpan di jurnal konfigurasi WAN.</p>
+    </div>
+</section>

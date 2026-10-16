@@ -1,0 +1,31 @@
+<section class="view" data-module="DHCP Server" data-module-ico="svc">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>DHCP Server</h2>
+            <span class="panel-note">desain saja &middot; kernel hanya punya DHCP client</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="pool">Pools</button>
+            <button type="button" class="wf-tab" data-tab="lease">Leases</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="0 pool &middot; 0 lease: server DHCP belum ada di kernel"></div>
+
+        <div class="wf-panel active" data-panel="pool">
+            <table class="wf-kv">
+                <tr><td>Pool terdefinisi</td><td>tidak ada</td></tr>
+                <tr><td>Rentang alamat</td><td>belum ada struktur <span class="mono">dhcp_server_pool</span> di state kernel</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="lease">
+            <table class="wf-kv">
+                <tr><td>Lease aktif</td><td>0 &mdash; bukan data kosong, memang tidak ada pelayan yang memberi lease</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Yang berjalan hari ini adalah DHCP <span class="mono">client</span> sisi WAN (DORA pada eth0), dan statusnya tampil di Dashboard serta Service List. Halaman server ini adalah rupa yang diminta owner; menulis pool atau menampilkan lease harus menunggu mesin DHCP server di kernel, jadi tidak ada satu pun baris lease yang dikarang.</p>
+    </div>
+</section>

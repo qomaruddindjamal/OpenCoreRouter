@@ -1,0 +1,88 @@
+<section class="view" data-source="/api/v1/nat" data-module="NAT &amp; Port Forwarding" data-module-ico="fw">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>NAT &amp; Port Forwarding</h2>
+            <span class="panel-note" data-bind="forwarding" data-fmt="pill"></span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="summary">Summary</button>
+            <button type="button" class="wf-tab" data-tab="rules">DNAT Rules</button>
+            <button type="button" class="wf-tab" data-tab="track">Conntrack</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment"
+             data-tools="find,filter,refresh"
+             data-hint="sumber: /api/v1/nat &#183; /api/v1/nat/rules &#183; /api/v1/nat/conntrack"></div>
+
+        <div class="wf-panel active" data-panel="summary">
+            <table class="wf-kv">
+                <tr><td>Masquerade aktif</td><td data-bind="masquerade_active" data-fmt="pill-yes"></td></tr>
+                <tr><td>Alamat masquerade</td><td data-bind="masquerade_ip" data-fmt="ip"></td></tr>
+                <tr><td>Jalur forwarding</td><td data-bind="forwarding" data-fmt="text"></td></tr>
+                <tr><td>Sesi aktif</td><td data-bind="active_sessions" data-fmt="num"></td></tr>
+                <tr><td>Baris snapshot</td><td data-bind="snapshot_rows" data-fmt="num"></td></tr>
+                <tr><td>Kapasitas tabel</td><td data-bind="capacity" data-fmt="num"></td></tr>
+                <tr><td>Drop tabel penuh</td><td data-bind="table_full_drops" data-fmt="num"></td></tr>
+                <tr><td>Aturan DNAT</td><td data-bind="dnat_rules" data-fmt="num"></td></tr>
+            </table>
+            <p class="wf-note">Angka diambil dari <span class="mono">NatEngine</span> kernel (conntrack 128 entri, DNAT 16 aturan, alokasi port 40000&ndash;65000). Nilai <span class="mono">forwarding = engine-only</span> berarti mesin NAT sudah diuji satuan tetapi belum dipanggil jalur paket poll loop, jadi sesi nyata bisa nol. Ini keadaan sebenarnya, bukan kegagalan pembacaan.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="rules">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Port WAN</th>
+                        <th>Protokol</th>
+                        <th>Target IP</th>
+                        <th class="num">Port Target</th>
+                        <th>Aktif</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/nat/rules" data-row-ico="fw">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="num row-name" data-bind="wan_port" data-fmt="num"></td>
+                        <td data-bind="protocol" data-fmt="text"></td>
+                        <td class="mono" data-bind="target_ip" data-fmt="ip"></td>
+                        <td class="num" data-bind="target_port" data-fmt="num"></td>
+                        <td data-bind="active" data-fmt="pill-yes"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Aturan DNAT yang terdaftar di kernel saat boot (demonstrasi port-forward). Pembuatannya lewat CLI <span class="mono">wan</span>/<span class="mono">config</span>, belum dapat ditambahkan dari WebUI.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="track">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th>Protokol</th>
+                        <th>Sumber</th>
+                        <th class="num">Port Src</th>
+                        <th>Tujuan</th>
+                        <th class="num">Port Dst</th>
+                        <th class="num">Port Terjemah</th>
+                        <th class="num">Paket Fwd</th>
+                        <th class="num">Paket Rev</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/nat/conntrack">
+                    <tr data-row>
+                        <td data-bind="protocol" data-fmt="text"></td>
+                        <td class="mono" data-bind="src" data-fmt="ip"></td>
+                        <td class="num" data-bind="src_port" data-fmt="num"></td>
+                        <td class="mono" data-bind="dst" data-fmt="ip"></td>
+                        <td class="num" data-bind="dst_port" data-fmt="num"></td>
+                        <td class="num" data-bind="translated_port" data-fmt="num"></td>
+                        <td class="num" data-bind="fwd_packets" data-fmt="num"></td>
+                        <td class="num" data-bind="rev_packets" data-fmt="num"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Snapshot maksimal 12 entri pertama dari tabel conntrack kernel agar muat di buffer respons 8&nbsp;KiB; jumlah penuh ada pada field <span class="mono">active_sessions</span>.</p>
+        </div>
+    </div>
+</section>

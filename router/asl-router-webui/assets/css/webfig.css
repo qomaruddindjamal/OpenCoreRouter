@@ -1,0 +1,351 @@
+/* ==========================================================================
+   Rinjani 1.0.0 — Komponen gaya WebFig: tab strip, toolbar, tabel padat,
+   plot trafik, modal pengeditan, dan submenu drop-right.
+   Nilai yang ditampilkan selalu berasal dari endpoint kernel; komponen ini
+   hanya mengatur rupa, tidak pernah menambah baris karangan.
+   ========================================================================== */
+
+/* --- Tab strip satu modul (pola WebFig: tab di atas, isi di bawah) --- */
+.wf-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    gap: 2px;
+    padding: 6px 10px 0;
+    overflow-x: auto;
+    background: var(--pf-th-bg);
+    border-bottom: 1px solid var(--pf-panel-border);
+}
+
+.wf-tab {
+    flex: 0 0 auto;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: var(--pf-text-dim);
+    background: transparent;
+    border: 1px solid transparent;
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+    white-space: nowrap;
+}
+
+.wf-tab:hover {
+    color: var(--pf-text-primary);
+    background: var(--pf-sidebar-hover);
+}
+
+.wf-tab.active {
+    background: var(--pf-panel-bg);
+    border-color: var(--pf-panel-border);
+    color: var(--pf-text-primary);
+    font-weight: 600;
+}
+
+.wf-panel {
+    display: none;
+}
+
+.wf-panel.active {
+    display: block;
+}
+
+/* --- Toolbar: tombol aksi nyata saja (Add/Remove palsu tidak dibuat) --- */
+.wf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 12px;
+    background: var(--pf-panel-head);
+    border-bottom: 1px solid var(--pf-panel-border);
+}
+
+.wf-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    color: var(--pf-text-primary);
+    background: var(--pf-input-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 3px;
+}
+
+.wf-btn:hover:not(:disabled) {
+    border-color: var(--pf-accent-blue);
+    color: var(--pf-accent-blue);
+}
+
+.wf-btn:disabled {
+    color: var(--pf-text-title);
+    background: var(--pf-neutral-bg);
+    cursor: not-allowed;
+}
+
+.wf-btn-primary {
+    color: var(--pf-on-accent);
+    background: var(--pf-accent-blue);
+    border-color: var(--pf-accent-btn-hover);
+}
+
+.wf-btn-primary:hover:not(:disabled) {
+    color: var(--pf-on-accent);
+    background: var(--pf-accent-btn-hover);
+}
+
+.wf-toolbar .wf-spacer {
+    margin-left: auto;
+}
+
+.wf-readout {
+    font-family: var(--pf-mono);
+    font-size: 11px;
+    color: var(--pf-text-dim);
+    flex: 0 1 auto;
+    min-width: 0;
+    text-align: right;
+}
+
+.wf-readout.warn {
+    color: var(--pf-err);
+}
+
+/* --- Tabel padat gaya WebFig + pemilihan baris --- */
+.wf-table {
+    border-top: 0;
+}
+
+.wf-table th {
+    padding: 6px 10px;
+    font-size: 10.5px;
+}
+
+.wf-table td {
+    padding: 5px 10px;
+    font-size: 12px;
+}
+
+.wf-table tbody tr {
+    cursor: default;
+}
+
+.wf-table tbody tr.selectable {
+    cursor: pointer;
+}
+
+.wf-table tbody tr.selected {
+    background: var(--pf-sel);
+}
+
+.wf-table tbody tr.selected:hover {
+    background: var(--pf-sel-hover);
+}
+
+.wf-role {
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--pf-text-title);
+}
+
+/* --- Plot trafik: digambar dari delta counter rx/tx kernel --- */
+.wf-plot {
+    padding: 12px;
+}
+
+.wf-plot canvas {
+    display: block;
+    width: 100%;
+    height: 150px;
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+}
+
+.wf-plot .micro {
+    margin-bottom: 6px;
+}
+
+/* --- Tabel key/value "General" --- */
+.wf-kv {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.wf-kv td {
+    padding: 6px 12px;
+    border-bottom: 1px solid var(--pf-row-line);
+    font-size: 12px;
+}
+
+.wf-kv td:first-child {
+    width: 34%;
+    color: var(--pf-text-dim);
+    font-weight: 600;
+    background: var(--pf-th-bg);
+}
+
+.wf-kv td:last-child {
+    font-family: var(--pf-mono);
+}
+
+/* --- Catatan kejujuran modul (bukan error, bukan klaim) --- */
+.wf-note {
+    padding: 9px 12px;
+    margin: 0 0 12px;
+    font-size: 11.5px;
+    color: var(--pf-warn);
+    background: var(--pf-warn-bg);
+    border-top: 1px solid var(--pf-panel-border);
+    border-bottom: 1px solid var(--pf-panel-border);
+}
+
+/* --- Modal: hanya tertutup lewat tombol Close/Cancel --- */
+.wf-overlay {
+    position: fixed;
+    inset: 0;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 54px 16px 24px;
+    background: rgba(6, 44, 58, 0.44);
+    z-index: 60;
+}
+
+.wf-overlay.open {
+    display: flex;
+}
+
+.wf-modal {
+    width: 540px;
+    max-width: 100%;
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 6px;
+    box-shadow: 0 14px 38px rgba(6, 44, 58, 0.32);
+}
+
+.wf-modal-head {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 14px;
+    background: var(--pf-panel-head);
+    color: var(--pf-panel-head-text);
+    border-radius: 5px 5px 0 0;
+}
+
+.wf-modal-head h3 {
+    font-size: 12px;
+    letter-spacing: 0.4px;
+    color: var(--pf-panel-head-text);
+    text-transform: none;
+}
+
+.wf-modal-head .wf-modal-tag {
+    margin-left: auto;
+    font-family: var(--pf-mono);
+    font-size: 11px;
+    color: var(--pf-text-sub);
+}
+
+.wf-modal-body {
+    padding: 14px 16px 4px;
+    max-height: 62vh;
+    overflow-y: auto;
+}
+
+.wf-modal-foot {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: var(--pf-panel-head);
+    border-top: 1px solid var(--pf-panel-border);
+    border-radius: 0 0 5px 5px;
+}
+
+.wf-modal-foot .wf-status {
+    font-family: var(--pf-mono);
+    font-size: 11px;
+    color: var(--pf-text-dim);
+    margin-right: auto;
+    word-break: break-word;
+}
+
+.wf-modal-foot .wf-status.bad {
+    color: var(--pf-err);
+}
+
+.wf-modal-foot .wf-status.good {
+    color: var(--pf-ok);
+}
+
+/* --- Formulir --- */
+.wf-f fieldset {
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
+    padding: 10px 12px 8px;
+    margin: 0 0 12px;
+}
+
+.wf-f legend {
+    padding: 0 6px;
+    font-size: 10.5px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--pf-text-title);
+}
+
+.wf-f .f-row {
+    display: grid;
+    grid-template-columns: 116px minmax(0, 1fr);
+    gap: 10px;
+    align-items: center;
+    margin-bottom: 8px;
+}
+
+.wf-f label {
+    font-size: 11.5px;
+    color: var(--pf-text-dim);
+}
+
+.wf-f input[type="text"],
+.wf-f select {
+    width: 100%;
+    height: 26px;
+    padding: 0 7px;
+    font-family: var(--pf-mono);
+    font-size: 12px;
+    color: var(--pf-text-primary);
+    background: var(--pf-input-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 3px;
+}
+
+.wf-f input[type="text"]:disabled {
+    background: var(--pf-neutral-bg);
+    color: var(--pf-text-title);
+}
+
+.wf-f .f-hint {
+    grid-column: 2;
+    font-size: 10.5px;
+    color: var(--pf-text-title);
+    margin: -4px 0 8px;
+}
+
+.wf-locked {
+    padding: 9px 12px;
+    font-size: 12px;
+    color: var(--pf-text-dim);
+    background: var(--pf-th-bg);
+    border-left: 3px solid var(--pf-accent-blue);
+}
+
+/* Submenu drop-right pindah ke layout.css (`.nav-parent`/`.nav-sub`). */
+.nav-link {
+    color: var(--pf-accent-blue);
+    font-weight: 600;
+}
+
+.nav-link:hover {
+    text-decoration: underline;
+}

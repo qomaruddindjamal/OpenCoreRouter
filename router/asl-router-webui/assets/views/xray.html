@@ -1,0 +1,31 @@
+<section class="view" data-module="XRay-Core" data-module-ico="xray">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>XRay-Core</h2>
+            <span class="panel-note">desain saja &middot; tidak ada modul xray di kernel</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="out">Outbounds</button>
+            <button type="button" class="wf-tab" data-tab="rul">Routing</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="0 konfigurasi: mesin proksi belum ada"></div>
+
+        <div class="wf-panel active" data-panel="out">
+            <table class="wf-kv">
+                <tr><td>Proses pengamat</td><td>tidak ada &mdash; kernel tidak menjalankan daemon pihak ketiga</td></tr>
+                <tr><td>Berkas konfigurasi</td><td>tidak dibaca; RJCFG01 hanya menampung setelan WAN</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="rul">
+            <table class="wf-kv">
+                <tr><td>Kebijakan routing domain</td><td>belum ada endpoint <span class="mono">/api/v1/routes</span></td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Entri sidebar ini permintaan owner. Selain belum ada mesinnya, doktrin platform juga melarang mengeksekusi biner pihak ketiga di dalam ASL Core Kernel: bila suatu saat fitur ini dibangun, ia harus menjadi modul native Rust <span class="mono">#![no_std]</span> di bawah prefix <span class="mono">asl-router-</span>, bukan program eksternal. Halaman ini karena itu hanya rupa.</p>
+    </div>
+</section>

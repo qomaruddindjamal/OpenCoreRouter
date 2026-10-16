@@ -1,0 +1,32 @@
+<section class="view" data-module="WireGuard" data-module-ico="wg">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>WireGuard</h2>
+            <span class="panel-note">desain saja &middot; belum ada /api/v1/wireguard</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="if">Interface</button>
+            <button type="button" class="wf-tab" data-tab="peers">Peers</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="0 baris: kernel belum punya modul WireGuard"></div>
+
+        <div class="wf-panel active" data-panel="if">
+            <table class="wf-kv">
+                <tr><td>Antarmuka wg</td><td>tidak ada &mdash; inventaris kernel hanya fisik/lokal</td></tr>
+                <tr><td>Ujung kriptografi</td><td>belum ada (ChaCha20-Poly1305 / X25519 tidak ditemukan di sumber)</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="peers">
+            <table class="wf-kv">
+                <tr><td>Peer terdaftar</td><td>0 &mdash; tidak ada tabel peer di kernel</td></tr>
+                <tr><td>Handshake terakhir</td><td>tidak dilaporkan</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Rupa halaman ini disiapkan lebih dulu sesuai arahan owner. Isinya sengaja kosong: README dan NAMING_POLICY menyebut WireGuard sebagai stack native yang dituju, sedangkan pencarian di <span class="mono">asl-kernel/</span> dan <span class="mono">router/</span> tidak menemukan modulnya. Selama mesin protokol belum ada, WebUI tidak menampilkan antarmuka wg palsu maupun kunci karangan.</p>
+    </div>
+</section>

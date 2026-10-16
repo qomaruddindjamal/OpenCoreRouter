@@ -1,0 +1,55 @@
+<section class="view" data-source="/api/v1/olt" data-module="vOlt (GPON)" data-module-ico="olt">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>vOlt (GPON)</h2>
+            <span class="panel-note" data-bind="operational" data-fmt="pill-yes"></span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="onu">ONU</button>
+            <button type="button" class="wf-tab" data-tab="ports">Ports</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment"
+             data-tools="find,filter,refresh"
+             data-hint="sumber: /api/v1/olt &#183; /api/v1/olt/ons"></div>
+
+        <div class="wf-panel active" data-panel="onu">
+            <table class="wf-kv">
+                <tr><td>ONU terdeteksi</td><td data-bind="ons" data-fmt="num"></td></tr>
+                <tr><td>Port PON aktif</td><td data-bind="ports" data-fmt="num"></td></tr>
+                <tr><td>Operasional</td><td data-bind="operational" data-fmt="pill-yes"></td></tr>
+                <tr><td>Scheduler terhubung</td><td data-bind="scheduler_connected" data-fmt="pill-yes"></td></tr>
+                <tr><td>Sebab</td><td data-bind="reason" data-fmt="text"></td></tr>
+                <tr><td>Crate marker</td><td data-bind="marker_crates" data-fmt="text"></td></tr>
+            </table>
+            <p class="wf-note">Crate <span class="mono">asl-router-gpon-ont</span> dan <span class="mono">asl-router-olt-carrier</span> ada di repositori tetapi isinya penanda struktur, bukan jalur data; fungsi <span class="mono">is_operational()</span>-nya bernilai tetap. Laporan kernel ini sengaja tidak menelan klaim itu: ONU = 0 dan scheduler belum terhubung.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="ports">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Port PON</th>
+                        <th>ONT ID</th>
+                        <th>Status</th>
+                        <th class="num">Rx dBm</th>
+                        <th class="num">Tx dBm</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/olt/ons" data-row-ico="olt">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="port" data-fmt="text"></td>
+                        <td class="mono" data-bind="ont_id" data-fmt="dash"></td>
+                        <td data-bind="status" data-fmt="pill"></td>
+                        <td class="num v-rx" data-bind="rx_dbm" data-fmt="num"></td>
+                        <td class="num v-tx" data-bind="tx_dbm" data-fmt="num"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Selama tidak ada perangkat optic yang truly terhubung, tabel ini kosong. Menampilkan baris contoh akan melanggar aturan kejujuran proyek, jadi tidak dilakukan.</p>
+        </div>
+    </div>
+</section>

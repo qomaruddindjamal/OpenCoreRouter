@@ -1,0 +1,55 @@
+<section class="view" data-source="/api/v1/services" data-module="Service List" data-module-ico="svc">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Service List</h2>
+            <span class="panel-note">/api/v1/services</span>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="diisi dari flag kernel, bukan daftar karangan"></div>
+
+        <table class="tbl wf-table">
+            <thead>
+                <tr>
+                    <th>Layanan</th>
+                    <th>Aktif</th>
+                    <th>Sumber keadaan</th>
+                </tr>
+            </thead>
+            <tbody data-row-ico="svc">
+                <tr>
+                    <td class="row-name">http_server</td>
+                    <td data-bind="http_server" data-fmt="pill-bool"></td>
+                    <td class="mono"> TcpWebServer bind <span data-bind="http_bind_ip"></span>:<span data-bind="http_port" data-fmt="num"></span></td>
+                </tr>
+                <tr>
+                    <td class="row-name">tcp_sessions</td>
+                    <td data-bind="tcp_sessions_active" data-fmt="num-pill"></td>
+                    <td class="mono">slot aktif (maks WEB_SESSIONS = 8)</td>
+                </tr>
+                <tr>
+                    <td class="row-name">dhcp_client</td>
+                    <td data-bind="dhcp_client" data-fmt="pill-bool"></td>
+                    <td class="mono">DORA sisi WAN, mode <span data-bind="wan_mode"></span></td>
+                </tr>
+                <tr>
+                    <td class="row-name">serial_cli</td>
+                    <td data-bind="serial_cli" data-fmt="pill-bool"></td>
+                    <td class="mono">COM1 115200</td>
+                </tr>
+                <tr>
+                    <td class="row-name">dns_proxy</td>
+                    <td data-bind="dns_proxy" data-fmt="pill-bool"></td>
+                    <td class="mono">mesin ada, jalur RX paket belum tersambung</td>
+                </tr>
+                <tr>
+                    <td class="row-name">mdns_responder</td>
+                    <td data-bind="mdns_responder" data-fmt="pill-bool"></td>
+                    <td class="mono">belum diimplementasikan</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p class="wf-note">Daftar ini hanya memuat layanan yang kernel benar-benar melaporkan lewat <span class="mono">/api/v1/services</span>. Tidak ada baris untuk fitur yang belum punya flag, karena baris kosong pun adalah klaim.</p>
+    </div>
+</section>

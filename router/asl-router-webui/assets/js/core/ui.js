@@ -32,7 +32,6 @@
         num: function (v) { return empty(v) ? DASH : String(v); },
         dash: function (v) { return empty(v) ? DASH : String(v); },
         ip: function (v) { return v === "0.0.0.0" ? "belum terikat" : (v || DASH); },
-        bool: function (v) { return v === true ? "aktif" : v === false ? "tidak aktif" : DASH; },
         uptime: function (ms) {
             if (typeof ms !== "number") return DASH;
             var s = Math.floor(ms / 1000);
@@ -52,9 +51,6 @@
             if (v === "down" || v === "error") return { t: v, c: "pill-err" };
             if (v === "absent" || v === "none") return { t: v, c: "pill-neutral" };
             return { t: empty(v) ? DASH : String(v), c: "pill-neutral" };
-        },
-        "pill-up": function (v) {
-            return v === true ? { t: "UP", c: "pill-ok" } : { t: "DOWN", c: "pill-err" };
         },
         "pill-yes": function (v) {
             return v === true ? { t: "YA", c: "pill-ok" } : { t: "TIDAK", c: "pill-err" };
@@ -79,7 +75,19 @@
             node.setAttribute("data-base-class", base);
         }
         var pill = P[kind];
-        var out = pill ? pill(value) : { t: (F[kind] || F.text)(value), c: null };
+        // Nama formatter tak dikenal harus tampil, bukan diam-diam jatuh ke
+        // teks mentah: typo data-fmt dulu membuat status string dibaca
+        // boolean-only dan baris terlihat valid padahal salah arti.
+        var out;
+        if (!kind) {
+            out = { t: F.text(value), c: null };
+        } else if (pill) {
+            out = pill(value);
+        } else if (F[kind]) {
+            out = { t: F[kind](value), c: null };
+        } else {
+            out = { t: "?fmt:" + kind, c: "pill-warn" };
+        }
         node.textContent = out.t;
         node.setAttribute("class", out.c ? base + " " + out.c : base);
     }
@@ -108,7 +116,9 @@
             var none = document.createElement("tr");
             var cell = document.createElement("td");
             cell.setAttribute("class", "row-mode");
-            cell.setAttribute("colspan", "10");
+            var table = tbody.parentNode;
+            var cols = table && table.querySelector ? table.querySelectorAll("th").length : 0;
+            cell.setAttribute("colspan", String(cols || 1));
             cell.textContent = "tidak ada baris dari kernel";
             none.appendChild(cell);
             tbody.appendChild(none);
@@ -116,6 +126,9 @@
         }
         for (var i = 0; i < rows.length; i++) {
             var row = tbody._tpl.cloneNode(true);
+            // Simpan objek data pada elemen baris: modal edit membacanya lewat
+            // properti ini, jadi tidak perlu menyusun ulang dari teks DOM.
+            row._data = rows[i];
             tbody.appendChild(row);
             bindInto(row, rows[i]);
         }
@@ -161,6 +174,9 @@
         listIn(root, "[data-source]").forEach(function (sc) {
             bindInto(sc, cache[sc.getAttribute("data-source")]);
         });
+        // Titik sambung untuk komponen yang butuh nilai mentah (plot trafik),
+        // tanpa mengubah kontrak deklaratif: pengikat tetap satu-satunya penulis teks.
+        if (typeof ui.onPaint === "function") ui.onPaint(root, cache);
     }
 
     ui.reset = function (root) {

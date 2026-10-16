@@ -1,0 +1,32 @@
+<section class="view" data-module="VPN" data-module-ico="vpn">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>VPN</h2>
+            <span class="panel-note">desain saja &middot; belum ada /api/v1/vpn</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="gen">General</button>
+            <button type="button" class="wf-tab" data-tab="tun">Terowongan</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="belum ada jalur terowongan yang dilaporkan kernel"></div>
+
+        <div class="wf-panel active" data-panel="gen">
+            <table class="wf-kv">
+                <tr><td>Layanan VPN aktif</td><td>tidak ada &mdash; <span class="mono">/api/v1/services</span> tidak memuat flag VPN</td></tr>
+                <tr><td>Rute terowongan</td><td>belum ada endpoint <span class="mono">/api/v1/routes</span></td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="tun">
+            <table class="wf-kv">
+                <tr><td>Terowongan L2TP/PPTP/GRE</td><td>belum ada &mdash; mesin enkapsulasi GRE tidak ditemukan di sumber kernel</td></tr>
+                <tr><td>Status koneksi</td><td>tidak dilaporkan</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Entri sidebar ini permintaan owner. Rupanya disiapkan, datanya tidak: kernel belum melayani satu pun endpoint VPN, jadi tidak ada nama terowongan, alamat, atau status yang ditulis di sini.</p>
+    </div>
+</section>

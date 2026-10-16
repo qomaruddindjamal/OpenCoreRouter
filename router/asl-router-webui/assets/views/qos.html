@@ -1,0 +1,32 @@
+<section class="view" data-module="QoS Manager" data-module-ico="qos">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>QoS Manager</h2>
+            <span class="panel-note">desain saja &middot; mesin shaper belum ada di kernel</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="queue">Antrian</button>
+            <button type="button" class="wf-tab" data-tab="profile">Profil</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="0 antrian &middot; 0 profil: tidak ada mesin penahan laju"></div>
+
+        <div class="wf-panel active" data-panel="queue">
+            <table class="wf-kv">
+                <tr><td>Antrian prioritas</td><td>tidak ada</td></tr>
+                <tr><td>Limit laju WAN/LAN</td><td>belum ada struktur antrian pada jalur kirim paket</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="profile">
+            <table class="wf-kv">
+                <tr><td>Profil tersimpan</td><td>0 &mdash; tidak ada yang dikarang di halaman ini</td></tr>
+                <tr><td>Kondisi <span class="mono">asl-router-qos</span></td><td>masih penanda modul; belum ada tipe antrian maupun fungsi penjadwal</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Jalur paket hari ini adalah fast-path tanpa penahan laju: TX eth0/eth1 mengirim apa adanya dan pencacahRX/TX-nya yang tampil di Dashboard. Agar halaman ini berhenti menjadi rupa, kernel memerlukan mesin antrian (mis. WFQ/HTB milik ASL sendiri) plus endpoint <span class="mono">/api/v1/qos</span> untuk membacanya.</p>
+    </div>
+</section>

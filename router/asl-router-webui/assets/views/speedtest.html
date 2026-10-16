@@ -1,0 +1,54 @@
+<section class="view" data-module="Speed Test" data-module-ico="qos">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Speed Test</h2>
+            <span class="panel-note">desain saja &middot; kernel tidak punya penghasil beban</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="test">Uji Laju</button>
+            <button type="button" class="wf-tab" data-tab="facts">Fakta jalur</button>
+        </div>
+
+        <div class="wf-toolbar" data-tools="refresh"
+             data-hint="0 hasil uji: tidak ada pengukuran laju yang bisa dijalankan dari kernel"></div>
+
+        <div class="wf-panel active" data-panel="test">
+            <div class="wf-f">
+                <fieldset>
+                    <legend>Parameter uji</legend>
+                    <div class="f-row">
+                        <label for="f-target">Sasaran</label>
+                        <input type="text" id="f-target" placeholder="host atau alamat uji" disabled>
+                    </div>
+                    <div class="f-row">
+                        <label for="f-proto">Protokol</label>
+                        <select id="f-proto" disabled>
+                            <option value="tcp">TCP</option>
+                            <option value="udp">UDP</option>
+                        </select>
+                    </div>
+                    <div class="f-row">
+                        <label for="f-dur">Durasi (detik)</label>
+                        <input type="number" id="f-dur" placeholder="10" disabled>
+                    </div>
+                    <div class="f-row">
+                        <button type="button" class="wf-btn" disabled>Mulai</button>
+                    </div>
+                    <p class="f-hint">Semua isian di atas dimatikan. Membukanya berarti mengarang angka Mbps yang tidak pernah diukur.</p>
+                </fieldset>
+            </div>
+        </div>
+
+        <div class="wf-panel" data-panel="facts">
+            <table class="wf-kv">
+                <tr><td>Yang dibaca Dashboard</td><td><span class="mono">rx_packets</span> dan <span class="mono">tx_packets</span> per antarmuka &mdash; hitungan paket akumulatif, bukan byte maupun laju</td></tr>
+                <tr><td>Field laju di API</td><td>tidak ada <span class="mono">rx_bytes</span>, <span class="mono">tx_bytes</span>, atau <span class="mono">*_bps</span> pada <span class="mono">/api/v1/interfaces</span></td></tr>
+                <tr><td>Klien keluar</td><td>mesin TCP hanya sisi terima &mdash; status socket tidak punya keadaan menghubungkan, jadi kernel tidak dapat membuka koneksi ke host uji</td></tr>
+                <tr><td>Penghasil beban</td><td>belum ada modul penimbul trafik pada jalur kirim</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Angka laju butuh dua hal yang belum ada di kernel: pembuka koneksi keluar dan pencacah byte berdasar waktu. Keduanya adalah pekerjaan router, bukan hiasan halaman. Tanpa itu, kolom Mbps di halaman ini hanya akan menjadi teks bergerak tanpa sumber. Halaman ini karena itu menampilkan rupa plus fakta jalurnya, dan tetap sengaja tidak menampilkan hasil.</p>
+    </div>
+</section>

@@ -1,0 +1,51 @@
+<section class="view" data-source="/api/v1/wireless" data-module="Wireless" data-module-ico="wifi">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Wireless</h2>
+            <span class="panel-note" data-bind="operational" data-fmt="pill-yes"></span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="radios">Radios</button>
+            <button type="button" class="wf-tab" data-tab="stations">Stations</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment"
+             data-tools="find,filter,refresh"
+             data-hint="sumber: /api/v1/wireless &#183; /api/v1/wireless/devices"></div>
+
+        <div class="wf-panel active" data-panel="radios">
+            <table class="wf-kv">
+                <tr><td>Radio terdeteksi</td><td data-bind="radios" data-fmt="num"></td></tr>
+                <tr><td>Station terasosiasi</td><td data-bind="stations" data-fmt="num"></td></tr>
+                <tr><td>Operasional</td><td data-bind="operational" data-fmt="pill-yes"></td></tr>
+                <tr><td>Sebab</td><td data-bind="reason" data-fmt="text"></td></tr>
+            </table>
+            <p class="wf-note">Build Rinjani 1.0.0 ini tidak memuat driver radio. Kernel melaporkan nol radio dan <span class="mono">operational = false</span>; halaman ini menampilkannya apa adanya dan tidak mengarang perangkat. Antarmuka nirkabel baru muncul bila driver nyata ditambahkan ke kernel.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="stations">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>MAC</th>
+                        <th>SSID</th>
+                        <th>Kuatsinyal</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/wireless/devices" data-row-ico="wifi">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="mono row-name" data-bind="mac" data-fmt="dash"></td>
+                        <td data-bind="ssid" data-fmt="text"></td>
+                        <td class="num" data-bind="signal" data-fmt="num"></td>
+                        <td data-bind="status" data-fmt="pill"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Daftar diisi dari endpoint yang sama; selama kernel tidak punya radio, daftar ini kosong dan barisnya memang harus kosong.</p>
+        </div>
+    </div>
+</section>

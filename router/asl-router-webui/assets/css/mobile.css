@@ -1,0 +1,223 @@
+/* ==========================================================================
+   Rinjani 1.0.0 — Tampilan Mobile (<= 900 px) & layar sentuh
+   Sidebar menjadi laci (drawer) yang dibuka lewat tombol hamburger; grup
+   "rail" ikon-only sengaja dinetalkan karena di layar sempit label harus tetap
+   terbaca. Semua target sentuh dinaikkan ke >= 40 px dan tabel dapat digulir
+   mendatar agar tidak memaksa seluruh halaman melebar.
+   ========================================================================== */
+
+/* Scrim: hanya aktif saat laci terbuka (kelas body.nav-open dari app.js). */
+.nav-scrim {
+    position: fixed;
+    top: var(--pf-header-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: none;
+    background: rgba(6, 44, 58, 0.42);
+    z-index: 25;
+}
+
+@media (max-width: 900px) {
+    .sidebar {
+        z-index: 30;
+        width: min(78vw, 268px);
+        padding-bottom: 24px;
+        transform: translateX(-100%);
+        transition: transform 0.18s ease;
+        box-shadow: 8px 0 24px rgba(6, 44, 58, 0.22);
+    }
+
+    body.nav-open .sidebar {
+        transform: none;
+    }
+
+    body.nav-open .nav-scrim {
+        display: block;
+    }
+
+    .main-area,
+    body.rail .main-area {
+        margin-left: 0;
+        padding: 14px 12px calc(var(--pf-footer-h) + 20px);
+    }
+
+    .chrome-footer,
+    body.rail .chrome-footer {
+        left: 0;
+        margin-left: 0;
+        padding-left: 12px;
+        padding-right: 12px;
+        gap: 10px;
+        font-size: 10.5px;
+    }
+
+    /* Chrome header: merek cukup logo, satu chip saja yang tersisa. */
+    .chrome-header {
+        gap: 8px;
+        padding-right: 10px;
+    }
+
+    .brand,
+    body.rail .brand {
+        width: auto;
+        min-width: 0;
+        padding: 0 10px;
+        border-right: 0;
+    }
+
+    body.rail .brand-text {
+        display: flex;
+    }
+
+    #chip-bind {
+        display: none;
+    }
+
+    /* Netalkan mode rail: laci mobile selalu menampilkan label. */
+    body.rail .nav-item,
+    .nav-item {
+        padding: 11px 16px;
+        border-left: 3px solid transparent;
+        text-align: left;
+        font-family: var(--pf-font);
+        font-size: 13.5px;
+    }
+
+    body.rail .nav-item .nav-ico,
+    .nav-item .nav-ico {
+        margin-right: 10px;
+    }
+
+    .nav-txt,
+    body.rail .nav-txt,
+    body.rail #nav-offgroup,
+    body.rail .nav-caret {
+        display: initial;
+    }
+
+    #nav-toggle {
+        width: 40px;
+        height: 40px;
+        font-size: 17px;
+    }
+
+    /* Tanpa hover nyata: submenu dibuka lewat kelas .open (app.js) dan
+       disusun inline di bawah induknya, bukan dipaku ke viewport. */
+    .nav-parent:hover > .nav-sub {
+        display: none;
+    }
+
+    .nav-parent.open > .nav-sub {
+        display: block;
+        position: static;
+        width: auto;
+        min-width: 0;
+        max-height: none;
+        margin: 0 0 4px;
+        padding: 2px 0 4px;
+        overflow: visible;
+        background: var(--pf-sidebar-hover);
+        border: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .nav-sub a,
+    .nav-action {
+        padding: 11px 20px 11px 34px;
+        font-size: 13px;
+        line-height: 18px;
+    }
+
+    /* Panel WebFig: gulir mendatar, bukan merentangkan halaman. */
+    .wf-panel,
+    .wf-plot {
+        overflow-x: auto;
+    }
+
+    .wf-table {
+        min-width: 620px;
+    }
+
+    .wf-kv {
+        min-width: 0;
+        table-layout: fixed;
+        word-break: break-word;
+    }
+
+    canvas,
+    #traffic-plot {
+        width: 100%;
+        max-width: 100%;
+    }
+
+    .wf-toolbar {
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+
+    .wf-toolbar .wf-btn,
+    .wf-f select,
+    .wf-f input[type="text"],
+    .wf-tab {
+        min-height: 40px;
+    }
+
+    .wf-tabs {
+        flex-wrap: nowrap;
+        overflow-x: auto;
+    }
+
+    /* Dialog daya pakai lebar layar; tombol tetap tersentuh. */
+    .swal {
+        width: 100%;
+        padding: 20px 14px 14px;
+    }
+
+    .swal-actions .wf-btn {
+        flex: 1 1 auto;
+        min-height: 42px;
+    }
+
+    .wf-modal {
+        width: 100%;
+        max-height: 88vh;
+        overflow-y: auto;
+    }
+}
+
+@media (max-width: 520px) {
+    .brand-text {
+        display: none;
+    }
+
+    #chip-hostname {
+        display: none;
+    }
+
+    .chrome-footer {
+        font-size: 9.5px;
+    }
+}
+
+/* Layar sentuh umum (termasuk tablet lebar): baris navigasi & kontrol
+   dilebarkan meski lebar viewport masih di atas 900 px. */
+@media (hover: none) {
+    .nav-item {
+        padding-top: 12px;
+        padding-bottom: 12px;
+    }
+
+    .wf-btn,
+    .wf-tab,
+    .wf-tool {
+        min-height: 40px;
+    }
+
+    /* Kotak Find adalah bagian grup kanan toolbar; pada sentuh ia menyusut
+       agar toolbar tetap muat satu baris. */
+    .wf-find input {
+        width: 96px;
+    }
+}

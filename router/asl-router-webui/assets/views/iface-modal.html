@@ -1,0 +1,54 @@
+<div class="wf-overlay" id="iface-overlay">
+    <div class="wf-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div class="wf-modal-head">
+            <h3 id="modal-title">Interface</h3>
+            <span class="wf-modal-tag" id="modal-tag"></span>
+            <button type="button" class="icon-btn" id="modal-x" title="Tutup">&#10005;</button>
+        </div>
+        <div class="wf-modal-body">
+            <p class="wf-locked" id="modal-locked"></p>
+            <div class="wf-f" id="iface-form">
+                <fieldset>
+                    <legend>Umum</legend>
+                    <div class="f-row">
+                        <label for="f-name">Nama Interface</label>
+                        <input type="text" id="f-name" maxlength="16" spellcheck="false">
+                    </div>
+                    <p class="f-hint">hanya huruf kecil, angka, &quot;-&quot;, &quot;_&quot;, &quot;.&quot; &mdash; maks 16 karakter</p>
+                </fieldset>
+                <fieldset id="fs-ip">
+                    <legend>Konfigurasi IPv4</legend>
+                    <div class="f-row">
+                        <label for="f-mode">Mode</label>
+                        <select id="f-mode">
+                            <option value="dhcp">DHCP Client</option>
+                            <option value="static">IP Static</option>
+                        </select>
+                    </div>
+                    <div class="f-row">
+                        <label for="f-ip">Alamat IP</label>
+                        <input type="text" id="f-ip" maxlength="15" spellcheck="false">
+                    </div>
+                    <div class="f-row">
+                        <label for="f-mask">Netmask</label>
+                        <input type="text" id="f-mask" maxlength="15" spellcheck="false">
+                    </div>
+                    <div class="f-row">
+                        <label for="f-gw">Gateway</label>
+                        <input type="text" id="f-gw" maxlength="15" spellcheck="false">
+                    </div>
+                    <div class="f-row">
+                        <label for="f-persist">Simpan permanen</label>
+                        <input type="checkbox" id="f-persist" checked>
+                    </div>
+                    <p class="f-hint" id="mode-hint"></p>
+                </fieldset>
+            </div>
+        </div>
+        <div class="wf-modal-foot">
+            <span class="wf-status" id="modal-status"></span>
+            <button type="button" class="wf-btn wf-btn-primary" id="modal-save">Simpan</button>
+            <button type="button" class="wf-btn" id="modal-close">Tutup</button>
+        </div>
+    </div>
+</div>

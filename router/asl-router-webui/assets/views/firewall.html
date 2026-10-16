@@ -1,24 +1,34 @@
-<section class="view" data-source="/api/v1/firewall/rules">
+<section class="view" data-source="/api/v1/firewall/rules" data-module="Firewall" data-module-ico="fw">
     <div class="panel">
         <div class="panel-head">
-            <h2>Kebijakan Firewall</h2>
+            <h2>Firewall</h2>
             <span class="panel-note" data-bind="wan_protected" data-fmt="pill-yes"></span>
         </div>
-        <div class="panel-body">
-            <div class="kpi-grid">
-                <div class="kpi"><span class="kpi-label">Kebijakan Bawaan</span><span class="kpi-val" data-bind="default_policy" data-fmt="pill-policy"></span></div>
-                <div class="kpi"><span class="kpi-label">Aturan TCAM</span><span class="kpi-val accent" data-bind="tcam_rules" data-fmt="num"></span></div>
-                <div class="kpi"><span class="kpi-label">Aturan DNAT</span><span class="kpi-val accent" data-bind="dnat_rules" data-fmt="num"></span></div>
-                <div class="kpi"><span class="kpi-label">WAN Terlindungi</span><span class="kpi-val" data-bind="wan_protected" data-fmt="bool"></span></div>
-                <div class="kpi"><span class="kpi-label">Port Manajemen</span><span class="kpi-val" data-bind="http_port" data-fmt="num"></span></div>
-                <div class="kpi"><span class="kpi-label">Port Terbuka</span><span class="kpi-val" data-bind="http_port_open" data-fmt="pill-yes"></span></div>
-            </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="rules">Filter Rules</button>
+            <button type="button" class="wf-tab" data-tab="nat">NAT</button>
         </div>
-    </div>
-    <div class="panel">
-        <div class="panel-head"><h2>Catatan Hanya-Baca</h2></div>
-        <div class="panel-body">
-            <p class="note">WebUI ini membaca jumlah aturan dari mesin TCAM kernel dan tidak dapat menulis aturan: endpoint POST belum ada, dan server hanya menerima <span class="mono">GET</span>/<span class="mono">HEAD</span> (metode lain dijawab <span class="mono">405</span>). Daftar aturan per-baris belum diekspos API, jadi sengaja tidak ditampilkan daripada dikarang.</p>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="sumber: /api/v1/firewall/rules &#183; aturan belum diekspos per baris"></div>
+
+        <div class="wf-panel active" data-panel="rules">
+            <table class="wf-kv">
+                <tr><td>Kebijakan bawaan</td><td data-bind="default_policy" data-fmt="pill-policy"></td></tr>
+                <tr><td>Aturan TCAM</td><td data-bind="tcam_rules" data-fmt="num"></td></tr>
+                <tr><td>Aturan DNAT</td><td data-bind="dnat_rules" data-fmt="num"></td></tr>
+                <tr><td>WAN terlindungi</td><td data-bind="wan_protected" data-fmt="pill-yes"></td></tr>
+                <tr><td>Port manajemen</td><td data-bind="http_port" data-fmt="num"></td></tr>
+                <tr><td>Port terbuka</td><td data-bind="http_port_open" data-fmt="pill-yes"></td></tr>
+            </table>
+            <p class="wf-note">Jumlah aturan dibaca langsung dari mesin TCAM kernel. Daftar aturan per-baris belum diekspos API, jadi sengaja tidak ditampilkan daripada dikarang. Modul ini masih baca-saja: satu-satunya jalur tulis WebUI saat ini adalah konfigurasi antarmuka WAN.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="nat">
+            <div class="panel-body">
+                <p class="note">NAT dipantau pada modul tersendiri lewat submenu <a href="#nat" class="nav-link">Firewall &rsaquo; NAT</a> (<span class="mono">/api/v1/nat</span>), termasuk tabel aturan DNAT dan conntrack.</p>
+            </div>
         </div>
     </div>
 </section>

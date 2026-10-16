@@ -1,26 +1,92 @@
-<section class="view" data-source="/api/v1/system">
+<section class="view" data-module="Dashboard" data-module-ico="dash">
     <div class="panel">
         <div class="panel-head">
-            <h2>System Overview</h2>
-            <span class="panel-note" data-bind="status" data-fmt="pill"></span>
+            <h2>Dashboard</h2>
+            <span class="panel-note">/api/v1/system &middot; /api/v1/services</span>
         </div>
-        <div class="panel-body">
-            <div class="kpi-grid">
-                <div class="kpi"><span class="kpi-label">Kernel Base</span><span class="kpi-val" data-bind="kernel"></span></div>
-                <div class="kpi"><span class="kpi-label">Distribusi</span><span class="kpi-val" data-bind="distro"></span></div>
-                <div class="kpi"><span class="kpi-label">Hostname</span><span class="kpi-val" data-bind="hostname"></span></div>
-                <div class="kpi"><span class="kpi-label">Arsitektur</span><span class="kpi-val" data-bind="arch"></span></div>
-                <div class="kpi"><span class="kpi-label">Uptime (PIT 8254)</span><span class="kpi-val" data-bind="uptime_ms" data-fmt="uptime"></span></div>
-                <div class="kpi"><span class="kpi-label">Tautan WAN</span><span class="kpi-val" data-bind="wan_up" data-fmt="pill-up"></span></div>
-                <div class="kpi"><span class="kpi-label">Sumber Alamat</span><span class="kpi-val" data-bind="wan_source"></span></div>
-                <div class="kpi"><span class="kpi-label">HTTP Dilayani</span><span class="kpi-val accent" data-bind="requests_served" data-fmt="num"></span></div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="traffic">Traffic</button>
+            <button type="button" class="wf-tab" data-tab="general">General</button>
+            <button type="button" class="wf-tab" data-tab="ifaces">Interfaces</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="edit,remove,comment" data-tools="find,filter,refresh">
+            <span class="wf-readout" data-source="/api/v1/system">uptime <span data-bind="uptime_ms" data-fmt="uptime"></span></span>
+        </div>
+
+        <div class="wf-panel active" data-panel="traffic">
+            <div class="wf-plot">
+                <p class="micro">Delta counter paket kernel per siklus segar &mdash; <span id="plot-span">memuat&hellip;</span></p>
+                <canvas id="traffic-plot" width="900" height="150">grafik membutuhkan canvas</canvas>
+                <div class="legend">
+                    <span><span class="sw sw-rx"></span>RX (masuk)</span>
+                    <span><span class="sw sw-tx"></span>TX (keluar)</span>
+                </div>
+            </div>
+            <p class="wf-note">Grafik ini dihitung di browser dari selisih <span class="mono">rx_packets</span> / <span class="mono">tx_packets</span> kernel pada tiap segar 5 detik. Bila tidak ada batang, berarti memang tidak ada trafik baru &mdash; bukan sensor yang gagal. Kernel belum menyimpan deret waktu, jadi riwayat sebelum halaman dibuka tidak ada.</p>
+            <div class="panel-body">
+                <table class="wf-kv" data-source="/api/v1/services">
+                    <tr><td>WAN mode</td><td data-bind="wan_mode" data-fmt="text"></td></tr>
+                    <tr><td>Alamat bind HTTP</td><td data-bind="http_bind_ip" data-fmt="ip"></td></tr>
+                    <tr><td>Sesi TCP aktif</td><td data-bind="tcp_sessions_active" data-fmt="num"></td></tr>
+                    <tr><td>Antrean tulis</td><td data-bind="write_queue_depth" data-fmt="num"></td></tr>
+                    <tr><td>Tulis ditolak</td><td data-bind="writes_rejected" data-fmt="num"></td></tr>
+                </table>
             </div>
         </div>
-    </div>
-    <div class="panel">
-        <div class="panel-head"><h2>Cakupan Build Ini</h2></div>
-        <div class="panel-body">
-            <p class="note">Semua angka di halaman ini dibaca langsung dari memori kernel lewat <span class="mono">/api/v1/system</span> pada setiap segar 5 detik. Modul yang belum punya endpoint (rute, lease DHCP, tabel ARP, jingkar paket, QoS) sengaja ditandai abu-abu di menu dan tidak menampilkan data kosong yang seolah-olah valid.</p>
+
+        <div class="wf-panel" data-panel="general">
+            <div class="panel-body">
+                <table class="wf-kv" data-source="/api/v1/system">
+                    <tr><td>Nama host</td><td data-bind="hostname" data-fmt="text"></td></tr>
+                    <tr><td>Distro</td><td data-bind="distro" data-fmt="text"></td></tr>
+                    <tr><td>Kernel</td><td data-bind="kernel" data-fmt="text"></td></tr>
+                    <tr><td>Arsitektur</td><td data-bind="arch" data-fmt="text"></td></tr>
+                    <tr><td>Uptime</td><td data-bind="uptime_ms" data-fmt="uptime"></td></tr>
+                    <tr><td>Status WAN</td><td data-bind="status" data-fmt="pill"></td></tr>
+                    <tr><td>Sumber alamat WAN</td><td data-bind="wan_source" data-fmt="text"></td></tr>
+                    <tr><td>Permintaan dilayani</td><td data-bind="requests_served" data-fmt="num"></td></tr>
+                </table>
+                <table class="wf-kv" data-source="/api/v1/services">
+                    <tr><td>DHCP client</td><td data-bind="dhcp_client" data-fmt="pill-bool"></td></tr>
+                    <tr><td>HTTP server</td><td data-bind="http_server" data-fmt="pill-bool"></td></tr>
+                    <tr><td>mDNS responder</td><td data-bind="mdns_responder" data-fmt="pill-bool"></td></tr>
+                    <tr><td>DNS proxy</td><td data-bind="dns_proxy" data-fmt="pill-bool"></td></tr>
+                    <tr><td>Serial CLI</td><td data-bind="serial_cli" data-fmt="pill-bool"></td></tr>
+                </table>
+            </div>
+            <p class="wf-note">Registri layanan melaporkan apa yang benar-benar dijalankan kernel build ini. Tidak ada baris untuk fitur yang crate-nya belum terhubung ke jalur data.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="ifaces">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Nama</th>
+                        <th>Peran</th>
+                        <th>Status</th>
+                        <th>IPv4</th>
+                        <th>Mode</th>
+                        <th class="num">RX</th>
+                        <th class="num">TX</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/interfaces">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="name"></td>
+                        <td class="wf-role" data-bind="role" data-fmt="text"></td>
+                        <td data-bind="status" data-fmt="pill"></td>
+                        <td class="mono" data-bind="ip" data-fmt="ip"></td>
+                        <td data-bind="config_mode" data-fmt="text"></td>
+                        <td class="num v-rx" data-bind="rx_packets" data-fmt="num"></td>
+                        <td class="num v-tx" data-bind="tx_packets" data-fmt="num"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Hanya NIC yang terdeteksi kernel yang muncul. Satu adapter = satu baris.</p>
         </div>
     </div>
 </section>

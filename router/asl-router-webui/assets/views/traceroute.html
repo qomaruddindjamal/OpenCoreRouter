@@ -1,0 +1,51 @@
+<section class="view" data-module="Trace Route" data-module-ico="iface">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Trace Route</h2>
+            <span class="panel-note">desain saja &middot; kernel tidak mengirim gema ICMP</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="trace">Jejak</button>
+            <button type="button" class="wf-tab" data-tab="facts">Fakta jalur</button>
+        </div>
+
+        <div class="wf-toolbar" data-tools="refresh"
+             data-hint="0 hop tercatat: tidak ada pemancar yang bisa diminta menaiki TTL"></div>
+
+        <div class="wf-panel active" data-panel="trace">
+            <div class="wf-f">
+                <fieldset>
+                    <legend>Target</legend>
+                    <div class="f-row">
+                        <label for="f-trhost">Alamat tujuan</label>
+                        <input type="text" id="f-trhost" placeholder="alamat IPv4" disabled>
+                    </div>
+                    <div class="f-row">
+                        <label for="f-trmax">Maksimum hop</label>
+                        <input type="number" id="f-trmax" placeholder="30" disabled>
+                    </div>
+                    <div class="f-row">
+                        <button type="button" class="wf-btn" disabled>Mulai</button>
+                    </div>
+                    <p class="f-hint">Isian dimatikan sampai ada jalur kirim ICMP. Daftar hop di bawah tetap kosong karena tidak ada satu paket pun yang bisa dilepas.</p>
+                </fieldset>
+            </div>
+            <table class="wf-kv">
+                <tr><td>Daftar hop</td><td>tidak ada &mdash; 0 baris, bukan placeholder karangan</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="facts">
+            <table class="wf-kv">
+                <tr><td>Jalur ICMP hari ini</td><td>hanya menbalas permintaan gema yang masuk; kernel menjadi sasaran <span class="mono">ping</span>, bukan pengirimnya</td></tr>
+                <tr><td>Pemancar gema</td><td>tidak ada fungsi pembangun permintaan gema ICMP yang dipakai jalur kirim</td></tr>
+                <tr><td>Pembangun Time-Exceeded</td><td>ada di stack, tetapi pemanggilnya baru satu pengujian satuan &mdash; belum tersambung ke jalur penerusan paket</td></tr>
+                <tr><td>Penerusan IPv4</td><td>tidak ada jalur pengurangan TTL dan pengiriman ulang, sehingga jejak rute lewat router juga belum terbentuk</td></tr>
+                <tr><td>UDP keluar</td><td>dipakai satu-satunya untuk alur DHCP klien, tidak untuk probe laju atau jejak</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Jejak rute adalah tiga potongan yang belum ada: pemancar permintaan gema dengan TTL naik, pembaca balasan Time-Exceeded, dan tabel hop hasil. Menaruh daftar alamat router pada halaman ini tanpa ketiganya berarti mengarang topologi jaringan lab. Yang terpasang hari ini: rupa mengikuti WebFig, isian terkunci, dan fakta jalur yang bisa diperiksa di sumber.</p>
+    </div>
+</section>

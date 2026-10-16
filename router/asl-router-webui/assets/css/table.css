@@ -1,0 +1,219 @@
+/* ==========================================================================
+   Rinjani 1.0.0 — Chrome modul gaya WebFig: tab modul berikon di ujung kiri
+   tab strip, toolbar aksi berikon, kotak Find, tombol Filter/Refresh, kolom
+   status, ikon tipe pada sel Nama, header yang bisa diurut, dan menu kolom.
+   Isi berkas ini hanya rupa: tidak ada satu bit pun data kernel yang
+   ditambahkan atau diubah di sini. Kumpulan ikon mask-nya hidup di aset
+   terpisah (/css/icons-act.css) karena gerbang ukuran respons kernel mengukur
+   tiap berkas secara individual.
+   ========================================================================== */
+
+/* --- Tab modul di ujung kiri tab strip: nama modul + ikonnya --- */
+.wf-tab-mod {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 5px 14px 5px 10px;
+    margin-right: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--pf-text-primary);
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-bottom: 0;
+    border-radius: 4px 4px 0 0;
+    white-space: nowrap;
+}
+
+.wf-tab-mod .act-ico {
+    color: var(--pf-accent-blue);
+}
+
+/* --- Toolbar aksi: tombol ikon+label, kelompok kanan menempel tepi --- */
+/* WebFig memuat enam tombol aksi plus grup kanan; pada layar sempit baris ini
+   harus melengkung, bukan memotong bacaan. */
+.wf-toolbar {
+    flex-wrap: wrap;
+    row-gap: 6px;
+}
+
+.wf-tool {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    font-size: 11.5px;
+    color: var(--pf-text-primary);
+    background: var(--pf-input-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 3px;
+    white-space: nowrap;
+}
+
+.wf-tool:hover:not(:disabled) {
+    border-color: var(--pf-accent-blue);
+    color: var(--pf-accent-blue);
+    background: var(--pf-sidebar-hover);
+}
+
+.wf-tool:disabled {
+    color: var(--pf-text-title);
+    background: var(--pf-neutral-bg);
+    cursor: not-allowed;
+}
+
+.wf-tool.on {
+    color: var(--pf-on-accent);
+    background: var(--pf-accent-blue);
+    border-color: var(--pf-accent-btn-hover);
+}
+
+.wf-tool-icon {
+    padding: 0 7px;
+}
+
+.wf-sep {
+    width: 1px;
+    height: 20px;
+    margin: 0 3px;
+    background: var(--pf-panel-border);
+}
+
+/* --- Kotak Find: ikon di dalam, input nyata menyaring baris di layar --- */
+.wf-find {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: 28px;
+    padding: 0 8px;
+    color: var(--pf-text-sub);
+    background: var(--pf-input-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 3px;
+}
+
+.wf-find input {
+    width: 130px;
+    height: 24px;
+    padding: 0;
+    font-family: var(--pf-mono);
+    font-size: 11.5px;
+    color: var(--pf-text-primary);
+    background: transparent;
+    border: 0;
+    outline: 0;
+}
+
+.wf-find:focus-within {
+    border-color: var(--pf-accent-blue);
+}
+
+/* --- Tabel: kolom status, ikon tipe, header urut, menu kolom --- */
+.wf-table .col-st {
+    width: 26px;
+    padding-left: 0;
+    padding-right: 0;
+    text-align: center;
+}
+
+/* Glif status = ikon aksi yang sudah ada (check/cross/minus) diberi warna
+   status, jadi tidak ada gambar baru yang perlu di-embed. */
+.st-ok {
+    color: var(--pf-up);
+}
+
+.st-down {
+    color: var(--pf-down);
+}
+
+.st-dim {
+    color: var(--pf-text-title);
+}
+
+.wf-table .row-name {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+}
+
+.wf-table th.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.wf-table th.sortable:hover {
+    color: var(--pf-accent-blue);
+}
+
+.wf-table th.sorted::after {
+    content: "\25B8";
+    margin-left: 4px;
+    color: var(--pf-accent-blue);
+}
+
+.wf-table th.sorted.desc::after {
+    content: "\25BE";
+}
+
+.wf-table th.th-cols,
+.wf-table td.col-hide,
+.wf-table th.col-hide {
+    display: none;
+}
+
+.wf-table th.th-cols {
+    width: 26px;
+    padding: 0;
+}
+
+.wf-table th.th-cols-show {
+    display: table-cell;
+    text-align: center;
+}
+
+.wf-table tr.row-hidden {
+    display: none;
+}
+
+.num .v-rx,
+td.v-rx {
+    color: var(--pf-plot-rx);
+}
+
+td.v-tx {
+    color: var(--pf-up);
+}
+
+/* --- Menu kolom: daftar centang per kolom, ditutup lewat tombolnya --- */
+.wf-cols {
+    position: absolute;
+    right: 8px;
+    z-index: 40;
+    display: none;
+    padding: 6px 8px;
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
+    box-shadow: 0 10px 26px rgba(6, 44, 58, 0.22);
+}
+
+.wf-cols.open {
+    display: block;
+}
+
+.wf-cols label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 3px 0;
+    font-size: 11.5px;
+    color: var(--pf-text-dim);
+    white-space: nowrap;
+}
+
+.wf-cols-note {
+    padding: 2px 0 4px;
+    font-size: 10.5px;
+    color: var(--pf-text-title);
+}

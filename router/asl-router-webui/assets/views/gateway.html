@@ -1,0 +1,33 @@
+<section class="view" data-module="Gateway" data-module-ico="svc">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Gateway</h2>
+            <span class="panel-note">desain saja &middot; tabel rute kernel belum diekspos API</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="routes">Rute</button>
+            <button type="button" class="wf-tab" data-tab="defgw">Gateway default</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="daftar rute tidak dibaca kernel: endpoint /api/v1/routes belum ada"></div>
+
+        <div class="wf-panel active" data-panel="routes">
+            <table class="wf-kv">
+                <tr><td>Mesin rute</td><td>ada &mdash; FIB kernel diisi rute terhubung saat WAN statik diadopsi dan rute default lewat gerbang WAN</td></tr>
+                <tr><td>Pembacaan WebUI</td><td>belum ada &mdash; tidak ada endpoint yang menampilkan isi FIB</td></tr>
+                <tr><td>Penulisan rute</td><td>belum ada &mdash; jalur tulis HTTP hanya untuk konfigurasi WAN</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="defgw">
+            <table class="wf-kv">
+                <tr><td>Gerbang terpakai</td><td>dibaca dari state WAN pada Dashboard/Interfaces, bukan dari halaman ini</td></tr>
+                <tr><td>Rute statis tambahan</td><td>0 ditampilkan &mdash; mengarang baris rute akan memalsukan status</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Item ini ada di sidebar atas permintaan owner. Karena FIB kernel nyata tetapi belum punya jalur baca, halaman ini sengaja tidak menampilkan satu baris rute pun; begitu <span class="mono">/api/v1/routes</span> tersedia, tab Rute diisi oleh pengikat data yang sama dengan modul lain.</p>
+    </div>
+</section>

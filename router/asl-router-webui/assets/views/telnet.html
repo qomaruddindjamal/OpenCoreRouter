@@ -1,0 +1,48 @@
+<section class="view" data-module="Telnet" data-module-ico="term">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>Telnet</h2>
+            <span class="panel-note">desain saja &middot; tidak ada server maupun klien telnet di kernel</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="con">Koneksi</button>
+            <button type="button" class="wf-tab" data-tab="facts">Fakta jalur</button>
+        </div>
+
+        <div class="wf-toolbar" data-tools="refresh"
+             data-hint="0 sesi: port 23 tidak diservis dan tidak ada penerbit koneksi keluar"></div>
+
+        <div class="wf-panel active" data-panel="con">
+            <div class="wf-f">
+                <fieldset>
+                    <legend>Session</legend>
+                    <div class="f-row">
+                        <label for="f-thost">Host</label>
+                        <input type="text" id="f-thost" placeholder="alamat tujuan" disabled>
+                    </div>
+                    <div class="f-row">
+                        <label for="f-tport">Port</label>
+                        <input type="number" id="f-tport" placeholder="23" disabled>
+                    </div>
+                    <div class="f-row">
+                        <button type="button" class="wf-btn" disabled>Connect</button>
+                    </div>
+                    <p class="f-hint">Tombol Connect dimatikan: tidak ada satu pun soket yang bisa dibuka dari sisi klien pada build ini.</p>
+                </fieldset>
+            </div>
+        </div>
+
+        <div class="wf-panel" data-panel="facts">
+            <table class="wf-kv">
+                <tr><td>Konsol yang benar-benar ada</td><td><span class="mono">rinjani-cli</span> pada serial COM1 115200</td></tr>
+                <tr><td>Sisi terima TCP</td><td>mesin TCP hanya melayani dengar dan terima (<span class="mono">Listen</span>, <span class="mono">SynReceived</span>, <span class="mono">Established</span>) &mdash; dipakai WebUI HTTP</td></tr>
+                <tr><td>Sisi kirim TCP</td><td>tidak ada keadaan menghubungkan pada mesin soket, sehingga klien telnet tidak dapat direalisasikan</td></tr>
+                <tr><td>Parsel NVT / opsi telnet</td><td>tidak ditemukan di sumber kernel maupun router</td></tr>
+                <tr><td>Risiko bila dipasang</td><td>telnet mengirim kredensial terbaca; tanpa autentikasi WebUI, membukanya pada NIC WAN sama dengan pintu tanpa kunci</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Urutan yang masuk akal: mesin autentikasi dan kanal akses-terkendali lebih dulu, lalu jika perlu protokol konsol terenkripsi. Telnet polos di jaringan lab tetap lebih murah ditutup daripada dibuat setengah. Yang halaman ini tidak lakukan: menyambung ke sesuatu, memperlihatkan keluaran karangan, atau memberi tampilan prompt yang hidup.</p>
+    </div>
+</section>

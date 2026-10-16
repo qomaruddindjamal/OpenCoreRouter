@@ -1,0 +1,43 @@
+<section class="view" data-module="ARP Table" data-module-ico="svc">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>ARP Table</h2>
+            <span class="panel-note">desain saja &middot; kernel tidak punya tabel ARP maupun endpoint-nya</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="arp">ARP Table</button>
+            <button type="button" class="wf-tab" data-tab="dyn">Dynamic</button>
+            <button type="button" class="wf-tab" data-tab="stat">Static</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="find,filter,refresh"
+             data-hint="0 baris: tidak ada endpoint /api/v1/arp untuk disaring"></div>
+
+        <div class="wf-panel active" data-panel="arp">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Nama</th>
+                        <th>Alamat IP</th>
+                        <th>MAC</th>
+                        <th>Tipe</th>
+                        <th class="num">Ambil</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td class="row-mode" colspan="6">0 baris: kernel tidak menyimpan tabel ARP.</td></tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Yang ada di kernel hanyalah <span class="mono">penjawab</span> ARP: router membangun balasan ARP dan gratuitous ARP untuk alamatnya sendiri lewat <span class="mono">build_arp_reply</span> / <span class="mono">build_arp_gratuitous</span> di <span class="mono">asl-router-netstack</span>. Tidak ada struktur tabel (cache IP&rarr;MAC) maupun endpoint <span class="mono">/api/v1/arp</span>, jadi halaman ini sengaja 0 baris dan tidak ada angka yang dikarang. Host lain yang melihat MAC router memakai tabel ARP miliknya sendiri, bukan tabel router.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="dyn">
+            <p class="wf-note">Entri dinamis (hasil pembelajaran dari trafik) butuh tabel ARP di kernel; mesinnya belum ada &mdash; 0 baris.</p>
+        </div>
+        <div class="wf-panel" data-panel="stat">
+            <p class="wf-note">Entri statis (pemetaan IP&rarr;MAC yang dipatok operator) belum punya penyimpanan konfigurasi maupun jalur tulis &mdash; 0 baris.</p>
+        </div>
+    </div>
+</section>

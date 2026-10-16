@@ -1,5 +1,7 @@
 /* ==========================================================================
    Rinjani 1.0.0 — Kerangka Layout: header, sidebar, area data, footer
+   Aturan di bawah 900 px sengaja TIDAK ada di sini; lihat /css/mobile.css
+   (laci navigasi + penyusunan ulang untuk layar sentuh).
    ========================================================================== */
 
 .chrome-header {
@@ -42,7 +44,7 @@
 }
 
 .brand-title {
-    color: #ffffff;
+    color: var(--pf-chrome-text);
     font-size: 12.5px;
     font-weight: 700;
     letter-spacing: 0.4px;
@@ -68,7 +70,7 @@
 
 .icon-btn:hover {
     border-color: var(--pf-accent-blue);
-    color: #ffffff;
+    color: var(--pf-accent-blue);
 }
 
 .header-right {
@@ -85,14 +87,14 @@
     padding: 3px 9px;
     border: 1px solid var(--pf-header-border);
     border-radius: 11px;
-    background: rgba(255, 255, 255, 0.04);
+    background: var(--pf-chip-bg);
     white-space: nowrap;
 }
 
 .chip-badge {
-    color: #38bdf8;
-    border-color: #38bdf8;
-    background: rgba(56, 189, 248, 0.1);
+    color: var(--pf-accent-blue);
+    border-color: var(--pf-accent-blue);
+    background: var(--pf-chip-bg);
     font-family: var(--pf-font);
     font-size: 10px;
     text-transform: uppercase;
@@ -108,7 +110,7 @@
 .sidebar {
     position: fixed;
     top: var(--pf-header-h);
-    bottom: var(--pf-footer-h);
+    bottom: 0;
     left: 0;
     width: var(--pf-sidebar-w);
     padding: 10px 0 18px;
@@ -135,19 +137,30 @@
     font-weight: 500;
 }
 
+/* Restart/Shutdown adalah tombol aksi, bukan tautan view. Reset agar tampak
+   sama persis dengan .nav-item <a> (baris penuh, rata kiri, tanpa kotak). */
+button.nav-item {
+    width: 100%;
+    margin: 0;
+    font-family: inherit;
+    text-align: left;
+    background: transparent;
+    cursor: pointer;
+}
+
 .nav-item:hover {
     background-color: var(--pf-sidebar-hover);
-    color: #ffffff;
+    color: var(--pf-text-primary);
 }
 
 .nav-item.active {
     background-color: var(--pf-sidebar-active);
     border-left-color: var(--pf-accent-blue);
-    color: #ffffff;
+    color: var(--pf-text-primary);
 }
 
 .nav-item.disabled {
-    color: #4d5566;
+    color: var(--pf-text-title);
     cursor: not-allowed;
 }
 
@@ -157,16 +170,20 @@
     padding: 18px 24px calc(var(--pf-footer-h) + 24px);
 }
 
+/* Footer menempel tepi KANAN sidebar: bar itu sendiri dimulai dari batas
+   sidebar (bukan sekadar teksnya yang digeser), sehingga kolom navigasi turun
+   sampai dasar jendela dan bar status berada di sebelahnya. Teks rata dengan
+   padding kiri .main-area. Owner memilih varian ini pada 2026-10-16. */
 .chrome-footer {
     position: fixed;
     bottom: 0;
-    left: 0;
+    left: var(--pf-sidebar-w);
     right: 0;
     height: var(--pf-footer-h);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-left: calc(var(--pf-sidebar-w) + 16px);
+    padding-left: 24px;
     padding-right: 18px;
     background-color: var(--pf-header-bg);
     border-top: 1px solid var(--pf-header-border);
@@ -180,13 +197,8 @@ body.rail .sidebar {
     width: var(--pf-sidebar-mini-w);
 }
 
-body.rail .main-area,
-body.rail .chrome-footer {
+body.rail .main-area {
     margin-left: var(--pf-sidebar-mini-w);
-}
-
-body.rail .chrome-footer {
-    padding-left: calc(var(--pf-sidebar-mini-w) + 16px);
 }
 
 body.rail .brand {
@@ -200,33 +212,124 @@ body.rail .nav-txt {
     display: none;
 }
 
+/* Rail hanya menampilkan ikon: kotak 16 px di tengah jalur 44 px, baris
+   lebih tinggi agar target sentuh tetap lega, tanpa kode dua huruf. */
 body.rail .nav-item {
-    text-align: center;
-    padding: 9px 0;
+    padding: 10px 0;
     border-left: 0;
-    font-family: var(--pf-mono);
-    font-size: 11px;
+    text-align: center;
+    font-size: 13px;
 }
 
-.nav-code {
+body.rail .nav-item .nav-ico {
+    margin-right: 0;
+}
+
+body.rail .chrome-footer {
+    left: var(--pf-sidebar-mini-w);
+}
+
+/* Grup "Modul belum aktif" adalah daftar panjang tanpa aksi; di rail ia hanya
+   memakan tempat, jadi disembunyikan (tetap ada di mode lebar). */
+body.rail #nav-offgroup {
     display: none;
 }
 
-body.rail .nav-code {
-    display: inline;
+/* --- Submenu drop-right (Firewall -> NAT, Services -> daftar layanan,
+   System -> Appearance/Packages/User/Restart/Shutdown). Panel dipaku dengan
+   position:fixed oleh app.js: .sidebar menggulung vertikal sehingga anak
+   absolute ikut terpotong selebar sidebar. Satu kolom, baris seragam, dapat
+   digulir bila daftar anak panjang. */
+.nav-parent {
+    position: relative;
 }
 
-@media (max-width: 900px) {
-    .sidebar {
-        display: none;
-    }
+.nav-caret {
+    float: right;
+    color: var(--pf-text-title);
+    font-size: 10px;
+}
 
-    .main-area,
-    .chrome-footer {
-        margin-left: 0;
-    }
+.nav-parent:hover > .nav-item,
+.nav-parent.open > .nav-item {
+    background-color: var(--pf-sidebar-active);
+    color: var(--pf-text-primary);
+}
 
-    .chrome-footer {
-        padding-left: 16px;
-    }
+.nav-sub {
+    position: fixed;
+    display: none;
+    min-width: 176px;
+    max-height: 62vh;
+    padding: 3px 0;
+    overflow-y: auto;
+    background: var(--pf-panel-bg);
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 4px;
+    box-shadow: 6px 8px 20px rgba(6, 44, 58, 0.22);
+    z-index: 40;
+}
+
+.nav-parent:hover > .nav-sub,
+.nav-parent:focus-within > .nav-sub,
+.nav-parent.open > .nav-sub {
+    display: block;
+}
+
+.nav-sub a {
+    display: block;
+    padding: 5px 14px;
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    color: var(--pf-text-primary);
+}
+
+.nav-sub a:hover,
+.nav-sub a.active {
+    background: var(--pf-sidebar-hover);
+    color: var(--pf-accent-blue);
+}
+
+/* Restart/Shutdown: baris aksi daya di dalam submenu System. Bentuknya tombol
+   (bukan tautan) karena tidak mengubah hash/route — app.js membuka dialog. */
+.nav-action {
+    display: block;
+    width: 100%;
+    margin: 0;
+    padding: 5px 14px;
+    font-family: inherit;
+    font-size: 12px;
+    line-height: 16px;
+    text-align: left;
+    white-space: nowrap;
+    color: var(--pf-text-primary);
+    background: transparent;
+    border: 0;
+    cursor: pointer;
+}
+
+.nav-action:hover {
+    background: var(--pf-sidebar-hover);
+    color: var(--pf-accent-blue);
+}
+
+.nav-action:disabled {
+    color: var(--pf-text-title);
+    cursor: default;
+}
+
+.nav-sub .sub-head {
+    padding: 4px 14px 5px;
+    margin-bottom: 2px;
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    color: var(--pf-text-title);
+    border-bottom: 1px solid var(--pf-panel-border);
+}
+
+body.rail .nav-caret {
+    display: none;
 }

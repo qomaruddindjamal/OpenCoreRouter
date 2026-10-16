@@ -1,0 +1,32 @@
+<section class="view" data-source="/api/v1/services" data-module="DNS Server" data-module-ico="svc">
+    <div class="panel">
+        <div class="panel-head">
+            <h2>DNS Server</h2>
+            <span class="panel-note">status dari /api/v1/services &middot; setelan belum ada endpoint</span>
+        </div>
+
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="gen">General</button>
+            <button type="button" class="wf-tab" data-tab="rec">Records</button>
+        </div>
+
+        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
+             data-hint="hanya flag aktif yang nyata; setelan tidak dapat dibaca"></div>
+
+        <div class="wf-panel active" data-panel="gen">
+            <table class="wf-kv">
+                <tr><td>Proksi DNS aktif</td><td data-bind="dns_proxy" data-fmt="pill-bool"></td></tr>
+                <tr><td>Pendengar UDP 53</td><td>tidak dilaporkan kernel</td></tr>
+                <tr><td>Upstream / allow-remote-requests</td><td>tidak ada endpoint baca-tulis untuk setelan DNS</td></tr>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="rec">
+            <table class="wf-kv">
+                <tr><td>Statis records</td><td>tidak ada &mdash; kernel belum menyimpan tabel record</td></tr>
+            </table>
+        </div>
+
+        <p class="wf-note">Baris flag di atas diambil dari <span class="mono">/api/v1/services</span> yang sama dipakai CLI <span class="mono">show services</span>. Tab Records dan seluruh setelan sengaja kosong: mesin proksi DNS ada di kernel tetapi jalur terima paketnya belum tersambung ke poll loop, dan tidak ada API untuk membaca atau menulis setelan DNS.</p>
+    </div>
+</section>

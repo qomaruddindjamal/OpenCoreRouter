@@ -1,21 +1,22 @@
 // OpenCR WebUI Core — router modul: memuat parsial view, mengikat data kernel,
-// menyegarkan berkala, dan mempertahankan rupa chrome (sidebar ciut/lebar).
+// dan menyegarkan berkala. Chrome navigasi (rail/laci/submenu/aksi daya)
+// hidup di /js/core/nav.js; berkas ini sengaja tetap kecil karena gerbang
+// WEB_RESP_MAX mengukur tiap aset secara individual.
 (function () {
     "use strict";
 
-    var VIEWS = {
-        system: { title: "System Overview", src: "/views/system.html" },
-        interfaces: { title: "Antarmuka Jaringan", src: "/views/interfaces.html" },
-        firewall: { title: "Kebijakan Firewall", src: "/views/firewall.html" },
-        services: { title: "Registri Layanan", src: "/views/services.html" }
-    };
+    // Tabel modul dan relasi induk-anak ada di views.js.
+    var VIEWS = (window.OPCR && OPCR.views ? OPCR.views.views : {}) || {};
+    var PARENT_OF = (window.OPCR && OPCR.views ? OPCR.views.parents : {}) || {};
     var REFRESH_MS = 5000;
-    var RAIL_KEY = "rinjani-rail";
 
     var mount = null;
     var foot = null;
     var current = null;
     var timer = null;
+
+    (window.OPCR = window.OPCR || {});
+    OPCR.config = { refreshMs: REFRESH_MS };
 
     function panel(title, bodyNode) {
         var p = document.createElement("div");
@@ -48,14 +49,20 @@
         var hh = two(now.getHours()) + ":" + two(now.getMinutes()) + ":" + two(now.getSeconds());
         foot.textContent = ok ? "sinkron " + hh + " (segar " + (REFRESH_MS / 1000) + " s)"
             : "gagal membaca kernel: " + why;
-        foot.setAttribute("class", ok ? "mono" : "mono error-inline");
+        foot.setAttribute("class", "mono" + (ok ? "" : " error-inline"));
     }
 
     function navTo(name) {
-        var items = document.querySelectorAll(".nav-item[data-view]");
+        var items = document.querySelectorAll("[data-view]");
         for (var i = 0; i < items.length; i++) {
-            var on = items[i].getAttribute("data-view") === name;
-            items[i].className = "nav-item" + (on ? " active" : "");
+            var view = items[i].getAttribute("data-view");
+            var on = view === name || PARENT_OF[name] === view;
+            var base = items[i].getAttribute("data-base-class");
+            if (base === null) {
+                base = items[i].className || "";
+                items[i].setAttribute("data-base-class", base);
+            }
+            items[i].className = base + (on ? " active" : "");
         }
     }
 
@@ -83,7 +90,11 @@
         if (!view) return;
         current = name;
         navTo(name);
+        // Setelah tujuan dipilih, chrome navigasi kembali ke keadaan diam.
+        OPCR.nav.close();
+        OPCR.nav.closeSubs();
         if (timer) clearInterval(timer);
+        OPCR.plot.reset();
         mount.textContent = "";
         mount.appendChild(panel(view.title, message("loading", "memuat " + view.src + " ...")));
         OPCR.api.getText(view.src, function (ok, text, why) {
@@ -95,7 +106,11 @@
                 return;
             }
             mount.textContent = "";
-            mount.appendChild(parsePartial(text));
+            var node = parsePartial(text);
+            mount.appendChild(node);
+            OPCR.wf.setup(node);
+            OPCR.tbl.setup(node);
+            OPCR.system.setup(node);
             refreshView();
             loadChips();
             timer = setInterval(function () { refreshView(); loadChips(); }, REFRESH_MS);
@@ -103,24 +118,26 @@
     }
 
     function fromHash() {
-        var h = (location.hash || "#system").replace("#", "");
+        // Tautan masuk boleh memakai `#nama` (bentuk kanonis yang ditulis
+        // router ini sendiri) atau `#/nama`; keduanya menunjuk modul yang sama.
+        var h = (location.hash || "#system").replace(/^#\/?/, "");
         return VIEWS[h] ? h : "system";
-    }
-
-    function initRail() {
-        var btn = document.getElementById("nav-toggle");
-        if (localStorage.getItem(RAIL_KEY) === "1") document.body.classList.add("rail");
-        btn.addEventListener("click", function () {
-            var rail = document.body.classList.toggle("rail");
-            localStorage.setItem(RAIL_KEY, rail ? "1" : "0");
-        });
     }
 
     document.addEventListener("DOMContentLoaded", function () {
         mount = document.getElementById("view-mount");
         foot = document.getElementById("foot-status");
-        initRail();
-        var items = document.querySelectorAll(".nav-item[data-view]");
+        // Chrome tabel (glif status, ikon tipe) harus melihat baris yang sudah
+        // terisi data, jadi ia ikut dilukis setelah plot.
+        OPCR.ui.onPaint = function (root, cache) {
+            OPCR.wf.onPaint(root, cache);
+            OPCR.tbl.onPaint(root);
+        };
+        // Canvas menggambar warna sendiri dari token, jadi dilukis ulang setiap
+        // kali tema berganti (mis. pita Auto berpindah saat halaman terbuka).
+        OPCR.theme.onChange = function () { OPCR.plot.draw(); };
+        OPCR.nav.init();
+        var items = document.querySelectorAll("[data-view]");
         for (var i = 0; i < items.length; i++) {
             items[i].addEventListener("click", function (ev) {
                 ev.preventDefault();
@@ -135,4 +152,9 @@
         window.addEventListener("hashchange", function () { show(fromHash()); });
         show(fromHash());
     });
+
+    OPCR.app = {
+        reload: function () { refreshView(); loadChips(); },
+        view: function () { return current; }
+    };
 })();

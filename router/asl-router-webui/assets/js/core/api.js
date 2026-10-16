@@ -35,6 +35,34 @@ window.OPCR = window.OPCR || {};
         xhr.send();
     };
 
+    // Tulis konfigurasi: hanya form-urlencoded, sesuai kontrak dispatch_post
+    // kernel (content-type lain ditolak 400, bukan 200 kosong).
+    api.post = function (path, form, done) {
+        var xhr = new XMLHttpRequest();
+        xhr.open("POST", path, true);
+        xhr.timeout = 8000;
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState !== 4) return;
+            var parsed = null;
+            try {
+                parsed = JSON.parse(xhr.responseText);
+            } catch (e) {
+                parsed = null;
+            }
+            var ok = xhr.status === 200 && parsed && parsed.ok === true;
+            if (ok) {
+                done(true, parsed.data, 200);
+                return;
+            }
+            var why = parsed && parsed.error ? parsed.error : ("http_" + (xhr.status || 0));
+            done(false, null, why);
+        };
+        xhr.ontimeout = function () { done(false, null, "timeout"); };
+        xhr.onerror = function () { done(false, null, "network_error"); };
+        xhr.send(form);
+    };
+
     // Ambil markup parsial view (bukan JSON) apa adanya.
     api.getText = function (path, done) {
         var xhr = new XMLHttpRequest();

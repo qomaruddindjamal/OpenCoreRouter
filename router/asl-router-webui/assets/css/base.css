@@ -1,45 +1,167 @@
 /* ==========================================================================
-   Rinjani 1.0.0 — Token, Reset & Tipografi (tema chrome-gelar / data-terang)
+   Rinjani 1.0.0 — Token, Reset & Tipografi
+   Tiga tema didefinisikan di sini dan dipilih oleh js/core/theme.js lewat
+   atribut data-theme pada <html>:
+     light = "Default Themes"  putih cerah + aksen biru aqua (bawaan, nilai :root di bawah)
+     dark  = "Darkmode Themes"
+     dusk  = pita "senja" yang hanya dipakai Auto Themes pukul 17.00-17.59
+   Semua warna yang dulu di-hardcode #ffffff di layout/components/webfig kini
+   membaca token, kalau tidak tema gelap akan meninggalkan teks putih di atas
+   latar putih.
    ========================================================================== */
 
 :root {
-    --pf-bg-main: #f4f6f9;
-    --pf-header-bg: #1e222b;
-    --pf-header-border: #282d37;
-    --pf-sidebar-bg: #181b20;
-    --pf-sidebar-border: #252a35;
-    --pf-sidebar-hover: #222733;
-    --pf-sidebar-active: #262c3a;
+    --pf-bg-main: #f4fbfe;
+    --pf-header-bg: #ffffff;
+    --pf-header-border: #cdeaf5;
+    --pf-sidebar-bg: #ffffff;
+    --pf-sidebar-border: #cdeaf5;
+    --pf-sidebar-hover: #e6f7fd;
+    --pf-sidebar-active: #d2f1fb;
     --pf-panel-bg: #ffffff;
-    --pf-panel-border: #e2e8f0;
-    --pf-panel-head: #1e222b;
-    --pf-accent-blue: #337ab7;
-    --pf-accent-hover: #4da3ff;
-    --pf-accent-cyan: #00bcd4;
-    --pf-text-menu: #a4adbd;
-    --pf-text-sub: #b4bccb;
-    --pf-text-title: #6e788b;
-    --pf-text-primary: #1e293b;
-    --pf-text-dim: #475569;
-    --pf-th-bg: #f8fafc;
-    --pf-row-line: #f1f5f9;
-    --pf-row-stripe: #fbfcfd;
-    --pf-row-hover: #f1f5f9;
-    --pf-ok: #2e7d32;
-    --pf-ok-bg: #e8f5e9;
-    --pf-warn: #f57f17;
-    --pf-warn-bg: #fff8e1;
-    --pf-err: #b71c1c;
-    --pf-err-bg: #fdecea;
-    --pf-neutral-bg: #eceff1;
-    --pf-up: #27ae60;
+    --pf-panel-border: #cdeaf5;
+    --pf-panel-head: #f1fbfe;
+    --pf-panel-head-text: #083c4e;
+    --pf-chrome-text: #0f4657;
+    --pf-on-accent: #ffffff;
+    --pf-input-bg: #ffffff;
+    --pf-chip-bg: #e7f7fc;
+    --pf-accent-blue: #0b9dc7;
+    --pf-accent-hover: #07799b;
+    --pf-accent-btn-hover: #0a7f9f;
+    --pf-accent-cyan: #14b8c4;
+    --pf-sel: #c7effa;
+    --pf-sel-hover: #b2e7f6;
+    --pf-text-menu: #125a6e;
+    --pf-text-sub: #3a7f95;
+    --pf-text-title: #5b98ac;
+    --pf-text-primary: #0a2e3c;
+    --pf-text-dim: #2d6c80;
+    --pf-th-bg: #f1fbfe;
+    --pf-row-line: #e4f5fb;
+    --pf-row-stripe: #fafdfe;
+    --pf-row-hover: #e8f8fd;
+    --pf-ok: #1e7e34;
+    --pf-ok-bg: #e7f5ea;
+    --pf-warn: #b26a00;
+    --pf-warn-bg: #fff5e0;
+    --pf-err: #c0271f;
+    --pf-err-bg: #fdeceb;
+    --pf-danger: #c0271f;
+    --pf-danger-hover: #8e1414;
+    --pf-ring-accent: #96dcf0;
+    --pf-ring-warn: #f0b4ae;
+    --pf-ring-pick: #c7effa;
+    --pf-neutral-bg: #e2f3f9;
+    --pf-up: #1e9e57;
     --pf-down: #c0392b;
+    --pf-plot-grid: #ddf1f9;
+    --pf-plot-rx: #0b9dc7;
+    --pf-plot-tx: #2f7fd8;
     --pf-sidebar-w: 220px;
     --pf-sidebar-mini-w: 56px;
     --pf-header-h: 50px;
     --pf-footer-h: 38px;
     --pf-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     --pf-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+
+/* Dasar gelap dipakai Darkmode dan Senja bersama; Senja hanya menimpa warna
+   aksen/latar hangatnya di blok berikutnya. */
+html[data-theme="dark"],
+html[data-theme="dusk"] {
+    --pf-chrome-text: #e8eef7;
+    --pf-on-accent: #ffffff;
+    --pf-accent-hover: #74b6ff;
+    --pf-text-primary: #e8eef7;
+    --pf-text-menu: #b9c6d9;
+    --pf-text-sub: #94a3b8;
+    --pf-text-title: #8296ae;
+    --pf-text-dim: #a5b4c9;
+    --pf-ok: #4ade80;
+    --pf-ok-bg: #14301f;
+    --pf-warn: #fbbf24;
+    --pf-warn-bg: #332708;
+    --pf-err: #f87171;
+    --pf-err-bg: #351616;
+    --pf-neutral-bg: #222c3a;
+    --pf-up: #4ade80;
+    --pf-down: #f87171;
+}
+
+html[data-theme="dark"] {
+    --pf-bg-main: #0e1218;
+    --pf-header-bg: #161c26;
+    --pf-header-border: #232c3a;
+    --pf-sidebar-bg: #121821;
+    --pf-sidebar-border: #212a37;
+    --pf-sidebar-hover: #1b2431;
+    --pf-sidebar-active: #22304a;
+    --pf-panel-bg: #161d28;
+    --pf-panel-border: #26303f;
+    --pf-panel-head: #1b2431;
+    --pf-panel-head-text: #e8eef7;
+    --pf-input-bg: #101720;
+    --pf-chip-bg: #1b2431;
+    --pf-accent-blue: #4d9fff;
+    --pf-accent-cyan: #35c9e8;
+    --pf-accent-btn-hover: #2a6dbe;
+    --pf-sel: #24406b;
+    --pf-sel-hover: #2c4c7d;
+    --pf-danger: #a33a34;
+    --pf-danger-hover: #7e231d;
+    --pf-ring-accent: #3a5a80;
+    --pf-ring-warn: #7a3a38;
+    --pf-ring-pick: #2a4a72;
+    --pf-th-bg: #1b2431;
+    --pf-row-line: #1a2230;
+    --pf-row-stripe: #141b26;
+    --pf-row-hover: #1e2a3b;
+    --pf-plot-grid: #26303f;
+    --pf-plot-rx: #4d9fff;
+    --pf-plot-tx: #fbbf24;
+}
+
+/* Senja: latar coklat-gelap + aksen oranye, hanya untuk Auto Themes. */
+html[data-theme="dusk"] {
+    --pf-bg-main: #150f0d;
+    --pf-header-bg: #1d1512;
+    --pf-header-border: #3a281f;
+    --pf-sidebar-bg: #191210;
+    --pf-sidebar-border: #33231b;
+    --pf-sidebar-hover: #241811;
+    --pf-sidebar-active: #3a2415;
+    --pf-panel-bg: #1f1714;
+    --pf-panel-border: #382519;
+    --pf-panel-head: #261914;
+    --pf-panel-head-text: #ffe6d2;
+    --pf-input-bg: #171110;
+    --pf-chip-bg: #2a1c15;
+    --pf-accent-blue: #ff8a3d;
+    --pf-accent-hover: #ffab6b;
+    --pf-accent-cyan: #ffb066;
+    --pf-accent-btn-hover: #b35a20;
+    --pf-sel: #4a2c18;
+    --pf-sel-hover: #5a3620;
+    --pf-danger: #a8452a;
+    --pf-danger-hover: #7e2f1c;
+    --pf-ring-accent: #7a4a28;
+    --pf-ring-warn: #7a3a30;
+    --pf-ring-pick: #6a3c1c;
+    --pf-text-primary: #ffe9da;
+    --pf-text-menu: #e8c6ac;
+    --pf-text-sub: #c79a7d;
+    --pf-text-title: #b0805f;
+    --pf-text-dim: #d6ab8f;
+    --pf-th-bg: #261914;
+    --pf-row-line: #241812;
+    --pf-row-stripe: #1b1310;
+    --pf-row-hover: #2e1f16;
+    --pf-up: #7fd88f;
+    --pf-down: #ff7a6b;
+    --pf-plot-grid: #382519;
+    --pf-plot-rx: #ff8a3d;
+    --pf-plot-tx: #ffd166;
 }
 
 * {

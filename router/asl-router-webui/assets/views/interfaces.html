@@ -1,41 +1,139 @@
-<section class="view">
+<section class="view" data-module="Interfaces" data-module-ico="iface">
     <div class="panel">
-        <div class="panel-head">
-            <h2>Antarmuka Jaringan</h2>
-            <span class="panel-note">/api/v1/interfaces</span>
+        <div class="wf-tabs">
+            <button type="button" class="wf-tab active" data-tab="iface">Interface</button>
+
+            <button type="button" class="wf-tab" data-tab="list">Interface List</button>
+            <button type="button" class="wf-tab" data-tab="eth">Ethernet</button>
+            <button type="button" class="wf-tab" data-tab="eoip">EoIP Tunnel</button>
+            <button type="button" class="wf-tab" data-tab="iptun">IP Tunnel</button>
+            <button type="button" class="wf-tab" data-tab="gre">GRE Tunnel</button>
+            <button type="button" class="wf-tab" data-tab="vlan">VLAN</button>
+            <button type="button" class="wf-tab" data-tab="vxlan">VXLAN</button>
+            <button type="button" class="wf-tab" data-tab="vrrp">VRRP</button>
+            <button type="button" class="wf-tab" data-tab="macsec">MACsec</button>
+            <button type="button" class="wf-tab" data-tab="macvlan">MACVLAN</button>
+            <button type="button" class="wf-tab" data-tab="bond">Bonding</button>
+            <button type="button" class="wf-tab" data-tab="veth">vEthernet</button>
         </div>
-        <table class="tbl">
-            <thead>
-                <tr>
-                    <th>Nama</th>
-                    <th>Mode</th>
-                    <th>Status</th>
-                    <th>MAC</th>
-                    <th>IPv4</th>
-                    <th>Netmask</th>
-                    <th>Gateway</th>
-                    <th>Sumber</th>
-                    <th class="num">RX</th>
-                    <th class="num">TX</th>
-                </tr>
-            </thead>
-            <tbody data-list="/api/v1/interfaces">
-                <tr data-row>
-                    <td class="row-name" data-bind="name"></td>
-                    <td class="row-mode" data-bind="mode"></td>
-                    <td data-bind="status" data-fmt="pill"></td>
-                    <td class="mono" data-bind="mac" data-fmt="dash"></td>
-                    <td class="mono" data-bind="ip" data-fmt="ip"></td>
-                    <td class="mono" data-bind="netmask" data-fmt="dash"></td>
-                    <td class="mono" data-bind="gateway" data-fmt="dash"></td>
-                    <td data-bind="source" data-fmt="dash"></td>
-                    <td class="num" data-bind="rx_packets" data-fmt="num"></td>
-                    <td class="num" data-bind="tx_packets" data-fmt="num"></td>
-                </tr>
-            </tbody>
-        </table>
-        <div class="panel-body">
-            <p class="note">RX/TX adalah hitungan paket pada jalur DMA virtio-net nyata, bukan perkiraan. eth1 dilaporkan <span class="mono">absent</span> bila kernel hanya mendeteksi satu NIC &mdash; itu keadaan sebenarnya pada topologi satu adapter bridged, bukan kegagalan pembacaan.</p>
+
+        <div class="wf-toolbar" data-actions="new,edit,enable,disable,remove,comment"
+             data-tools="find,filter,refresh"
+             data-hint="klik = pilih &#183; dobel-klik = buka modal edit"></div>
+
+        <div class="wf-panel active" data-panel="iface">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Nama</th>
+                        <th>Peran</th>
+                        <th>Tipe</th>
+                        <th>Status</th>
+                        <th>MAC</th>
+                        <th>IPv4</th>
+                        <th>Netmask</th>
+                        <th>Gateway</th>
+                        <th>Mode</th>
+                        <th>Sumber</th>
+                        <th class="num">RX</th>
+                        <th class="num">TX</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/interfaces" data-modal="iface">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="name"></td>
+                        <td class="wf-role" data-bind="role" data-fmt="text"></td>
+                        <td data-bind="type" data-fmt="text"></td>
+                        <td data-bind="status" data-fmt="pill"></td>
+                        <td class="mono" data-bind="mac" data-fmt="dash"></td>
+                        <td class="mono" data-bind="ip" data-fmt="ip"></td>
+                        <td class="mono" data-bind="netmask" data-fmt="dash"></td>
+                        <td class="mono" data-bind="gateway" data-fmt="dash"></td>
+                        <td data-bind="config_mode" data-fmt="text"></td>
+                        <td data-bind="source" data-fmt="dash"></td>
+                        <td class="num v-rx" data-bind="rx_packets" data-fmt="num"></td>
+                        <td class="num v-tx" data-bind="tx_packets" data-fmt="num"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="wf-panel" data-panel="veth">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th>Nama</th>
+                        <th>Induk</th>
+                        <th>Tipe</th>
+                        <th>VLAN ID</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr><td class="row-mode" colspan="5">0 baris: kernel belum punya mesin interface virtual.</td></tr>
+                </tbody>
+            </table>
+            <p class="wf-note">vEthernet = antarmuka buatan di atas induk fisik (VLAN, MACVLAN, bonding). Tab disediakan agar susunan rupa sesuai; datanya menyusul saat mesinnya ada. Hanya baris di tab ini yang boleh di-Remove.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="list">
+            <p class="wf-note">Interface List (pengelompokan antarmuka ke daftar bernama) belum punya mesin maupun endpoint &mdash; 0 baris.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="eth">
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Nama</th>
+                        <th>MAC</th>
+                        <th>Status</th>
+                        <th class="num">RX</th>
+                        <th class="num">TX</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/interfaces" data-modal="iface">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="name"></td>
+                        <td class="mono" data-bind="mac" data-fmt="dash"></td>
+                        <td data-bind="status" data-fmt="pill"></td>
+                        <td class="num v-rx" data-bind="rx_packets" data-fmt="num"></td>
+                        <td class="num v-tx" data-bind="tx_packets" data-fmt="num"></td>
+                    </tr>
+                </tbody>
+            </table>
+            <p class="wf-note">Port fisik ethernet hasil enumerasi PCI + driver virtio-net/E1000. MTU, queue dan kecepatan link tidak ditampilkan karena kernel tidak melaporkannya.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="eoip">
+            <p class="wf-note">EoIP Tunnel: belum ada mesin tunnel Ethernet-over-IP.</p>
+        </div>
+        <div class="wf-panel" data-panel="iptun">
+            <p class="wf-note">IP Tunnel (IPIP): belum ada encapsulation IP-dalam-IP.</p>
+        </div>
+        <div class="wf-panel" data-panel="gre">
+            <p class="wf-note">GRE Tunnel: crate GRE belum ada di workspace ini.</p>
+        </div>
+        <div class="wf-panel" data-panel="vlan">
+            <p class="wf-note">VLAN 802.1Q: baru ada field <span class="mono">vlan_tag</span> tak terpakai di fastpath ring; mesin tagging belum dibuat, jadi 0 baris.</p>
+        </div>
+        <div class="wf-panel" data-panel="vxlan">
+            <p class="wf-note">VXLAN: belum ada mesin L2 overlay.</p>
+        </div>
+        <div class="wf-panel" data-panel="vrrp">
+            <p class="wf-note">VRRP: belum ada mesin redundansi gateway.</p>
+        </div>
+        <div class="wf-panel" data-panel="macsec">
+            <p class="wf-note">MACsec: belum ada enkripsi layer-2.</p>
+        </div>
+        <div class="wf-panel" data-panel="macvlan">
+            <p class="wf-note">MACVLAN: belum ada sub-antar-muka berbasis MAC.</p>
+        </div>
+        <div class="wf-panel" data-panel="bond">
+            <p class="wf-note">Bonding / LAG: belum ada mesin agregasi link.</p>
         </div>
     </div>
 </section>
