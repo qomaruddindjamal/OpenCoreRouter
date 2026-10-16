@@ -1124,7 +1124,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     /// Snapshot runtime untuk WebUI/API. SEMUA field bersumber dari state
     /// kernel aktual pada saat makro diekspansi (tidak ada nilai tetap).
     macro_rules! web_runtime {
-        ($srv:expr, $now_ms:expr, $lan_present:expr, $wan_present:expr) => {{
+        ($srv:expr, $now_ms:expr, $lan_present:expr, $wan_present:expr, $cli_beat:expr) => {{
             let srv = &mut *$srv;
             let hlen = (rjcfg_journal.active_config.hostname_len as usize).min(32);
             web_host[..hlen].copy_from_slice(&rjcfg_journal.active_config.hostname[..hlen]);
@@ -1196,7 +1196,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 wan_config_static: wan_static_mode,
                 dns_active: false,
                 mdns_active: false,
-                serial_cli_active: true,
+                // Heartbeat nyata: diisi di situs pemindai CLI serial pada setiap
+                // iterasi loop. Literal `true` akan melaporkan CLI hidup meski
+                // loop macet di tengah.
+                serial_cli_active: $now_ms.saturating_sub($cli_beat) < 2_000,
                 tcam_rules: tcam.rule_count() as u32,
                 dnat_rules: dnat_active_rules,
                 default_policy: "deny",
@@ -1208,6 +1211,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 // Datapath kernel belum memanggil process_egress/ingress
                 // (lihat [R16]); mengklaim sebaliknya akan memalsukan status.
                 nat_forwarding_wired: false,
+                // Mesin TCAM berdiri dan diuji, tetapi `classify` belum pernah
+                // ditanyakan pada frame yang lewat (lihat [R5] self-test boot);
+                // melaporkannya sebagai perlindungan akan memalsukan status.
+                firewall_wired: false,
                 last_write_ok: web_write_ok,
                 last_write_report: core::str::from_utf8(&web_report[..web_report_len])
                     .unwrap_or(""),
@@ -1223,6 +1230,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     }
 
     let mut loop_count: u32 = 0;
+    let mut serial_cli_beat_ms: u64 = pit.elapsed_ms();
     loop {
         loop_count = loop_count.wrapping_add(1);
 
@@ -1669,7 +1677,13 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     // (3b) TCP/HTTP WebUI pada alamat WAN.
                     let mut web_handled = false;
                     if let Some(srv) = web_server.as_mut() {
-                        let rt = web_runtime!(srv, now_ms, lan_present_now, wan_present_now);
+                        let rt = web_runtime!(
+                            srv,
+                            now_ms,
+                            lan_present_now,
+                            wan_present_now,
+                            serial_cli_beat_ms
+                        );
                         let mut tx = |b: &[u8]| -> Result<(), &'static str> {
                             match eth0.transmit(b) {
                                 Ok(()) => {
@@ -1740,7 +1754,13 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 // dan daur ulang slot yang ditinggal peer.
                 if let Some(srv) = web_server.as_mut() {
                     if srv.active_sessions() > 0 {
-                        let rt = web_runtime!(srv, now_ms, lan_present_now, wan_present_now);
+                        let rt = web_runtime!(
+                            srv,
+                            now_ms,
+                            lan_present_now,
+                            wan_present_now,
+                            serial_cli_beat_ms
+                        );
                         let mut tx = |b: &[u8]| -> Result<(), &'static str> {
                             match eth0.transmit(b) {
                                 Ok(()) => {
@@ -1770,6 +1790,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         }
 
         // SERIAL CLI INTERACTIVE COMMAND SCANNER
+        serial_cli_beat_ms = pit.elapsed_ms();
         if let Some(ch) = SERIAL.read_byte() {
             if ch == b'\r' || ch == b'\n' {
                 SERIAL.write_str("\r\n");

@@ -273,6 +273,30 @@ impl<'a> HttpResponseBuilder<'a> {
     }
 }
 
+/// Kode status yang benar-benar tercetak pada baris status sebuah respons, atau
+/// `0` bila buffer bukan respons HTTP.
+///
+/// Pemanggil wajib memakai fungsi ini alih-alih menulis angka yang direncanakan.
+/// `dispatch`/`dispatch_static` mengembalikan `Ok(n)` untuk 200, 304, 403 dan 429
+/// sekaligus, sehingga angka asumsi pemanggil membuat log konsol melaporkan
+/// `-> 200` untuk respons yang sebenarnya tidak berubah atau ditolak.
+#[must_use]
+pub fn response_status(buf: &[u8]) -> u16 {
+    const PFX: &[u8] = b"HTTP/1.1 ";
+    if buf.len() < PFX.len() + 3 || &buf[..PFX.len()] != PFX {
+        return 0;
+    }
+    let mut code = 0u16;
+    for i in 0..3 {
+        let b = buf[PFX.len() + i];
+        if !b.is_ascii_digit() {
+            return 0;
+        }
+        code = code * 10 + (b - b'0') as u16;
+    }
+    code
+}
+
 pub struct StaticAsset {
     pub path: &'static str,
     pub content_type: &'static str,
@@ -479,5 +503,43 @@ mod tests {
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
 
         assert!(resp.contains("HTTP/1.1 429 Too Many Requests\r\n"));
+    }
+
+    #[test]
+    fn test_09_response_status_reads_the_emitted_line() {
+        // Guard kejujuran log: angka yang dilaporkan server harus dibaca dari
+        // baytes yang benar-benar dikirim, bukan dari niat pemanggil.
+        let mut buf = [0u8; 256];
+        let cases = [
+            HttpStatus::Ok,
+            HttpStatus::NotModified,
+            HttpStatus::BadRequest,
+            HttpStatus::Unauthorized,
+            HttpStatus::Forbidden,
+            HttpStatus::NotFound,
+            HttpStatus::MethodNotAllowed,
+            HttpStatus::TooManyRequests,
+            HttpStatus::InternalServerError,
+        ];
+        for status in cases {
+            let len = HttpResponseBuilder::new(&mut buf, status)
+                .with_content_type("text/plain")
+                .finish_with_body(b"x")
+                .unwrap();
+            assert_eq!(response_status(&buf[..len]), status.code());
+        }
+
+        let len = HttpResponseBuilder::new(&mut buf, HttpStatus::Ok)
+            .finish_not_modified("css-base", 5923)
+            .unwrap();
+        assert_eq!(response_status(&buf[..len]), 304);
+    }
+
+    #[test]
+    fn test_09b_response_status_rejects_non_responses() {
+        assert_eq!(response_status(b""), 0);
+        assert_eq!(response_status(b"GET / HTTP/1.1\r\n"), 0);
+        assert_eq!(response_status(b"HTTP/1.1 20"), 0);
+        assert_eq!(response_status(b"HTTP/1.1 2xx OK\r\n"), 0);
     }
 }

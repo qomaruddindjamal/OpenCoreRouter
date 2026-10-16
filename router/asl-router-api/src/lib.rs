@@ -133,6 +133,10 @@ pub struct WebRuntime<'a> {
     pub nat_table_full_drops: u32,
     /// `true` hanya bila datapath kernel benar-benar memanggil mesin NAT.
     pub nat_forwarding_wired: bool,
+    /// `true` hanya bila aturan TCAM benar-benar ditanyakan pada frame yang
+    /// lewat (klasifikasi in-line). Mesin yang berdiri sendiri tanpa dipanggil
+    /// jalur data tidak boleh dilaporkan sebagai perlindungan.
+    pub firewall_wired: bool,
     /// Hasil penerapan perintah tulis terakhir oleh kernel (dipakai modal WebUI).
     pub last_write_ok: bool,
     pub last_write_report: &'a str,
@@ -178,6 +182,7 @@ impl<'a> Default for WebRuntime<'a> {
             nat_capacity: 0,
             nat_table_full_drops: 0,
             nat_forwarding_wired: false,
+            firewall_wired: false,
             last_write_ok: false,
             last_write_report: "",
             wan_rx: 0,
@@ -698,6 +703,11 @@ impl ApiDispatcher {
                 if rt.wan_present {
                     j.raw(b",");
                 }
+                // Kernel belum punya sensor carrier link, jadi status LAN dibaca
+                // dari fakta yang memang ada: alamat IPv4 yang terpasang pada
+                // interface itu. Literal "up" akan melaporkan interface tanpa
+                // alamat sebagai berjalan.
+                let lan_up = rt.lan_ip != [0, 0, 0, 0];
                 j.raw(b"{\"name\":").quoted(rt.lan_name);
                 j.raw(b",\"role\":").quoted("lan");
                 j.raw(b",\"type\":").quoted("ethernet");
@@ -707,8 +717,9 @@ impl ApiDispatcher {
                 // field sengaja tidak ada, ditampilkan sebagai em-dash.
                 j.raw(b",\"source\":").quoted("local");
                 j.raw(b",\"config_mode\":").quoted("local");
-                j.raw(b",\"status\":").quoted("up");
-                j.raw(b",\"running\":").bool(true);
+                j.raw(b",\"status\":")
+                    .quoted(if lan_up { "up" } else { "down" });
+                j.raw(b",\"running\":").bool(lan_up);
                 j.raw(b",\"rx_packets\":")
                     .u32(rt.lan_rx)
                     .raw(b",\"tx_packets\":")
@@ -728,7 +739,7 @@ impl ApiDispatcher {
         out: &mut [u8],
         rt: &WebRuntime,
     ) -> Result<usize, &'static str> {
-        let mut body = [0u8; 384];
+        let mut body = [0u8; 512];
         let n = {
             let mut j = JsonBuf::new(&mut body);
             j.raw(b"{\"ok\":true,\"data\":{\"default_policy\":")
@@ -737,9 +748,20 @@ impl ApiDispatcher {
                 .u32(rt.tcam_rules)
                 .raw(b",\"dnat_rules\":")
                 .u32(rt.dnat_rules)
+                // Perlindungan hanya boleh dilaporkan bila classifier benar-benar
+                // ditanyakan pada frame yang lewat; mesin TCAM yang berdiri
+                // sendiri bukan tembok.
                 .raw(b",\"wan_protected\":")
-                .bool(rt.wan_up)
-                .raw(b",\"http_port_open\":")
+                .bool(rt.wan_up && rt.firewall_wired)
+                .raw(b",\"rules_enforced\":")
+                .bool(rt.firewall_wired)
+                .raw(b",\"datapath\":");
+            j.quoted(if rt.firewall_wired {
+                "wired"
+            } else {
+                "engine-only"
+            });
+            j.raw(b",\"http_port_open\":")
                 .bool(rt.http_listening)
                 .raw(b",\"http_port\":")
                 .u32(rt.http_port as u32)
@@ -1279,6 +1301,7 @@ mod tests {
             nat_capacity: 128,
             nat_table_full_drops: 0,
             nat_forwarding_wired: false,
+            firewall_wired: false,
             last_write_ok: false,
             last_write_report: "",
             wan_rx: 41,
@@ -1521,6 +1544,54 @@ mod tests {
         assert!(resp.contains("\"default_policy\":\"deny\""));
         assert!(resp.contains("\"tcam_rules\":16"));
         assert!(resp.contains("\"http_port\":80"));
+    }
+
+    #[test]
+    fn test_04b_firewall_protected_requires_datapath() {
+        // Jumlah aturan bukan bukti penegakan. Selama classifier tidak pernah
+        // ditanya pada frame yang lewat, pelaporan "WAN terlindungi: YA" adalah
+        // klaim keamanan yang salah.
+        let mut dispatcher = ApiDispatcher::new();
+        let req = path(b"GET /api/v1/firewall/rules HTTP/1.1\r\n\r\n");
+        let mut buf = [0u8; 1024];
+
+        let len = dispatcher.dispatch(&req, 0, &mut buf, &rt()).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("\"wan_protected\":false"));
+        assert!(resp.contains("\"rules_enforced\":false"));
+        assert!(resp.contains("\"datapath\":\"engine-only\""));
+
+        let mut wired = rt();
+        wired.firewall_wired = true;
+        let len = dispatcher.dispatch(&req, 0, &mut buf, &wired).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("\"wan_protected\":true"));
+        assert!(resp.contains("\"rules_enforced\":true"));
+        assert!(resp.contains("\"datapath\":\"wired\""));
+    }
+
+    #[test]
+    fn test_04c_lan_status_datang_dari_alamat_bukan_literal() {
+        // Regresi §5: interface LAN tanpa alamat tidak boleh lagi dilaporkan
+        // berjalan hanya karena barisnya tercetak.
+        let mut dispatcher = ApiDispatcher::new();
+        let mut r = rt();
+        r.lan_present = true;
+        r.lan_ip = [0, 0, 0, 0];
+        let req = path(b"GET /api/v1/interfaces HTTP/1.1\r\n\r\n");
+        let mut buf = [0u8; 2048];
+        let len = dispatcher.dispatch(&req, 0, &mut buf, &r).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+
+        assert!(resp.contains("\"role\":\"lan\""));
+        assert!(resp.contains("\"status\":\"down\""));
+        assert!(resp.contains("\"running\":false"));
+
+        r.lan_ip = [192, 168, 56, 100];
+        let len = dispatcher.dispatch(&req, 0, &mut buf, &r).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("\"status\":\"up\""));
+        assert!(resp.contains("\"running\":true"));
     }
 
     #[test]

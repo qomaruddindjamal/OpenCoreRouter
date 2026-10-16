@@ -16,7 +16,9 @@ use asl_router_netstack::{
     TcpSocketState, ETHERTYPE_IPV4, IP_PROTO_TCP, TCP_FLAG_ACK, TCP_FLAG_FIN, TCP_FLAG_PSH,
     TCP_FLAG_RST, TCP_FLAG_SYN, TCP_MAX_PAYLOAD,
 };
-use asl_router_webcore::{serve_static, HttpMethod, HttpRequest, HttpResponseBuilder, HttpStatus};
+use asl_router_webcore::{
+    response_status, serve_static, HttpMethod, HttpRequest, HttpResponseBuilder, HttpStatus,
+};
 
 pub fn dispatch_static(
     req: &HttpRequest,
@@ -674,11 +676,16 @@ impl TcpWebServer {
                     };
                     match res {
                         Ok(n) => {
+                            // API bisa mengembalikan 200, 403, atau 429 di jalur
+                            // `Ok`; angka yang dicatat dibaca dari baris status.
+                            let st = response_status(&out[..n]);
                             s.resp_len = n;
                             self.stats.api_served += 1;
-                            self.last_status = 200;
+                            self.last_status = st;
                             if is_post {
-                                log("[R28] HTTP 200 hasil POST jalur tulis\r\n");
+                                log("[R28] POST jalur tulis -> ");
+                                log_u16(st, log);
+                                log("\r\n");
                             }
                         }
                         Err(_) => {
@@ -695,8 +702,11 @@ impl TcpWebServer {
                 } else {
                     match dispatch_static(&req, out) {
                         Some(Ok(n)) => {
+                            // Aset yang validatornya cocok dijawab 304 lewat jalur
+                            // `Ok` yang sama; status dibaca dari baris status respons.
+                            let st = response_status(&out[..n]);
                             s.resp_len = n;
-                            self.last_status = 200;
+                            self.last_status = st;
                         }
                         Some(Err(_)) => {
                             let b = HttpResponseBuilder::new(out, HttpStatus::InternalServerError)
@@ -1406,6 +1416,110 @@ mod tests {
         assert!(
             !resp.contains(".tbl = {}"),
             "tblcols.js membuat ulang OPCR.tbl dan menghapus tbl.setup"
+        );
+    }
+
+    fn served(a: &asl_router_webcore::StaticAsset) -> &'static str {
+        core::str::from_utf8(a.content).expect("aset bukan utf-8")
+    }
+
+    #[test]
+    fn test_05h_kejujuran_status_dan_submenu_layar_sentuh() {
+        // Guard AUD-01, empat cacat yang muncul dari penelusuran rantai
+        // UI->handler->endpoint->kernel:
+        // (1) halaman tanpa sumber data dulu menulis "sinkron" padahal nol
+        //     permintaan dikirim; (2) readout toolbar adalah simpul terikat
+        //     sehingga Find/Filter menghapusnya permanen; (3) tap induk pada
+        //     layar sentuh membuka submenu lalu app.js menutupnya lagi;
+        // (4) Firewall melaporkan WAN terlindungi meski TCAM tidak ditanya.
+        assert!(
+            served(&registry::JS_UI).contains(r#"done(true, null, "kosong")"#),
+            "jalur nol-sumber tidak lagi menandai halaman sebagai kosong"
+        );
+        let app = served(&registry::JS_APP);
+        assert!(
+            app.contains("halaman rupa: 0 endpoint kernel") && app.contains("(ok, why, kosong)"),
+            "app.js tidak menangani penanda kosong"
+        );
+
+        let sys = served(&registry::VIEW_SYSTEM);
+        assert!(
+            sys.contains(r#"class="wf-info" data-source="/api/v1/system""#),
+            "uptime Dashboard harus terikat di luar sasaran pesan toolbar"
+        );
+        assert!(
+            !sys.contains(r#"wf-readout" data-source"#),
+            "readout terikat akan dimusnahkan Find/Filter (table.js menulis textContent-nya)"
+        );
+        assert!(
+            served(&registry::CSS_WEBFIG).contains(".wf-info"),
+            ".wf-info belum bergaya: angka kernel dan pesan toolbar tak terbeda"
+        );
+
+        assert!(
+            served(&registry::JS_NAV).contains("ev.stopImmediatePropagation()"),
+            "tap induk layar sentuh diteruskan ke app.js yang menutup submenu"
+        );
+
+        let fw = served(&registry::VIEW_FIREWALL);
+        assert!(
+            fw.contains(r#"data-bind="rules_enforced""#) && fw.contains(r#"data-bind="datapath""#),
+            "Firewall kembali melaporkan jumlah aturan sebagai penegakan"
+        );
+    }
+
+    #[test]
+    fn test_05i_status_log_dibaca_dari_baris_status_respons() {
+        // Guard §4.27: `dispatch`/`dispatch_static` mengembalikan `Ok` untuk
+        // 200, 304, 403 dan 429 sekaligus. Angka status yang ditulis sebagai
+        // literal di build_response berarti konsol sedang mengarang.
+        let src = include_str!("lib.rs");
+        // Kedua penanda ditulis dengan escape: bila keduanya tertulis sebagai
+        // literal utuh, badan tes ini menemukan dirinya sendiri dan guard
+        // gagal (atau lolos) karena alasan yang salah.
+        const HARD: &str = "last_status = 2\x30\x30";
+        const CALL: &str = "response_status(&out[..n\x5d)";
+        assert!(
+            !src.contains(HARD),
+            "200 dihardcode lagi: respons 304/403/429 akan tercatat sebagai 200"
+        );
+        assert_eq!(
+            src.matches(CALL).count(),
+            2,
+            "jalur API dan jalur aset wajib membaca baris status yang dikirim"
+        );
+    }
+
+    #[test]
+    fn test_05j_penolakan_bertingkat_dan_footer_halaman_kerja() {
+        // Guard AUD-01 lanjutan, dari penelusuran langsung di VM:
+        // (1) "/tool ping 10.10.66.1" dulu jatuh ke "perintah tidak dikenal"
+        //     padahal tabel NO punya alasan teknisnya (tanpa argumen);
+        // (2) kepala sesi terminal membeku pada "menghubungkan…" setelah
+        //     view dibangun ulang karena alamat host tidak dibaca lagi;
+        // (3) footer melabeli terminal sebagai "halaman rupa" padahal tiap
+        //     perintahnya adalah panggilan HTTP nyata ke kernel.
+        let term = served(&registry::JS_TERM);
+        assert!(
+            term.contains("nw[k] === cw[k]"),
+            "tabel NO hanya dicocokkan persis: perintah berargumen kehilangan sebab penolakan"
+        );
+        assert!(
+            !term.contains(r#"D.NO[i][0] === c || D.NO[i][0] === head"#),
+            "cocok-persis lama masih menjadi satu-satunya gerbang penolakan"
+        );
+        assert_eq!(
+            term.matches("greet(cur)").count(),
+            2,
+            "sesi yang dibangun ulang wajib membaca ulang alamat host"
+        );
+        assert!(
+            served(&registry::JS_APP).contains("halaman interaktif"),
+            "footer tidak lagi membedakan halaman rupa dari halaman kerja"
+        );
+        assert!(
+            served(&registry::VIEW_TERMINAL).contains(r#"data-cli="1""#),
+            "terminal.html kehilangan penanda halaman kerja"
         );
     }
 
@@ -2386,5 +2500,74 @@ mod tests {
         assert!(text3.starts_with("HTTP/1.1 405"));
         assert!(!api.power_armed(rt.tick_100ms), "PUT tidak boleh meng-arm");
         assert!(api.take_power().is_none());
+    }
+
+    #[test]
+    fn test_20_conditional_get_dilaporkan_304_bukan_200() {
+        // Guard §4.27 lewat jalur TCP sungguhan: `dispatch_static` mengembalikan
+        // `Ok` yang sama untuk 200 penuh maupun 304, jadi satu-satunya angka
+        // yang boleh dicatat server adalah yang tertulis pada baris status.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 20000);
+
+        let asset = &registry::VIEW_ARP;
+        // Validator `<label>-<panjang>` disusun di tumpukan: crate ini no_std.
+        let mut raw = [0u8; 256];
+        let mut n = 0usize;
+        for b in b"GET /views/arp.html HTTP/1.1\r\nHost: 192.0.2.10\r\nIf-None-Match: \"" {
+            raw[n] = *b;
+            n += 1;
+        }
+        for b in asset.etag.as_bytes() {
+            raw[n] = *b;
+            n += 1;
+        }
+        raw[n] = b'-';
+        n += 1;
+        let mut digits = [0u8; 20];
+        let mut d = digits.len();
+        let mut v = asset.content.len();
+        if v == 0 {
+            d -= 1;
+            digits[d] = b'0';
+        }
+        while v > 0 {
+            d -= 1;
+            digits[d] = b'0' + (v % 10) as u8;
+            v /= 10;
+        }
+        for b in &digits[d..] {
+            raw[n] = *b;
+            n += 1;
+        }
+        for b in b"\"\r\n\r\n" {
+            raw[n] = *b;
+            n += 1;
+        }
+
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            20001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &raw[..n],
+            &mut cap,
+        );
+        assert_eq!(
+            server.last_status, 304,
+            "validasi ulang yang sah sedang dicatat dengan angka lain"
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.contains("HTTP/1.1 304 Not Modified"),
+            "baris status respons bukan 304: {text}"
+        );
     }
 }
