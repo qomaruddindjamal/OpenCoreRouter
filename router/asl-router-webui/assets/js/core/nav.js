@@ -85,6 +85,12 @@
                 if (touch) {
                     p.querySelector(".nav-item").addEventListener("click", function (ev) {
                         ev.preventDefault();
+                        // app.js juga mengikat elemen yang sama (data-view) dan
+                        // panggilannya menutup semua submenu lewat nav.closeSubs().
+                        // Tanpa penghentian ini, sentuhan pada induk membuka lalu
+                        // seketika menutup grupnya lagi sehingga submenu layar
+                        // sentuh tidak pernah bisa dipakai.
+                        ev.stopImmediatePropagation();
                         var was = p.classList.contains("open");
                         closeSubs();
                         if (!was) p.classList.add("open");

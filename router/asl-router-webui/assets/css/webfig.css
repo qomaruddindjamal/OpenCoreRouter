@@ -93,13 +93,22 @@
     margin-left: auto;
 }
 
-.wf-readout {
+/* Bacaan toolbar (.wf-readout) adalah sasaran pesan Find/Filter/toolbar, jadi
+   nilai terikat kernel tidak boleh tinggal di dalamnya: penyaringan baris
+   menulis textContent dan memusnahkan simpul [data-bind] di dalamnya untuk
+   sisa sesi. Angka kernel hidup di .wf-info yang tak pernah disentuh pesan. */
+.wf-readout,
+.wf-info {
     font-family: var(--pf-mono);
     font-size: 11px;
     color: var(--pf-text-dim);
     flex: 0 1 auto;
     min-width: 0;
     text-align: right;
+}
+
+.wf-info {
+    text-align: left;
 }
 
 .wf-readout.warn {

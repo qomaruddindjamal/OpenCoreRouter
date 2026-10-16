@@ -147,7 +147,9 @@
     ui.refresh = function (root, done) {
         var urls = sources(root);
         if (urls.length === 0) {
-            if (done) done(true, null);
+            // Argumen ketiga: tanpa sumber data tidak ada permintaan yang bisa
+            // dibuktikan segar, jadi footer tidak boleh menulis "sinkron".
+            if (done) done(true, null, "kosong");
             return;
         }
         var cache = {}, pending = urls.length, failed = null;

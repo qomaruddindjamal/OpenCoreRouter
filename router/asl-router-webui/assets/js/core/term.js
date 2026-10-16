@@ -153,9 +153,13 @@
         if (c === "/system power arm") { post("/api/v1/power", "action=arm"); return; }
         if (c === "/system reboot") { post("/api/v1/power", "action=restart"); return; }
         if (c === "/system shutdown") { post("/api/v1/power", "action=shutdown"); return; }
-        for (i = 0; i < D.NO.length; i++) if (D.NO[i][0] === c || D.NO[i][0] === head) {
-            say("tl-err", "ditolak: " + D.NO[i][1]);
-            return;
+        var cw = c.split(" ");
+        for (i = 0; i < D.NO.length; i++) {
+            // NO tanpa argumen: padanan dibaca per kata dari depan supaya
+            // "/tool ping 10.10.66.1" ikut mendapat alasan penolakan.
+            var nw = D.NO[i][0].split(" "), k, hit = nw.length <= cw.length;
+            for (k = 0; hit && k < nw.length; k++) hit = nw[k] === cw[k];
+            if (hit) { say("tl-err", "ditolak: " + D.NO[i][1]); return; }
         }
         say("tl-err", "perintah tidak dikenal: \"" + line + "\" - ketik help untuk daftar yang punya jalur.");
     }
@@ -198,6 +202,8 @@
             tabs();
             paint();
             focus();
+            // Label kepala sesi hidup di DOM parsial yang baru: baca ulang.
+            greet(cur);
         }
     };
 })(((window.OPCR = window.OPCR || {}).term = {}));

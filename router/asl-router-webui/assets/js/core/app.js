@@ -43,11 +43,17 @@
         return doc.body ? doc.body.firstElementChild : null;
     }
 
-    function stamp(ok, why) {
+    function stamp(ok, why, kosong) {
         var now = new Date();
         function two(v) { return v < 10 ? "0" + v : String(v); }
         var hh = two(now.getHours()) + ":" + two(now.getMinutes()) + ":" + two(now.getSeconds());
-        foot.textContent = ok ? "sinkron " + hh + " (segar " + (REFRESH_MS / 1000) + " s)"
+        // Footer hanya boleh mengklaim sinkron bila ada permintaan kernel yang
+        // benar-benar baru saja berhasil.
+        var root = mount.firstElementChild;
+        var cli = kosong && root && root.getAttribute("data-cli");
+        foot.textContent = cli ? "halaman interaktif: 0 endpoint pasif, perintah memanggil kernel saat diketik"
+            : kosong ? "halaman rupa: 0 endpoint kernel"
+            : ok ? "sinkron " + hh + " (segar " + (REFRESH_MS / 1000) + " s)"
             : "gagal membaca kernel: " + why;
         foot.setAttribute("class", "mono" + (ok ? "" : " error-inline"));
     }
@@ -69,7 +75,7 @@
     function refreshView() {
         var node = mount.firstElementChild;
         if (!node || !current) return;
-        OPCR.ui.refresh(node, function (ok, why) { stamp(ok, why); });
+        OPCR.ui.refresh(node, function (ok, why, kosong) { stamp(ok, why, kosong); });
     }
 
     // Terminal dan CSS-nya dimuat malas. shell.html adalah pemegang gerbang

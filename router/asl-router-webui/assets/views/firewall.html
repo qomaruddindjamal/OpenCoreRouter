@@ -2,7 +2,7 @@
     <div class="panel">
         <div class="panel-head">
             <h2>Firewall</h2>
-            <span class="panel-note" data-bind="wan_protected" data-fmt="pill-yes"></span>
+            <span class="panel-note" data-bind="datapath" data-fmt="text"></span>
         </div>
 
         <div class="wf-tabs">
@@ -16,13 +16,14 @@
         <div class="wf-panel active" data-panel="rules">
             <table class="wf-kv">
                 <tr><td>Kebijakan bawaan</td><td data-bind="default_policy" data-fmt="pill-policy"></td></tr>
+                <tr><td>Aturan ditegakkan di jalur data</td><td data-bind="rules_enforced" data-fmt="pill-yes"></td></tr>
                 <tr><td>Aturan TCAM</td><td data-bind="tcam_rules" data-fmt="num"></td></tr>
                 <tr><td>Aturan DNAT</td><td data-bind="dnat_rules" data-fmt="num"></td></tr>
                 <tr><td>WAN terlindungi</td><td data-bind="wan_protected" data-fmt="pill-yes"></td></tr>
                 <tr><td>Port manajemen</td><td data-bind="http_port" data-fmt="num"></td></tr>
                 <tr><td>Port terbuka</td><td data-bind="http_port_open" data-fmt="pill-yes"></td></tr>
             </table>
-            <p class="wf-note">Jumlah aturan dibaca langsung dari mesin TCAM kernel. Daftar aturan per-baris belum diekspos API, jadi sengaja tidak ditampilkan daripada dikarang. Modul ini masih baca-saja: satu-satunya jalur tulis WebUI saat ini adalah konfigurasi antarmuka WAN.</p>
+            <p class="wf-note">Jumlah aturan dibaca langsung dari mesin TCAM kernel. Mesin itu berjalan dan diuji sendiri, tetapi build ini belum menanyakannya pada frame yang lewat, jadi "WAN terlindungi" dan "Aturan ditegakkan di jalur data" dilaporkan TIDAK sampai klasifikasi in-line terpasang &mdash; angka aturan bukan bukti penegakan. Daftar aturan per-baris belum diekspos API, jadi sengaja tidak ditampilkan daripada dikarang. Modul ini masih baca-saja: satu-satunya jalur tulis WebUI saat ini adalah konfigurasi antarmuka WAN.</p>
         </div>
 
         <div class="wf-panel" data-panel="nat">
