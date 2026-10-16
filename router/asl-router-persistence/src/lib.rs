@@ -2,7 +2,8 @@
 //! Version: RINJANI_1_0_0
 //! Standard: DO-178C DAL-A / ARINC 653 IMA
 //! RJCFG01 Configuration Journal Subsystem with Dual-Slot A/B Atomic Switch
-//! Supports hostname, static DNS hosts, DHCP pool configuration, and interface profiles.
+//! Supports hostname, static DNS hosts, DHCP pool configuration, WAN addressing
+//! mode (DHCP vs static) and operator-changed interface names.
 
 #![no_std]
 
@@ -11,6 +12,36 @@ use asl_router_gpt::compute_crc32;
 pub const RJCFG_MAGIC: [u8; 8] = *b"RJCFG01\0";
 pub const RJCFG_HEADER_SIZE: usize = 32;
 pub const RJCFG_SLOT_SIZE: usize = 4096; // 4 KiB per slot
+
+/// Penanda blok konfigurasi WAN lanjutan pada payload. Rekam lama (sebelum sprint
+/// UI-02) hanya menulis byte 0..119 dan `serialize` selalu menolkan sisanya, jadi
+/// byte 119 pada slot lama pasti 0. Nilai 0xA7 berarti blok WAN benar-benar ada.
+/// Tag dipakai alih-alih menaikkan `RjcfgHeader.version` karena pembaca menolak
+/// versi tidak dikenal — kenaikan versi akan membuat rekam lama ikut tertolak dan
+/// hostname pengguna hilang.
+pub const RJCFG_WAN_BLOCK_TAG: u8 = 0xA7;
+/// Panjang maksimum nama antarmuka yang dapat ditulis WebUI/CLI.
+pub const RJCFG_IFACE_NAME_MAX: usize = 16;
+/// Mode WAN: alamat diperoleh lewat klien DHCP.
+pub const RJCFG_WAN_MODE_DHCP: u8 = 0;
+/// Mode WAN: alamat statik dipegang operator.
+pub const RJCFG_WAN_MODE_STATIC: u8 = 1;
+
+// Offset blok WAN dalam slot (byte 0..119 dipakai field warisan).
+const OFF_WAN_TAG: usize = 119;
+const OFF_WAN_MODE: usize = 120;
+const OFF_WAN_IP: usize = 121;
+const OFF_WAN_MASK: usize = 125;
+const OFF_WAN_GW: usize = 129;
+const OFF_WAN_NAME_LEN: usize = 133;
+const OFF_WAN_NAME: usize = 134;
+const OFF_LAN_NAME_LEN: usize = 150;
+const OFF_LAN_NAME: usize = 151;
+const OFF_WAN_END: usize = 167;
+/// Penjaga regresi: ekstensi blok WAN harus tetap muat dalam slot 4096 B dan
+/// batas akhir harus cocok dengan susunan offset di atas.
+const _: () = assert!(OFF_WAN_END <= RJCFG_SLOT_SIZE);
+const _: () = assert!(OFF_WAN_END == OFF_LAN_NAME + RJCFG_IFACE_NAME_MAX);
 
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -38,6 +69,26 @@ pub struct RjcfgConfigPayload {
     pub static_dns_host: [u8; 32],
     pub static_dns_host_len: u8,
     pub static_dns_ip: [u8; 4],
+    /// Konfigurasi WAN (blok lanjutan, lihat `RJCFG_WAN_BLOCK_TAG`).
+    pub wan_mode: u8,
+    pub wan_ip: [u8; 4],
+    pub wan_netmask: [u8; 4],
+    pub wan_gw: [u8; 4],
+    pub wan_name: [u8; RJCFG_IFACE_NAME_MAX],
+    pub wan_name_len: u8,
+    pub lan_name: [u8; RJCFG_IFACE_NAME_MAX],
+    pub lan_name_len: u8,
+}
+
+/// Nama antarmuka: huruf/angka kecil, `-`, `_`, `.`; panjang 1..=16. Aturan ini
+/// dipakai WebUI dan CLI agar satu sumber kebenaran untuk validasi penamaan.
+pub fn iface_name_ok(s: &str) -> bool {
+    if s.is_empty() || s.len() > RJCFG_IFACE_NAME_MAX {
+        return false;
+    }
+    s.bytes().all(|b| {
+        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_' || b == b'.'
+    })
 }
 
 impl RjcfgConfigPayload {
@@ -66,6 +117,22 @@ impl RjcfgConfigPayload {
             k += 1;
         }
 
+        let mut wan_name = [0u8; RJCFG_IFACE_NAME_MAX];
+        let wn_str = b"eth0";
+        let mut m = 0;
+        while m < wn_str.len() {
+            wan_name[m] = wn_str[m];
+            m += 1;
+        }
+
+        let mut lan_name = [0u8; RJCFG_IFACE_NAME_MAX];
+        let ln_str = b"eth1";
+        let mut p = 0;
+        while p < ln_str.len() {
+            lan_name[p] = ln_str[p];
+            p += 1;
+        }
+
         Self {
             hostname,
             hostname_len: h_str.len() as u8,
@@ -78,6 +145,14 @@ impl RjcfgConfigPayload {
             static_dns_host,
             static_dns_host_len: s_str.len() as u8,
             static_dns_ip: [192, 168, 56, 1],
+            wan_mode: RJCFG_WAN_MODE_DHCP,
+            wan_ip: [0; 4],
+            wan_netmask: [0; 4],
+            wan_gw: [0; 4],
+            wan_name,
+            wan_name_len: wn_str.len() as u8,
+            lan_name,
+            lan_name_len: ln_str.len() as u8,
         }
     }
 
@@ -96,6 +171,17 @@ impl RjcfgConfigPayload {
         out[82] = self.static_dns_host_len;
         out[83..115].copy_from_slice(&self.static_dns_host);
         out[115..119].copy_from_slice(&self.static_dns_ip);
+        // Blok WAN lanjutan (sprint UI-02): ditulis selalu, dengan tag agar
+        // pembaca dapat membedakan rekam warisan (byte 119 == 0) dari rekam baru.
+        out[OFF_WAN_TAG] = RJCFG_WAN_BLOCK_TAG;
+        out[OFF_WAN_MODE] = self.wan_mode;
+        out[OFF_WAN_IP..OFF_WAN_IP + 4].copy_from_slice(&self.wan_ip);
+        out[OFF_WAN_MASK..OFF_WAN_MASK + 4].copy_from_slice(&self.wan_netmask);
+        out[OFF_WAN_GW..OFF_WAN_GW + 4].copy_from_slice(&self.wan_gw);
+        out[OFF_WAN_NAME_LEN] = self.wan_name_len;
+        out[OFF_WAN_NAME..OFF_WAN_NAME + RJCFG_IFACE_NAME_MAX].copy_from_slice(&self.wan_name);
+        out[OFF_LAN_NAME_LEN] = self.lan_name_len;
+        out[OFF_LAN_NAME..OFF_LAN_NAME + RJCFG_IFACE_NAME_MAX].copy_from_slice(&self.lan_name);
     }
 
     pub fn deserialize(buf: &[u8; RJCFG_SLOT_SIZE]) -> Result<Self, &'static str> {
@@ -135,6 +221,48 @@ impl RjcfgConfigPayload {
         let mut static_dns_ip = [0u8; 4];
         static_dns_ip.copy_from_slice(&buf[115..119]);
 
+        // Blok WAN: hanya ada bila tag tersimpan. Rekam warisan memakai default
+        // (DHCP + nama eth0/eth1) sehingga pembacaan tidak pernah gagal.
+        let mut wan_mode = RJCFG_WAN_MODE_DHCP;
+        let mut wan_ip = [0u8; 4];
+        let mut wan_netmask = [0u8; 4];
+        let mut wan_gw = [0u8; 4];
+        let mut wan_name = [0u8; RJCFG_IFACE_NAME_MAX];
+        let mut wan_name_len = 0u8;
+        let mut lan_name = [0u8; RJCFG_IFACE_NAME_MAX];
+        let mut lan_name_len = 0u8;
+        let mut block_present = false;
+        if buf[OFF_WAN_TAG] == RJCFG_WAN_BLOCK_TAG {
+            block_present = true;
+            wan_mode = buf[OFF_WAN_MODE];
+            if wan_mode > RJCFG_WAN_MODE_STATIC {
+                return Err("Invalid WAN mode");
+            }
+            wan_ip.copy_from_slice(&buf[OFF_WAN_IP..OFF_WAN_IP + 4]);
+            wan_netmask.copy_from_slice(&buf[OFF_WAN_MASK..OFF_WAN_MASK + 4]);
+            wan_gw.copy_from_slice(&buf[OFF_WAN_GW..OFF_WAN_GW + 4]);
+            wan_name_len = buf[OFF_WAN_NAME_LEN];
+            if wan_name_len as usize > RJCFG_IFACE_NAME_MAX {
+                return Err("Invalid WAN interface name length");
+            }
+            wan_name.copy_from_slice(&buf[OFF_WAN_NAME..OFF_WAN_NAME + RJCFG_IFACE_NAME_MAX]);
+            lan_name_len = buf[OFF_LAN_NAME_LEN];
+            if lan_name_len as usize > RJCFG_IFACE_NAME_MAX {
+                return Err("Invalid LAN interface name length");
+            }
+            lan_name.copy_from_slice(&buf[OFF_LAN_NAME..OFF_LAN_NAME + RJCFG_IFACE_NAME_MAX]);
+        }
+        if !block_present || wan_name_len == 0 {
+            let d = b"eth0";
+            wan_name[..d.len()].copy_from_slice(d);
+            wan_name_len = d.len() as u8;
+        }
+        if !block_present || lan_name_len == 0 {
+            let d = b"eth1";
+            lan_name[..d.len()].copy_from_slice(d);
+            lan_name_len = d.len() as u8;
+        }
+
         Ok(Self {
             hostname,
             hostname_len,
@@ -147,7 +275,80 @@ impl RjcfgConfigPayload {
             static_dns_host,
             static_dns_host_len,
             static_dns_ip,
+            wan_mode,
+            wan_ip,
+            wan_netmask,
+            wan_gw,
+            wan_name,
+            wan_name_len,
+            lan_name,
+            lan_name_len,
         })
+    }
+
+    /// Tulis alamat WAN statik ke dalam payload (belum di-commit).
+    pub fn set_wan_static(&mut self, ip: [u8; 4], netmask: [u8; 4], gw: [u8; 4]) {
+        self.wan_mode = RJCFG_WAN_MODE_STATIC;
+        self.wan_ip = ip;
+        self.wan_netmask = netmask;
+        self.wan_gw = gw;
+    }
+
+    /// Kembalikan payload ke mode DHCP: alamat yang pernah statik dibersihkan
+    /// supaya boot berikutnya tidak pernah mengarang alamat lama.
+    pub fn set_wan_dhcp(&mut self) {
+        self.wan_mode = RJCFG_WAN_MODE_DHCP;
+        self.wan_ip = [0; 4];
+        self.wan_netmask = [0; 4];
+        self.wan_gw = [0; 4];
+    }
+
+    /// Ganti nama antarmuka sisi WAN; validasi ketat karena nama dipakai kembali
+    /// sebagai pengenal pada endpoint tulis.
+    pub fn set_wan_name(&mut self, name: &str) -> Result<(), &'static str> {
+        if !iface_name_ok(name) {
+            return Err("Interface name must be 1..=16 of [a-z0-9-_.]");
+        }
+        for b in self.wan_name.iter_mut() {
+            *b = 0;
+        }
+        let bytes = name.as_bytes();
+        self.wan_name[..bytes.len()].copy_from_slice(bytes);
+        self.wan_name_len = bytes.len() as u8;
+        Ok(())
+    }
+
+    pub fn set_lan_name(&mut self, name: &str) -> Result<(), &'static str> {
+        if !iface_name_ok(name) {
+            return Err("Interface name must be 1..=16 of [a-z0-9-_.]");
+        }
+        for b in self.lan_name.iter_mut() {
+            *b = 0;
+        }
+        let bytes = name.as_bytes();
+        self.lan_name[..bytes.len()].copy_from_slice(bytes);
+        self.lan_name_len = bytes.len() as u8;
+        Ok(())
+    }
+
+    /// Nama WAN sebagai `&str`; buffer dipinjam pemanggil agar tetap no_std
+    /// tanpa alokasi. Salinan yang rusak UTF-8 jatuh ke default `eth0`.
+    pub fn wan_name_str<'a>(&'a self, out_buf: &'a mut [u8; RJCFG_IFACE_NAME_MAX]) -> &'a str {
+        let len = self.wan_name_len as usize;
+        if len == 0 || len > RJCFG_IFACE_NAME_MAX {
+            return "eth0";
+        }
+        out_buf[..len].copy_from_slice(&self.wan_name[..len]);
+        core::str::from_utf8(&out_buf[..len]).unwrap_or("eth0")
+    }
+
+    pub fn lan_name_str<'a>(&'a self, out_buf: &'a mut [u8; RJCFG_IFACE_NAME_MAX]) -> &'a str {
+        let len = self.lan_name_len as usize;
+        if len == 0 || len > RJCFG_IFACE_NAME_MAX {
+            return "eth1";
+        }
+        out_buf[..len].copy_from_slice(&self.lan_name[..len]);
+        core::str::from_utf8(&out_buf[..len]).unwrap_or("eth1")
     }
 }
 
@@ -548,5 +749,97 @@ mod tests {
             .err()
             .expect("active_slot tidak valid harus menolak");
         assert_eq!(err, "RJCFG01: active_slot tidak valid");
+    }
+
+    #[test]
+    fn test_15_wan_static_roundtrip() {
+        let mut cfg = RjcfgConfigPayload::default_config();
+        cfg.set_wan_static([198, 51, 100, 20], [255, 255, 255, 0], [198, 51, 100, 1]);
+        cfg.set_wan_name("wan-uplink").unwrap();
+
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        cfg.serialize(&mut slot);
+        assert_eq!(slot[OFF_WAN_TAG], RJCFG_WAN_BLOCK_TAG);
+
+        let back = RjcfgConfigPayload::deserialize(&slot).expect("blok WAN terbaca");
+        assert_eq!(back.wan_mode, RJCFG_WAN_MODE_STATIC);
+        assert_eq!(back.wan_ip, [198, 51, 100, 20]);
+        assert_eq!(back.wan_netmask, [255, 255, 255, 0]);
+        assert_eq!(back.wan_gw, [198, 51, 100, 1]);
+        let mut nb = [0u8; RJCFG_IFACE_NAME_MAX];
+        assert_eq!(back.wan_name_str(&mut nb), "wan-uplink");
+        assert_eq!(back, cfg);
+    }
+
+    #[test]
+    fn test_16_legacy_slot_without_wan_block_keeps_defaults() {
+        // Rekam pra-UI-02: byte 119..167 nol karena serialize lama menolkan slot.
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        RjcfgConfigPayload::default_config().serialize(&mut slot);
+        for b in slot[OFF_WAN_TAG..OFF_WAN_END].iter_mut() {
+            *b = 0;
+        }
+        let back = RjcfgConfigPayload::deserialize(&slot).expect("rekam warisan wajib diterima");
+        let mut nb = [0u8; RJCFG_IFACE_NAME_MAX];
+        assert_eq!(back.hostname_len, 7);
+        assert_eq!(&back.hostname[..7], b"rinjani");
+        assert_eq!(back.wan_mode, RJCFG_WAN_MODE_DHCP);
+        assert_eq!(back.wan_ip, [0, 0, 0, 0]);
+        assert_eq!(back.wan_name_str(&mut nb), "eth0");
+        assert_eq!(back.lan_name_str(&mut nb), "eth1");
+    }
+
+    #[test]
+    fn test_17_invalid_wan_mode_rejected() {
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        RjcfgConfigPayload::default_config().serialize(&mut slot);
+        slot[OFF_WAN_MODE] = 2; // bukan dhcp(0) dan bukan static(1)
+        assert_eq!(
+            RjcfgConfigPayload::deserialize(&slot),
+            Err("Invalid WAN mode")
+        );
+    }
+
+    #[test]
+    fn test_18_iface_name_validation() {
+        assert!(iface_name_ok("eth0"));
+        assert!(iface_name_ok("wan-uplink.2"));
+        assert!(!iface_name_ok(""));
+        assert!(!iface_name_ok("ETH0"));
+        assert!(!iface_name_ok("eth 0"));
+        assert!(!iface_name_ok("a;rm -rf"));
+        assert!(!iface_name_ok("enam belas karakter percobaan"));
+        let mut cfg = RjcfgConfigPayload::default_config();
+        assert!(cfg.set_wan_name("eth;drop").is_err());
+        // Nama yang ditolak tidak boleh meninggalkan sisa di payload.
+        let mut nb = [0u8; RJCFG_IFACE_NAME_MAX];
+        assert_eq!(cfg.wan_name_str(&mut nb), "eth0");
+    }
+
+    #[test]
+    fn test_19_wan_config_survives_commit_and_reload() {
+        let mut journal = RjcfgJournal::new_default();
+        let mut cfg = journal.active_config;
+        cfg.set_wan_static([203, 0, 113, 9], [255, 255, 255, 128], [203, 0, 113, 1]);
+        cfg.set_lan_name("lan-home").unwrap();
+        let slot = journal.commit_update(cfg).expect("commit ok");
+        assert_eq!(slot, 1);
+
+        let loaded = RjcfgJournal::load_from_disk(&journal.header, &journal.slot_b)
+            .expect("muat ulang dari slot aktif");
+        assert_eq!(loaded.active_config.wan_mode, RJCFG_WAN_MODE_STATIC);
+        assert_eq!(loaded.active_config.wan_ip, [203, 0, 113, 9]);
+        let mut nb = [0u8; RJCFG_IFACE_NAME_MAX];
+        assert_eq!(loaded.active_config.lan_name_str(&mut nb), "lan-home");
+    }
+
+    #[test]
+    fn test_20_dhcp_mode_clears_static_addresses() {
+        let mut cfg = RjcfgConfigPayload::default_config();
+        cfg.set_wan_static([198, 51, 100, 20], [255, 255, 255, 0], [198, 51, 100, 1]);
+        cfg.set_wan_dhcp();
+        assert_eq!(cfg.wan_mode, RJCFG_WAN_MODE_DHCP);
+        assert_eq!(cfg.wan_ip, [0, 0, 0, 0]);
+        assert_eq!(cfg.wan_gw, [0, 0, 0, 0]);
     }
 }

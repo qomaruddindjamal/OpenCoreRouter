@@ -407,3 +407,31 @@ pub fn triple_fault_reboot() -> ! {
         core::hint::spin_loop();
     }
 }
+
+/// Reset sistem lengkap: detak reset 8042 (perintah 0xFE ke port 0x64) lebih
+/// dulu, lalu triple fault sebagai cadangan. Bukti runtime: di VirtualBox triple
+/// fault sendiri berakhir di Gurumeditation (VM berhenti), sedangkan 0xFE
+/// me-reset CPU sehingga guest boot ulang tanpa campur tangan host.
+#[cfg(target_arch = "x86_64")]
+pub fn system_reset() -> ! {
+    unsafe {
+        core::arch::asm!("cli");
+        core::arch::asm!(
+            "out dx, al",
+            in("dx") 0x0064u16,
+            in("al") 0xFEu8,
+            options(nomem, nostack, preserves_flags)
+        );
+    }
+    for _ in 0..(1u32 << 22) {
+        core::hint::spin_loop();
+    }
+    triple_fault_reboot()
+}
+
+#[cfg(not(target_arch = "x86_64"))]
+pub fn system_reset() -> ! {
+    loop {
+        core::hint::spin_loop();
+    }
+}

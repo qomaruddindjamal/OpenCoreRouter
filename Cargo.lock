@@ -61,6 +61,7 @@ dependencies = [
  "asl-router-hwinv",
  "asl-router-lpm",
  "asl-router-nat",
+ "asl-router-persistence",
  "asl-router-tcam",
  "asl-router-webcore",
 ]

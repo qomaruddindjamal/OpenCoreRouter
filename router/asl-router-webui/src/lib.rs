@@ -22,12 +22,35 @@ pub fn dispatch_static(
     req: &HttpRequest,
     out_buf: &mut [u8],
 ) -> Option<Result<usize, &'static str>> {
+    // Route shell: semua entri sidebar dilayani dari satu dokumen; router
+    // client-side (app.js + views.js) yang memilih parsial view-nya.
     let path = if req.path == "/"
-        || req.path == "/status"
-        || req.path == "/interfaces"
-        || req.path == "/firewall"
-        || req.path == "/services"
-    {
+        || matches!(
+            req.path,
+            "/status"
+                | "/interfaces"
+                | "/firewall"
+                | "/nat"
+                | "/services"
+                | "/arp"
+                | "/serviceslist"
+                | "/dnsserver"
+                | "/gateway"
+                | "/dhcpserver"
+                | "/wireguard"
+                | "/vpn"
+                | "/xray"
+                | "/qos"
+                | "/wireless"
+                | "/olt"
+                | "/terminal"
+                | "/appearance"
+                | "/packages"
+                | "/usermanager"
+                | "/speedtest"
+                | "/telnet"
+                | "/traceroute"
+        ) {
         "/"
     } else {
         req.path
@@ -46,7 +69,7 @@ pub fn dispatch_static(
 // -----------------------------------------------------------------------------
 
 /// Jumlah sesi TCP paralel yang dapat dilayani. WebUI modular membuka banyak
-/// aset sekaligus saat muat pertama (chrome + 3 CSS + 3 JS + logo + parsial
+/// aset sekaligus saat muat pertama (chrome + 4 CSS + 5 JS + logo + parsial
 /// view); dengan 4 slot browser harus menunggu SYN yang dijatuhkan diulang,
 /// sehingga halaman pertama terasa lambat.
 pub const WEB_SESSIONS: usize = 8;
@@ -406,10 +429,12 @@ impl TcpWebServer {
         s.peer_window = th.window;
         s.hold_ticks = 0;
 
-        // Dispatch HTTP ketika permintaan lengkap (terminator header \r\n\r\n).
+        // Dispatch HTTP hanya ketika permintaan benar-benar lengkap: header
+        // tertutup dan body sepanjang Content-Length sudah mendarat penuh.
         if s.state == TcpSocketState::Established
             && !s.responded
-            && find_double_crlf(&self.req[slot][..s.req_len]).is_some()
+            && s.req_len > 0
+            && http_request_is_complete(&self.req[slot][..s.req_len], s.req_len == WEB_REQ_MAX)
         {
             self.build_response(slot, &mut s, rt, api, log);
         }
@@ -479,7 +504,14 @@ impl TcpWebServer {
                     s.fin_sent = false;
                 }
             }
-            if s.state == TcpSocketState::FinWait || s.state == TcpSocketState::SynReceived {
+            let stalled_body = s.state == TcpSocketState::Established
+                && !s.responded
+                && s.req_len > 0
+                && s.resp_len == 0;
+            if s.state == TcpSocketState::FinWait
+                || s.state == TcpSocketState::SynReceived
+                || stalled_body
+            {
                 s.hold_ticks += 1;
                 if s.hold_ticks > WEB_SESSION_EXPIRY_TICKS {
                     self.sessions[i] = WebSession::closed();
@@ -610,10 +642,17 @@ impl TcpWebServer {
             }
             Ok(req) => {
                 let is_head = req.method == HttpMethod::Head;
+                let is_post = req.method == HttpMethod::Post;
                 let pl = req.path.len().min(64);
                 self.last_path[..pl].copy_from_slice(&req.path.as_bytes()[..pl]);
                 self.last_path_len = pl as u8;
-                if req.method != HttpMethod::Get && !is_head {
+                // POST hanya diterima untuk sumber daya antarmuka dan jalur daya;
+                // metode lain yang bukan GET/HEAD tetap 405.
+                let post_target_ok = is_post
+                    && (req.path.starts_with("/api/v1/interfaces/") || req.path == "/api/v1/power");
+                if (req.method != HttpMethod::Get && !is_head && !post_target_ok)
+                    || (is_post && !post_target_ok)
+                {
                     let b = HttpResponseBuilder::new(out, HttpStatus::MethodNotAllowed)
                         .with_content_type("application/json");
                     if let Ok(n) =
@@ -628,11 +667,19 @@ impl TcpWebServer {
                     return;
                 }
                 if req.path.starts_with("/api/") {
-                    match api.dispatch(&req, rt.tick_100ms, out, rt) {
+                    let res = if is_post {
+                        api.dispatch_post(&req, out, rt)
+                    } else {
+                        api.dispatch(&req, rt.tick_100ms, out, rt)
+                    };
+                    match res {
                         Ok(n) => {
                             s.resp_len = n;
                             self.stats.api_served += 1;
                             self.last_status = 200;
+                            if is_post {
+                                log("[R28] HTTP 200 hasil POST jalur tulis\r\n");
+                            }
                         }
                         Err(_) => {
                             let b = HttpResponseBuilder::new(out, HttpStatus::InternalServerError)
@@ -733,6 +780,51 @@ fn find_double_crlf(buf: &[u8]) -> Option<usize> {
     None
 }
 
+/// Urai nilai `Content-Length` dari wilayah header saja (case-insensitive).
+fn content_length_of(header: &[u8]) -> Option<usize> {
+    let text = core::str::from_utf8(header).ok()?;
+    for line in text.split("\r\n") {
+        if line.is_empty() {
+            break;
+        }
+        let (name, value) = match line.split_once(':') {
+            Some(pair) => pair,
+            None => continue, // baris request-line tidak punya kolon header
+        };
+        if name.trim().eq_ignore_ascii_case("content-length") {
+            let mut n = 0usize;
+            let mut digits = 0usize;
+            for b in value.trim().bytes() {
+                if b.is_ascii_digit() {
+                    n = n.saturating_mul(10).saturating_add((b - b'0') as usize);
+                    digits += 1;
+                }
+            }
+            return if digits == 0 { None } else { Some(n) };
+        }
+    }
+    None
+}
+
+/// Permintaan dianggap lengkap bila header sudah tertutup DAN seluruh body
+/// sepanjang `Content-Length` sudah mendarat. Tanpa cek kedua, POST terfragmentasi
+/// akan di-dispatch dengan body kosong — perintah tulis hilang diam-diam.
+/// Buffer permintaan yang penuh diperlakukan lengkap agar pengurai membalas 400
+/// alih-alih menggantung sampai slot kedaluwarsa.
+fn http_request_is_complete(buf: &[u8], full: bool) -> bool {
+    let header_end = match find_double_crlf(buf) {
+        Some(i) => i + 4,
+        None => return false,
+    };
+    if full {
+        return true;
+    }
+    match content_length_of(&buf[..header_end]) {
+        Some(cl) => buf.len() >= header_end.saturating_add(cl),
+        None => true,
+    }
+}
+
 fn log_ip(ip: &[u8; 4], log: &dyn Fn(&str)) {
     let mut b = [0u8; 15];
     let mut i = 0usize;
@@ -788,14 +880,58 @@ mod tests {
 
     #[test]
     fn test_01_modules_registry() {
-        assert_eq!(registry::MODULES.len(), 4);
-        assert_eq!(registry::MODULES[0].name, "Dashboard");
-        assert!(registry::MODULES[0].enabled);
+        assert_eq!(registry::MODULES.len(), 23);
+        // Sembilan modul berdata kernel nyata + empat belas rupa saja yang sengaja
+        // enabled:false karena kernel tidak punya endpoint-nya (WireGuard, VPN,
+        // XRay, QoS Manager, ARP Table, Gateway, DHCP Server, Terminal,
+        // Appearance, Packages, User Manager, Speed Test, Telnet, Trace Route).
+        // Restart dan Shutdown tidak lagi menjadi modul berhalaman: keduanya
+        // aksi daya yang langsung membuka dialog. Registri tidak boleh melaporkan
+        // yang tidak ada sebagai aktif.
+        assert_eq!(registry::MODULES.iter().filter(|m| m.enabled).count(), 9);
+        assert_eq!(registry::MODULES.iter().filter(|m| !m.enabled).count(), 14);
+        assert!(registry::MODULES.iter().all(|m| m.path != "/restart"));
+        assert!(registry::MODULES.iter().all(|m| m.path != "/shutdown"));
+        // Urutan mengikuti sidebar: NAT anak Firewall, grup Services (ARP Table,
+        // Service List, DNS Server, Gateway, DHCP Server), Terminal, grup System,
+        // lalu grup Tools.
+        let names: [&str; 23] = [
+            "Dashboard",
+            "vOlt",
+            "Interfaces",
+            "Wireless",
+            "Firewall",
+            "NAT",
+            "WireGuard",
+            "VPN",
+            "XRay-Core",
+            "QoS Manager",
+            "Services",
+            "ARP Table",
+            "Service List",
+            "DNS Server",
+            "Gateway",
+            "DHCP Server",
+            "Terminal",
+            "Appearance",
+            "Packages",
+            "User Manager",
+            "Speed Test",
+            "Telnet",
+            "Trace Route",
+        ];
+        for (i, want) in names.iter().enumerate() {
+            assert_eq!(
+                registry::MODULES[i].name,
+                *want,
+                "modul ke-{i} urutannya berubah"
+            );
+        }
     }
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 12);
+        assert_eq!(registry::ALL_ASSETS.len(), 46);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
@@ -804,9 +940,40 @@ mod tests {
     }
 
     #[test]
+    fn test_02b_every_asset_fits_response_buffer() {
+        // Gerbang runtime: setiap aset harus terlayani penuh pada buffer
+        // sebesar WEB_RESP_MAX. Gerbang konstan di modul sudah menahan
+        // kompilasi; uji ini memastikan path dispatch benar-benar memuatnya.
+        for asset in registry::ALL_ASSETS.iter() {
+            // Katalog crate ini no_std: permintaan disusun di buffer stack,
+            // bukan lewat `format!`/alokasi.
+            let mut raw = [0u8; 96];
+            let mut n = 0usize;
+            for b in b"GET " {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in asset.path.as_bytes() {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in b" HTTP/1.1\r\n\r\n" {
+                raw[n] = *b;
+                n += 1;
+            }
+            let req = HttpRequest::parse(&raw[..n]).unwrap();
+            let mut buf = [0u8; WEB_RESP_MAX];
+            let len = dispatch_static(&req, &mut buf)
+                .unwrap_or_else(|| panic!("{} tidak terdaftar", asset.path))
+                .unwrap_or_else(|e| panic!("{} gagal: {e}", asset.path));
+            assert!(len >= asset.content.len(), "{} terpotong", asset.path);
+        }
+    }
+
+    #[test]
     fn test_03_dispatch_shell_root() {
         let req = HttpRequest::parse(b"GET / HTTP/1.1\r\n\r\n").unwrap();
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; WEB_RESP_MAX];
         let res = dispatch_static(&req, &mut buf).expect("Must find root asset");
         let len = res.unwrap();
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
@@ -817,12 +984,51 @@ mod tests {
         // Shell modular hanya berisi chrome; halaman dimuat sebagai parsial.
         assert!(resp.contains("view-mount"));
         assert!(resp.contains("/js/core/app.js"));
+        assert!(resp.contains("/js/core/nav.js"));
+        assert!(resp.contains("/js/core/views.js"));
+        assert!(resp.contains("/js/core/theme.js"));
+        // Modal edit antarmuka bukan bagian shell lagi: dipisah ke aset
+        // /views/iface-modal.html agar chrome tetap di bawah gerbang respons.
+        assert!(!resp.contains("id=\"iface-overlay\""));
+        assert!(resp.contains("/js/core/ifedit.js"));
+        // Submenu drop-right Firewall -> NAT dan grup Services/System.
+        assert!(resp.contains("nav-sub"));
+        assert!(resp.contains("href=\"#nat\""));
+        assert!(resp.contains("href=\"#dhcpserver\""));
+        // Restart/Shutdown adalah aksi daya pada sidebar, bukan view: tidak ada
+        // href/`data-view` untuk keduanya, hanya pegangan dialog `data-power`.
+        assert!(resp.contains("data-power=\"restart\""));
+        assert!(resp.contains("data-power=\"shutdown\""));
+        assert!(!resp.contains("href=\"#restart\""));
+        assert!(!resp.contains("href=\"#shutdown\""));
+        // Ikon sidebar (data-ico + stylesheet mask-image) dan laci mobile.
+        assert!(resp.contains("/css/icons.css"));
+        assert!(resp.contains("/css/mobile.css"));
+        // Chrome modul gaya WebFig: rupa di /css/table.css, ikon aksinya di
+        // /css/icons-act.css (dipisah karena gerbang respons mengukur aset
+        // satu per satu).
+        assert!(resp.contains("/css/table.css"));
+        assert!(resp.contains("/css/icons-act.css"));
+        assert!(resp.contains("/js/core/table.js"));
+        assert!(resp.contains("/js/core/tblcols.js"));
+        assert!(resp.contains("class=\"nav-ico\" data-ico=\"iface\""));
+        assert!(resp.contains("id=\"nav-scrim\""));
+        // Anak grup Services termasuk ARP Table (tambahan owner di sidebar);
+        // Registri, views.js, dan alias harus ikut menyimpannya.
+        assert!(resp.contains("href=\"#arp\""));
+        // Suntingan manual sidebar pernah meninggalkan item Interfaces kedua;
+        // satu item per modul adalah kontrak navigasi.
+        assert_eq!(
+            resp.matches("data-view=\"interfaces\"").count(),
+            1,
+            "item Interfaces harus tepat satu"
+        );
     }
 
     #[test]
     fn test_04_dispatch_css_asset() {
         let req = HttpRequest::parse(b"GET /css/base.css HTTP/1.1\r\n\r\n").unwrap();
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; WEB_RESP_MAX];
         let res = dispatch_static(&req, &mut buf).expect("Must find css asset");
         let len = res.unwrap();
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
@@ -863,13 +1069,28 @@ mod tests {
                 "data-source=\"/api/v1/firewall/rules\"",
             ),
             (
+                b"GET /views/nat.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/nat.html",
+                "data-source=\"/api/v1/nat\"",
+            ),
+            (
+                b"GET /views/wireless.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/wireless.html",
+                "data-source=\"/api/v1/wireless\"",
+            ),
+            (
+                b"GET /views/olt.html HTTP/1.1\r\n\r\n" as &[u8],
+                "/views/olt.html",
+                "data-source=\"/api/v1/olt\"",
+            ),
+            (
                 b"GET /views/services.html HTTP/1.1\r\n\r\n" as &[u8],
                 "/views/services.html",
                 "data-source=\"/api/v1/services\"",
             ),
         ] {
             let req = HttpRequest::parse(raw).unwrap();
-            let mut buf = [0u8; 4096];
+            let mut buf = [0u8; WEB_RESP_MAX];
             let len = dispatch_static(&req, &mut buf)
                 .unwrap_or_else(|| panic!("{path} tidak terdaftar"))
                 .expect("parsial terlalu besar");
@@ -877,13 +1098,185 @@ mod tests {
             assert!(resp.contains(needle), "{path} kehilangan pengikat {needle}");
             // Parsial hanya berisi bentuk + atribut pengikat, tidak pernah data.
             assert!(!resp.contains("192.168."), "{path} memuat alamat karangan");
+            // Pola UI-02: setiap modul non-dashboard memakai tab strip + toolbar.
+            assert!(
+                resp.contains("wf-tabs") && resp.contains("wf-toolbar"),
+                "{path} belum bergaya WebFig (tab strip + toolbar)"
+            );
+        }
+    }
+
+    #[test]
+    fn test_05c_dispatch_new_sidebar_views() {
+        // Sembilan entri baru sidebar owner. Yang punya data kernel nyata harus
+        // membawa pengikat endpoint; yang rupa saja harus menandai dirinya
+        // "desain saja" supaya tidak menyamar sebagai modul hidup.
+        for (path, needle) in [
+            (
+                "/views/serviceslist.html",
+                "data-source=\"/api/v1/services\"",
+            ),
+            ("/views/dnsserver.html", "data-source=\"/api/v1/services\""),
+            ("/views/wireguard.html", "desain saja"),
+            ("/views/vpn.html", "desain saja"),
+            ("/views/xray.html", "desain saja"),
+            ("/views/qos.html", "desain saja"),
+            ("/views/gateway.html", "desain saja"),
+            ("/views/arp.html", "desain saja"),
+            ("/views/dhcpserver.html", "desain saja"),
+            ("/views/packages.html", "desain saja"),
+            ("/views/usermanager.html", "desain saja"),
+            ("/views/terminal.html", "desain saja"),
+            ("/views/speedtest.html", "desain saja"),
+            ("/views/telnet.html", "desain saja"),
+            ("/views/traceroute.html", "desain saja"),
+            ("/views/iface-modal.html", "id=\"iface-overlay\""),
+            ("/css/icons.css", "mask-image"),
+            ("/css/mobile.css", "@media (max-width: 900px)"),
+            ("/css/table.css", ".wf-tool"),
+            ("/css/icons-act.css", "data-ico=\"cols\""),
+            ("/js/core/table.js", "tbl.setup"),
+            ("/js/core/tblcols.js", "tbl.tableOps"),
+        ] {
+            let mut raw = [0u8; 96];
+            let mut n = 0usize;
+            for b in b"GET " {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in path.as_bytes() {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in b" HTTP/1.1\r\n\r\n" {
+                raw[n] = *b;
+                n += 1;
+            }
+            let req = HttpRequest::parse(&raw[..n]).unwrap();
+            let mut buf = [0u8; WEB_RESP_MAX];
+            let len = dispatch_static(&req, &mut buf)
+                .unwrap_or_else(|| panic!("{path} tidak terdaftar"))
+                .expect("parsial terlalu besar");
+            let resp = core::str::from_utf8(&buf[..len]).unwrap();
+            assert!(resp.contains(needle), "{path} kehilangan {needle}");
+            assert!(!resp.contains("192.168."), "{path} memuat alamat karangan");
+        }
+    }
+
+    #[test]
+    fn test_05e_appjs_menghidupkan_mesin_chrome() {
+        // app.js harus memanggil mesin chrome dua kali: sekali saat parsial
+        // dipasang (setup) dan sekali setiap kali baris kernel dilukis ulang
+        // (onPaint). Kalau salah satu hilang, tabel tampil tanpa toolbar,
+        // glif status, atau ikon tipe tanpa ada kesalahan yang terdengar.
+        let req = HttpRequest::parse(b"GET /js/core/app.js HTTP/1.1\r\n\r\n").unwrap();
+        let mut buf = [0u8; WEB_RESP_MAX];
+        let len = dispatch_static(&req, &mut buf)
+            .expect("app.js tidak terdaftar")
+            .expect("app.js terlalu besar");
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+
+        assert!(resp.contains("OPCR.tbl.setup(node)"));
+        assert!(resp.contains("OPCR.tbl.onPaint(root)"));
+        assert!(resp.contains("OPCR.wf.setup(node)"));
+    }
+
+    #[test]
+    fn test_05f_tblcols_tidak_menimpa_namespace_tbl() {
+        // table.js dan tblcols.js berbagi satu namespace OPCR.tbl. Pola IIFE
+        // `.tbl = {}` pada berkas kedua akan membuang tbl.setup milik berkas
+        // pertama; app.js lalu melempar TypeError dan setiap parsial tampil
+        // tanpa chrome maupun data (cacat UI-02G saat verifikasi live).
+        let owner = {
+            let req = HttpRequest::parse(b"GET /js/core/table.js HTTP/1.1\r\n\r\n").unwrap();
+            let mut buf = [0u8; WEB_RESP_MAX];
+            let len = dispatch_static(&req, &mut buf)
+                .expect("table.js tidak terdaftar")
+                .expect("table.js terlalu besar");
+            core::str::from_utf8(&buf[..len])
+                .unwrap()
+                .contains("tbl.setup = function")
+        };
+        assert!(owner, "table.js harus memegang tbl.setup");
+
+        let req = HttpRequest::parse(b"GET /js/core/tblcols.js HTTP/1.1\r\n\r\n").unwrap();
+        let mut buf = [0u8; WEB_RESP_MAX];
+        let len = dispatch_static(&req, &mut buf)
+            .expect("tblcols.js tidak terdaftar")
+            .expect("tblcols.js terlalu besar");
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+
+        assert!(resp.contains("tbl.tableOps = function"));
+        assert!(
+            !resp.contains(".tbl = {}"),
+            "tblcols.js membuat ulang OPCR.tbl dan menghapus tbl.setup"
+        );
+    }
+
+    #[test]
+    fn test_05d_shell_routes_and_retired_power_paths() {
+        // Route shell termasuk grup Services/System/Tools. /reboot pensiun karena
+        // sidebar owner memakai label Restart; /restart dan /shutdown pensiun
+        // karena Restart/Shutdown bukan halaman lagi, melainkan dialog aksi daya.
+        for path in [
+            "/wireguard",
+            "/vpn",
+            "/xray",
+            "/serviceslist",
+            "/dnsserver",
+            "/dhcpserver",
+            "/packages",
+            "/usermanager",
+            "/qos",
+            "/gateway",
+            "/arp",
+            "/terminal",
+            "/speedtest",
+            "/telnet",
+            "/traceroute",
+        ] {
+            let mut raw = [0u8; 64];
+            let mut n = 0usize;
+            for b in b"GET " {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in path.as_bytes() {
+                raw[n] = *b;
+                n += 1;
+            }
+            for b in b" HTTP/1.1\r\n\r\n" {
+                raw[n] = *b;
+                n += 1;
+            }
+            let req = HttpRequest::parse(&raw[..n]).unwrap();
+            let mut buf = [0u8; WEB_RESP_MAX];
+            let len = dispatch_static(&req, &mut buf)
+                .unwrap_or_else(|| panic!("{path} tidak dipetakan ke shell"))
+                .expect("shell terlalu besar");
+            let resp = core::str::from_utf8(&buf[..len]).unwrap();
+            assert!(resp.contains("id=\"view-mount\""), "{path} bukan shell");
+        }
+
+        for retired in [
+            b"GET /reboot HTTP/1.1\r\n\r\n".as_slice(),
+            b"GET /restart HTTP/1.1\r\n\r\n".as_slice(),
+            b"GET /shutdown HTTP/1.1\r\n\r\n".as_slice(),
+        ] {
+            let req = HttpRequest::parse(retired).unwrap();
+            let mut buf = [0u8; WEB_RESP_MAX];
+            assert!(
+                dispatch_static(&req, &mut buf).is_none(),
+                "{} seharusnya sudah pensiun",
+                req.path
+            );
         }
     }
 
     #[test]
     fn test_06_dispatch_logo_svg() {
         let req = HttpRequest::parse(b"GET /images/logo.svg HTTP/1.1\r\n\r\n").unwrap();
-        let mut buf = [0u8; 4096];
+        let mut buf = [0u8; WEB_RESP_MAX];
         let res = dispatch_static(&req, &mut buf).expect("Must find logo asset");
         let len = res.unwrap();
         let resp = core::str::from_utf8(&buf[..len]).unwrap();
@@ -956,6 +1349,9 @@ mod tests {
     fn runtime() -> WebRuntime<'static> {
         WebRuntime {
             hostname: "rinjani-wan",
+            wan_present: true,
+            wan_name: "eth0",
+            lan_name: "eth1",
             wan_ip: SRV_IP,
             wan_netmask: [255, 255, 255, 0],
             wan_gw: [192, 0, 2, 1],
@@ -1183,8 +1579,12 @@ mod tests {
         assert!(text.starts_with("HTTP/1.1 200 OK"));
         assert!(text.contains("\"ip\":\"192.0.2.10\""));
         assert!(text.contains("\"source\":\"static\""));
-        // eth1 tidak ada pada topologi satu-NIC -> wajib dilaporkan absent.
-        assert!(text.contains("\"status\":\"absent\""));
+        assert!(text.contains("\"name\":\"eth0\""));
+        // Topologi satu-NIC: hanya eth0 yang muncul. Tidak ada baris anomali
+        // `eth1 absent` lagi — itu dahulu membuat UI tampak punya dua port.
+        assert!(!text.contains("eth1"));
+        assert!(!text.contains("absent"));
+        assert_eq!(text.matches("\"name\":").count(), 1);
         // Tidak boleh ada alamat karangan.
         assert!(!text.contains("192.168.56."));
         assert!(!text.contains("192.0.2.199"));
@@ -1570,5 +1970,225 @@ mod tests {
             server.on_tick(&rt, &mut scratch, &mut tx, &nolog);
         }
         assert_eq!(server.active_sessions(), 0);
+    }
+
+    /// helper: handshake sampai ESTABLISHED, kembalikan seq lanjutannya.
+    fn handshake(
+        server: &mut TcpWebServer,
+        api: &mut ApiDispatcher,
+        cap: &mut Cap,
+        base: u32,
+    ) -> u32 {
+        let rt = runtime();
+        client_frame(server, &rt, api, base, 0, TCP_FLAG_SYN, &[], cap);
+        let our_next = seg_of(&cap.frames[0][..cap.lens[0]]).2.seq.wrapping_add(1);
+        client_frame(server, &rt, api, base + 1, our_next, TCP_FLAG_ACK, &[], cap);
+        our_next
+    }
+
+    #[test]
+    fn test_17_post_body_tersplit_belum_memicu_dispatch() {
+        // Inti perbaikan jalur tulis: permintaan POST hanya boleh di-dispatch
+        // setelah body sepanjang Content-Length mendarat penuh.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 9000);
+        let frames_after_handshake = cap.n;
+
+        let head = b"POST /api/v1/interfaces/eth0 HTTP/1.1\r\nHost: 192.0.2.10\r\n\
+                    Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 67\r\n\r\n";
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            9001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            head,
+            &mut cap,
+        );
+        // Baru header: belum boleh ada respons sama sekali.
+        assert_eq!(server.stats.api_served, 0);
+        assert_eq!(
+            cap.n, frames_after_handshake,
+            "header saja tidak boleh dijawab"
+        );
+
+        let body = b"mode=static&ip=192.0.2.20&netmask=255.255.255.0&name=wan0&persist=1";
+        assert_eq!(
+            body.len(),
+            67,
+            "panjang body harus sama dengan Content-Length"
+        );
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            9001 + head.len() as u32,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            body,
+            &mut cap,
+        );
+        assert_eq!(server.stats.api_served, 1);
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(text.starts_with("HTTP/1.1 200 OK"));
+        assert!(text.contains("\"status\":\"queued\""));
+
+        let cmd = api
+            .take_write()
+            .expect("perintah harus tertampung di antrean");
+        assert_eq!(cmd.target_str(), "eth0");
+        assert_eq!(cmd.mode, asl_router_api::WAN_MODE_STATIC);
+        assert_eq!(cmd.ip, [192, 0, 2, 20]);
+        assert_eq!(cmd.netmask, [255, 255, 255, 0]);
+        // Nama baru dan flag persistensi ikut terbawa ke kernel, bukan hilang
+        // di lapisan transport.
+        assert_eq!(cmd.new_name_str(), "wan0");
+        assert!(cmd.persist);
+    }
+
+    #[test]
+    fn test_17b_endpoint_verdict_tulis_terlewat_dari_tcp() {
+        // Modal WebUI membaca hasil akhir kernel lewat endpoint ini; ia harus
+        // benar-benar terlayani pada jalur TCP nyata, bukan hanya di unit test API.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 9100);
+        let req = b"GET /api/v1/writes/last HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n";
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            9101,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req,
+            &mut cap,
+        );
+        assert_eq!(server.stats.api_served, 1);
+        let (body, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&body[..len]).unwrap();
+        assert!(text.starts_with("HTTP/1.1 200 OK"));
+        assert!(
+            text.contains("\"applied\":false"),
+            "belum ada laporan kernel"
+        );
+        assert!(text.contains("\"queue_depth\":0"));
+    }
+
+    #[test]
+    fn test_18_post_ke_luar_sumber_daya_antarmuka_ditolak_405() {
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 9500);
+        let req = b"POST /api/v1/nat HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Length: 0\r\n\r\n";
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            9501,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req,
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(text.starts_with("HTTP/1.1 405 Method Not Allowed"));
+        assert!(api.take_write().is_none());
+    }
+
+    #[test]
+    fn test_19_post_power_terlayani_lewat_tcp_bukan_kena_405() {
+        // Regresi nyata: gerbang metode di build_response sempat menolak semua
+        // POST kecuali /api/v1/interfaces/*, sehingga aksi daya WebUI mati di 405
+        // walaupun unit test ApiDispatcher hijau. Uji lewat jalur TCP penuh.
+        let rt = runtime();
+
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 9600);
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            9601,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 10\r\n\r\naction=arm",
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.starts_with("HTTP/1.1 200 OK"),
+            "arm seharusnya 200, dapat: {}",
+            text
+        );
+        assert!(text.contains("\"status\":\"armed\""));
+        assert!(api.power_armed(rt.tick_100ms), "slot harus ter-arm");
+
+        // Aksi restart memakai slot yang sudah ter-arm dari POST sebelumnya.
+        let mut server2 = TcpWebServer::new(80);
+        server2.listen(80);
+        let mut cap2 = Cap::new();
+        let our_next2 = handshake(&mut server2, &mut api, &mut cap2, 9700);
+        client_frame(
+            &mut server2,
+            &rt,
+            &mut api,
+            9701,
+            our_next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 14\r\n\r\naction=restart",
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "restart ter-arm seharusnya 200, dapat: {}",
+            text2
+        );
+        assert!(text2.contains("\"status\":\"scheduled\""));
+        assert_eq!(
+            api.take_power(),
+            Some(asl_router_api::POWER_RESTART),
+            "kernel harus menerima kinds restart"
+        );
+
+        // Metode selain GET/HEAD/POST pada jalur daya tetap 405.
+        let mut server3 = TcpWebServer::new(80);
+        server3.listen(80);
+        let mut cap3 = Cap::new();
+        let our_next3 = handshake(&mut server3, &mut api, &mut cap3, 9800);
+        client_frame(
+            &mut server3,
+            &rt,
+            &mut api,
+            9801,
+            our_next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            b"PUT /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Length: 0\r\n\r\n",
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(text3.starts_with("HTTP/1.1 405"));
+        assert!(!api.power_armed(rt.tick_100ms), "PUT tidak boleh meng-arm");
+        assert!(api.take_power().is_none());
     }
 }

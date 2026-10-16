@@ -116,6 +116,34 @@ fn mask_to_prefix(m: [u8; 4]) -> Option<u8> {
     }
 }
 
+/// Label protokol untuk snapshot NAT yang dibaca WebUI (angka kawat -> teks).
+#[cfg(target_os = "none")]
+fn proto_label(p: u8) -> &'static str {
+    match p {
+        asl_router_nat::PROTO_ICMP => "icmp",
+        asl_router_nat::PROTO_TCP => "tcp",
+        asl_router_nat::PROTO_UDP => "udp",
+        _ => "other",
+    }
+}
+
+/// Susun laporan hasil tulis kernel ke buffer tetap untuk WebUI. Semua bagian
+/// laporan sengaja ASCII sehingga pemotongan pada batas byte tetap UTF-8 valid.
+#[cfg(target_os = "none")]
+fn fill_report(dst: &mut [u8], parts: &[&str]) -> usize {
+    let mut n = 0usize;
+    for part in parts {
+        for byte in part.bytes() {
+            if n == dst.len() {
+                break;
+            }
+            dst[n] = byte;
+            n += 1;
+        }
+    }
+    n
+}
+
 // -----------------------------------------------------------------------------
 // LIMINE BOOT PROTOCOL REQUESTS
 // -----------------------------------------------------------------------------
@@ -557,30 +585,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     // 'wan static' menghentikan pompa DHCP agar tidak ada perlombaan alamat.
     let mut wan_static_mode = false;
 
-    // DISCOVER pertama dikirim segera bila DMA eth0 sudah up.
-    if let Ok(pkt_len) = asl_router_netstack::build_dhcp_discover_with_hostname(
-        our_mac,
-        0x52494E4A,
-        "rinjani",
-        &mut dhcp_buf,
-    ) {
-        let mut sent = false;
-        if let Some(eth0) = eth0.as_mut() {
-            if eth0.ready && eth0.transmit(&dhcp_buf[..pkt_len]).is_ok() {
-                sent = true;
-                dhcp_discover_tx = 1;
-                dhcp_next_tx_ms = 4_000;
-            }
-        }
-        SERIAL.write_str("[R13] DHCP DISCOVER ");
-        SERIAL.write_str(if sent {
-            "TERKIRIM ke wire (broadcast 255.255.255.255, xid=0x52494E4A, opt12=rinjani, "
-        } else {
-            "BELUM TERKIRIM (eth0 belum siap TX; diulang oleh pump [R28], "
-        });
-        SERIAL.write_u32(pkt_len as u32);
-        SERIAL.write_str(" bytes) — menunggu OFFER\n");
-    }
+    // DISCOVER pertama TIDAK dikirim di titik ini: journal RJCFG01 baru dibaca
+    // setelah probe disk (lihat [R26]/[R29]), dan operator boleh memilih mode
+    // statik tersimpan. Pompa [R28] mengirim DISCOVER pada tick pertamanya
+    // hanya bila mode yang berlaku memang dhcp.
 
     #[cfg(feature = "qemu-dev")]
     {
@@ -995,6 +1003,66 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut netstack = asl_router_netstack::NetStackEngine::new(our_mac, our_ip);
     let netstack_lan = asl_router_netstack::NetStackEngine::new(lan_mac, lan_ip_real);
 
+    // [R29]: TERAPKAN konfigurasi WAN hasil [R26] dari RJCFG01. Mode statik yang
+    // pernah ditulis operator (CLI maupun WebUI) dipulihkan sebelum pompa DHCP
+    // pertama bekerja, sehingga alamat tidak berubah tiap reboot. Nilai yang
+    // tidak layak pakai dilaporkan, tidak diperbaiki diam-diam.
+    {
+        let cfg = rjcfg_journal.active_config;
+        let journal_pfx = mask_to_prefix(cfg.wan_netmask);
+        let static_usable = cfg.wan_mode == asl_router_persistence::RJCFG_WAN_MODE_STATIC
+            && cfg.wan_ip != [0, 0, 0, 0]
+            && cfg.wan_ip[0] != 127
+            && cfg.wan_ip[0] < 224
+            && journal_pfx.is_some();
+        if static_usable {
+            let pfx = journal_pfx.unwrap_or(24);
+            let (ip, mask, gw) = (cfg.wan_ip, cfg.wan_netmask, cfg.wan_gw);
+            wan_ip = ip;
+            wan_netmask = mask;
+            wan_gw = gw;
+            wan_up = true;
+            wan_source = "static-journal";
+            wan_static_mode = true;
+            netstack.our_ip = ip;
+            nat_engine.wan_ip = ip;
+            let _ = router_fib.add_connected_route(
+                [
+                    ip[0] & mask[0],
+                    ip[1] & mask[1],
+                    ip[2] & mask[2],
+                    ip[3] & mask[3],
+                ],
+                pfx,
+                1,
+            );
+            if gw != [0, 0, 0, 0] {
+                let _ = router_fib.add_static_route([0, 0, 0, 0], 0, gw, 1, 100);
+            }
+            fib_wan_routes_added = true;
+            SERIAL.write_str("[R29] WAN statik DARI JOURNAL diterapkan: ");
+            write_ip(ip);
+            SERIAL.write_str("/");
+            SERIAL.write_u32(pfx as u32);
+            SERIAL.write_str(" gw=");
+            write_ip(gw);
+            SERIAL.write_str(" — pompa DHCP tidak berjalan, WebUI bind di alamat ini\n");
+        } else if cfg.wan_mode == asl_router_persistence::RJCFG_WAN_MODE_STATIC {
+            SERIAL.write_str("[R29] WAN statik pada journal tidak layak pakai (IP/netmask) — mode DHCP dipertahankan\n");
+        } else {
+            SERIAL.write_str("[R29] RJCFG01: mode WAN=dhcp — klien DHCP berjalan\n");
+        }
+        // Nama antarmuka dari journal dipakai WebUI/CLI; default eth0/eth1 bila
+        // blok WAN belum pernah ditulis.
+        let mut nb = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
+        SERIAL.write_str("[R29] nama antarmuka WAN=");
+        SERIAL.write_str(cfg.wan_name_str(&mut nb));
+        let mut lb = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
+        SERIAL.write_str(" LAN=");
+        SERIAL.write_str(cfg.lan_name_str(&mut lb));
+        SERIAL.write_str("\n");
+    }
+
     // [R12]: NET POLL LOOP & SERIAL CLI
     SERIAL.write_str("[R12] NET POLL LOOP\n");
     SERIAL.write_str("rinjani-cli> ");
@@ -1023,17 +1091,93 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut drop_packets: u32 = 0;
 
     let mut web_host = [0u8; 32];
+    let mut web_wan_name = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
+    let mut web_lan_name = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
+    let mut web_dnat = [asl_router_api::DnatSnapshot {
+        wan_port: 0,
+        protocol: "none",
+        target_ip: [0; 4],
+        target_port: 0,
+        active: false,
+    }; asl_router_nat::MAX_DNAT_RULES];
+    let mut web_conn = [asl_router_api::ConnSnapshot {
+        protocol: "none",
+        src_ip: [0; 4],
+        src_port: 0,
+        dst_ip: [0; 4],
+        dst_port: 0,
+        trans_port: 0,
+        fwd_packets: 0,
+        rev_packets: 0,
+    }; asl_router_api::NAT_CONN_SNAPSHOT_MAX];
+    let mut web_report = [0u8; 96];
+    let mut web_report_len: usize = 0;
+    let mut web_write_ok = false;
+    // [R30] Aksi daya dari WebUI: kinds & batas waktu eksekusi dipegang kernel,
+    // bukan dispatcher, supaya ACK sempat terkirim sebelum mesin mati.
+    let mut power_kind: Option<u8> = None;
+    let mut power_deadline_ms: u64 = 0;
+    // Xid DHCP baru tiap perpindahan mode dari WebUI/CLI agar tidak memakai
+    // ulang xid siklus sebelumnya di wire yang sama.
+    let mut dhcp_mode_switches: u32 = 0;
 
     /// Snapshot runtime untuk WebUI/API. SEMUA field bersumber dari state
     /// kernel aktual pada saat makro diekspansi (tidak ada nilai tetap).
     macro_rules! web_runtime {
-        ($srv:expr, $now_ms:expr, $lan_present:expr) => {{
+        ($srv:expr, $now_ms:expr, $lan_present:expr, $wan_present:expr) => {{
             let srv = &mut *$srv;
             let hlen = (rjcfg_journal.active_config.hostname_len as usize).min(32);
             web_host[..hlen].copy_from_slice(&rjcfg_journal.active_config.hostname[..hlen]);
+            let cfg = &rjcfg_journal.active_config;
+            let wn_len =
+                (cfg.wan_name_len as usize).min(asl_router_persistence::RJCFG_IFACE_NAME_MAX);
+            web_wan_name[..wn_len].copy_from_slice(&cfg.wan_name[..wn_len]);
+            let ln_len =
+                (cfg.lan_name_len as usize).min(asl_router_persistence::RJCFG_IFACE_NAME_MAX);
+            web_lan_name[..ln_len].copy_from_slice(&cfg.lan_name[..ln_len]);
+            // Salinan aturan DNAT + conntrack dari mesin NAT kernel. Diisi ulang
+            // setiap ekspansi makro sehingga tabel WebUI selalu mencerminkan
+            // isi tabel kernel pada saat permintaan dilayani.
+            let mut dcnt = 0usize;
+            for k in 0..asl_router_nat::MAX_DNAT_RULES {
+                let r = &nat_engine.dnat_rules[k];
+                if r.is_active && dcnt < web_dnat.len() {
+                    web_dnat[dcnt] = asl_router_api::DnatSnapshot {
+                        wan_port: r.wan_port,
+                        protocol: proto_label(r.protocol),
+                        target_ip: r.target_lan_ip,
+                        target_port: r.target_lan_port,
+                        active: true,
+                    };
+                    dcnt += 1;
+                }
+            }
+            let mut ccnt = 0usize;
+            for k in 0..asl_router_nat::MAX_CONNTRACK_ENTRIES {
+                let e = &nat_engine.conntrack[k];
+                if e.state == asl_router_nat::ConntrackState::Unused {
+                    continue;
+                }
+                if ccnt < web_conn.len() {
+                    web_conn[ccnt] = asl_router_api::ConnSnapshot {
+                        protocol: proto_label(e.protocol),
+                        src_ip: e.orig_src_ip,
+                        src_port: e.orig_src_port,
+                        dst_ip: e.orig_dst_ip,
+                        dst_port: e.orig_dst_port,
+                        trans_port: e.trans_src_port,
+                        fwd_packets: e.packets_fwd,
+                        rev_packets: e.packets_rev,
+                    };
+                    ccnt += 1;
+                }
+            }
             asl_router_api::WebRuntime {
                 hostname: core::str::from_utf8(&web_host[..hlen]).unwrap_or("rinjani"),
                 uptime_ms: $now_ms,
+                wan_present: $wan_present,
+                wan_name: core::str::from_utf8(&web_wan_name[..wn_len]).unwrap_or("eth0"),
+                lan_name: core::str::from_utf8(&web_lan_name[..ln_len]).unwrap_or("eth1"),
                 wan_ip,
                 wan_netmask,
                 wan_gw,
@@ -1049,12 +1193,24 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 // BOUND yang dipegang). Halted (fail-closed) atau mode static
                 // berarti client tidak berjalan.
                 dhcp_client_active: !wan_static_mode && !dhcp_client.is_halted(),
+                wan_config_static: wan_static_mode,
                 dns_active: false,
                 mdns_active: false,
                 serial_cli_active: true,
                 tcam_rules: tcam.rule_count() as u32,
                 dnat_rules: dnat_active_rules,
                 default_policy: "deny",
+                dnat_list: &web_dnat[..dcnt],
+                nat_sessions: &web_conn[..ccnt],
+                nat_session_count: nat_engine.active_sessions as u32,
+                nat_capacity: asl_router_nat::MAX_CONNTRACK_ENTRIES as u32,
+                nat_table_full_drops: nat_engine.table_full_drops,
+                // Datapath kernel belum memanggil process_egress/ingress
+                // (lihat [R16]); mengklaim sebaliknya akan memalsukan status.
+                nat_forwarding_wired: false,
+                last_write_ok: web_write_ok,
+                last_write_report: core::str::from_utf8(&web_report[..web_report_len])
+                    .unwrap_or(""),
                 wan_rx: wan_rx_packets,
                 wan_tx: wan_tx_packets,
                 lan_rx: lan_rx_packets,
@@ -1069,6 +1225,208 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut loop_count: u32 = 0;
     loop {
         loop_count = loop_count.wrapping_add(1);
+
+        // [R29] JALUR TULIS WEBUI: dispatcher hanya menvalidasi dan menampung
+        // perintah; kernel di sini yang mengubah state WAN dan journal. Nama
+        // target harus sama dengan antarmuka WAN yang benar-benar terdeteksi,
+        // sehingga tidak ada baris fiktif yang bisa diedit.
+        while let Some(cmd) = api_dispatcher.take_write() {
+            let mut old_name_buf = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
+            let old_len = (rjcfg_journal.active_config.wan_name_len as usize)
+                .min(asl_router_persistence::RJCFG_IFACE_NAME_MAX);
+            old_name_buf[..old_len]
+                .copy_from_slice(&rjcfg_journal.active_config.wan_name[..old_len]);
+            let old = core::str::from_utf8(&old_name_buf[..old_len]).unwrap_or("eth0");
+
+            if old != cmd.target_str() {
+                web_write_ok = false;
+                web_report_len = fill_report(
+                    &mut web_report,
+                    &[
+                        "target '",
+                        cmd.target_str(),
+                        "' bukan antarmuka WAN terdeteksi",
+                    ],
+                );
+                SERIAL.write_str("[R29] WebUI write DITOLAK: target='");
+                SERIAL.write_str(cmd.target_str());
+                SERIAL.write_str("' != WAN='");
+                SERIAL.write_str(old);
+                SERIAL.write_str("'\n");
+                continue;
+            }
+
+            let mut cfg = rjcfg_journal.active_config;
+            let new_name = cmd.new_name_str();
+            let renamed = new_name != old;
+            if renamed && cfg.set_wan_name(new_name).is_err() {
+                web_write_ok = false;
+                web_report_len = fill_report(&mut web_report, &["nama ditolak: ", new_name]);
+                continue;
+            }
+
+            let now_ms = pit.elapsed_ms();
+            let mut mid: &str = "";
+            let head: &'static str;
+            if cmd.mode == asl_router_persistence::RJCFG_WAN_MODE_STATIC {
+                cfg.set_wan_static(cmd.ip, cmd.netmask, cmd.gw);
+                head = "statik diterapkan";
+                wan_static_mode = true;
+                wan_ip = cmd.ip;
+                wan_netmask = cmd.netmask;
+                wan_gw = cmd.gw;
+                wan_up = true;
+                wan_conflict = false;
+                wan_source = "static-webui";
+                dad_active = true;
+                dad_deadline_ms = now_ms + 1_000;
+                netstack.our_ip = cmd.ip;
+                nat_engine.wan_ip = cmd.ip;
+                if let Some(pfx) = mask_to_prefix(cmd.netmask) {
+                    let _ = router_fib.add_connected_route(
+                        [
+                            cmd.ip[0] & cmd.netmask[0],
+                            cmd.ip[1] & cmd.netmask[1],
+                            cmd.ip[2] & cmd.netmask[2],
+                            cmd.ip[3] & cmd.netmask[3],
+                        ],
+                        pfx,
+                        1,
+                    );
+                }
+                if cmd.gw != [0, 0, 0, 0] {
+                    let _ = router_fib.add_static_route([0, 0, 0, 0], 0, cmd.gw, 1, 100);
+                }
+                fib_wan_routes_added = true;
+                // DAD (RFC 5227) dijalankan seperti 'wan static' pada CLI.
+                let mut probe_sent = false;
+                if let Ok(plen) =
+                    asl_router_netstack::build_arp_request(our_mac, cmd.ip, cmd.ip, &mut arp_probe)
+                {
+                    if let Some(eth0) = eth0.as_mut() {
+                        if eth0.ready && eth0.transmit(&arp_probe[..plen]).is_ok() {
+                            probe_sent = true;
+                            wan_tx_packets += 1;
+                        }
+                    }
+                }
+                mid = if probe_sent {
+                    ", probe ARP DAD TX"
+                } else {
+                    ", probe ARP DAD tidak terkirim"
+                };
+            } else {
+                cfg.set_wan_dhcp();
+                head = "dhcp aktif: alamat dilepas, DORA diulang";
+                wan_static_mode = false;
+                wan_ip = [0, 0, 0, 0];
+                wan_netmask = [0, 0, 0, 0];
+                wan_gw = [0, 0, 0, 0];
+                wan_up = false;
+                wan_conflict = false;
+                wan_source = "none";
+                dad_active = false;
+                netstack.our_ip = [0, 0, 0, 0];
+                nat_engine.wan_ip = [0, 0, 0, 0];
+                dhcp_mode_switches = dhcp_mode_switches.wrapping_add(1);
+                let _ = dhcp_client.start_discover(0x5249_4E4A + 8 + dhcp_mode_switches);
+                dhcp_request_tx = false;
+                dhcp_discover_tx = 0;
+                dhcp_next_tx_ms = now_ms + 500;
+                dhcp_halted_logged = false;
+            }
+
+            rjcfg_journal.active_config = cfg;
+            // Operator minta persistensi => keberhasilan hanya jika readback disk
+            // cocok. Tanpa itu laporan harus menyebut 'RAM saja'.
+            let mut persist_done = !cmd.persist;
+            let mut tail: &str = if cmd.persist {
+                ", persistensi gagal"
+            } else {
+                " (RAM saja, tidak ditulis ke disk)"
+            };
+            if cmd.persist {
+                if !block_is_ata {
+                    tail = ", tidak dipersist: device block bukan ATA";
+                } else if let Some(base) = rjcfg01_lba {
+                    let active = rjcfg_journal.active_config;
+                    match rjcfg_journal.commit_update(active) {
+                        Ok(slot) => {
+                            if rjcfg_write_and_verify(&mut ata_dev, &rjcfg_journal, base, slot) {
+                                persist_done = true;
+                                tail = ", RJCFG01 ditulis + diverifikasi di disk";
+                            } else {
+                                tail = ", RJCFG01 READBACK GAGAL";
+                            }
+                        }
+                        Err(e) => tail = e,
+                    }
+                } else {
+                    tail = ", tidak dipersist: partisi RJCFG01 tidak ada";
+                }
+            }
+            web_write_ok = persist_done;
+            web_report_len = fill_report(
+                &mut web_report,
+                &[if renamed { "nama + " } else { "" }, head, mid, tail],
+            );
+            SERIAL.write_str("[R29] WebUI write diterapkan: WAN='");
+            SERIAL.write_str(new_name);
+            SERIAL.write_str("' mode=");
+            SERIAL.write_str(
+                if cmd.mode == asl_router_persistence::RJCFG_WAN_MODE_STATIC {
+                    "static"
+                } else {
+                    "dhcp"
+                },
+            );
+            SERIAL.write_str(" persist=");
+            SERIAL.write_str(if cmd.persist { "ya" } else { "tidak" });
+            SERIAL.write_str(" — ");
+            SERIAL.write_str(core::str::from_utf8(&web_report[..web_report_len]).unwrap_or(""));
+            SERIAL.write_str("\n");
+        }
+
+        // [R30] JALUR DAYA WEBUI: API sudah menjaga arming 2 langkah
+        // (handle_power). Kernel hanya mengeksekusi aksi yang lolos penjaga itu,
+        // POWER_EXEC_MS setelah ACK agar browser menerima respons lebih dulu,
+        // memakai routine yang sama dengan CLI 'reboot'/'shutdown'.
+        if let Some(kind) = api_dispatcher.take_power() {
+            power_kind = Some(kind);
+            power_deadline_ms = pit.elapsed_ms() + asl_router_api::POWER_EXEC_MS;
+            SERIAL.write_str("[R30] Aksi daya WebUI dijadwalkan: ");
+            SERIAL.write_str(if kind == asl_router_api::POWER_SHUTDOWN {
+                "shutdown"
+            } else {
+                "restart"
+            });
+            SERIAL.write_str(" dalam ");
+            SERIAL.write_u32(asl_router_api::POWER_EXEC_MS as u32);
+            SERIAL.write_str(" ms\n");
+        }
+        let power_due = match power_kind {
+            Some(_) => pit.elapsed_ms() >= power_deadline_ms,
+            None => false,
+        };
+        if power_due {
+            if power_kind == Some(asl_router_api::POWER_SHUTDOWN) {
+                SERIAL.write_str("[R30] SHUTDOWN WebUI — probing ACPI PM1_CNT candidates...\r\n");
+                if power::try_poweroff_candidates(&|s| SERIAL.write_str(s)) {
+                    SERIAL.write_str("[R30] Power-off unexpected return.\r\n");
+                }
+                SERIAL.write_str("[R30] Semua kandidat PM1_CNT ditolak — entering safe halt (power-off TIDAK didukung platform ini).\r\n");
+                loop {
+                    #[cfg(target_arch = "x86_64")]
+                    unsafe {
+                        core::arch::asm!("hlt", options(nomem, nostack, preserves_flags));
+                    }
+                    #[cfg(not(target_arch = "x86_64"))]
+                    core::hint::spin_loop();
+                }
+            }
+            SERIAL.write_str("[R30] RESTART WebUI via reset 8042 (0xFE) lalu triple fault...\r\n");
+            power::system_reset();
+        }
 
         // [R24] JALUR LAN NYATA: poll RX eth1 (DMA), ARP/ICMP responder, GARP
         if let Some(eth1) = eth1.as_mut() {
@@ -1119,6 +1477,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         // Ingress DMA -> mesin DHCP / TCP-HTTP WebUI / responder ARP+ICMP.
         // Egress  : DISCOVER+REQUEST, segmen TCP, ARP/ICMP reply via eth0.transmit.
         let lan_present_now = eth1.as_ref().map_or(false, |e| e.ready);
+        let wan_present_now = eth0.as_ref().map_or(false, |e| e.ready);
         if let Some(eth0) = eth0.as_mut() {
             if eth0.ready {
                 let now_ms = pit.elapsed_ms();
@@ -1146,7 +1505,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                     if eth0.transmit(&dhcp_buf[..n]).is_ok() {
                                         dhcp_discover_tx += 1;
                                         wan_tx_packets += 1;
-                                        SERIAL.write_str("[R28] DHCP DISCOVER TX ulang #");
+                                        SERIAL.write_str("[R28] DHCP DISCOVER TX percobaan #");
                                         SERIAL.write_u32(dhcp_discover_tx);
                                         SERIAL.write_str(" (menunggu OFFER)\n");
                                     }
@@ -1310,7 +1669,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     // (3b) TCP/HTTP WebUI pada alamat WAN.
                     let mut web_handled = false;
                     if let Some(srv) = web_server.as_mut() {
-                        let rt = web_runtime!(srv, now_ms, lan_present_now);
+                        let rt = web_runtime!(srv, now_ms, lan_present_now, wan_present_now);
                         let mut tx = |b: &[u8]| -> Result<(), &'static str> {
                             match eth0.transmit(b) {
                                 Ok(()) => {
@@ -1381,7 +1740,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 // dan daur ulang slot yang ditinggal peer.
                 if let Some(srv) = web_server.as_mut() {
                     if srv.active_sessions() > 0 {
-                        let rt = web_runtime!(srv, now_ms, lan_present_now);
+                        let rt = web_runtime!(srv, now_ms, lan_present_now, wan_present_now);
                         let mut tx = |b: &[u8]| -> Result<(), &'static str> {
                             match eth0.transmit(b) {
                                 Ok(()) => {
@@ -1787,6 +2146,39 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             SERIAL.write_str(" DHCP-dihentikan DAD-probe=");
                             SERIAL.write_str(if probe_sent { "TX" } else { "TIDAK-TERKIRIM" });
                             SERIAL.write_str(" — WebUI bind pada alamat ini setelah DAD\r\n");
+                            // [R29] CLI memakai journal yang sama dengan jalur tulis
+                            // WebUI: 'wan static' yang sukses juga ditulis ke RJCFG01
+                            // agar tidak ada divergensi antar-antarmuka.
+                            {
+                                let mut cfg = rjcfg_journal.active_config;
+                                cfg.set_wan_static(ip, mask, gw);
+                                let mut logged = false;
+                                if block_is_ata {
+                                    if let Some(base) = rjcfg01_lba {
+                                        if let Ok(slot) = rjcfg_journal.commit_update(cfg) {
+                                            logged = true;
+                                            SERIAL.write_str("RJCFG01 wan static: ");
+                                            SERIAL.write_str(
+                                                if rjcfg_write_and_verify(
+                                                    &mut ata_dev,
+                                                    &rjcfg_journal,
+                                                    base,
+                                                    slot,
+                                                ) {
+                                                    "ditulis + diverifikasi di disk\r\n"
+                                                } else {
+                                                    "READBACK GAGAL\r\n"
+                                                },
+                                            );
+                                        }
+                                    }
+                                }
+                                if !logged {
+                                    SERIAL.write_str(
+                                        "RJCFG01 wan static: tidak ditulis (journal RAM saja)\r\n",
+                                    );
+                                }
+                            }
                         }
                     } else if cmd == b"disk print" || cmd == b"show disk" {
                         SERIAL.write_str("Disk Layout (GPT Partition Table):\r\n");
@@ -2084,8 +2476,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     } else if cmd == b"clear" {
                         SERIAL.write_str("\x1B[2J\x1B[H");
                     } else if cmd == b"reboot" {
-                        SERIAL.write_str("[R26] Reboot via triple fault (null IDT + int3)...\r\n");
-                        power::triple_fault_reboot();
+                        SERIAL.write_str(
+                            "[R26] Reboot via reset 8042 (0xFE) lalu triple fault...\r\n",
+                        );
+                        power::system_reset();
                     } else if cmd == b"shutdown" {
                         SERIAL.write_str(
                             "[R25] SHUTDOWN REQUESTED — probing ACPI PM1_CNT candidates...\r\n",
