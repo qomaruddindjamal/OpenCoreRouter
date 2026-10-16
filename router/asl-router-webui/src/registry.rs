@@ -21,15 +21,17 @@ pub struct WebUiModule {
 }
 
 /// Modul yang dikenal WebUI, mengikuti urutan sidebar. Dua puluh tiga entri:
-/// sembilan berdata kernel nyata (`enabled:true`, view-nya membaca endpoint
-/// sungguhan) dan empat belas rupa saja (`enabled:false`) karena kernel belum
+/// sepuluh berdata kernel nyata (`enabled:true`, view-nya membaca endpoint
+/// sungguhan) dan tiga belas rupa saja (`enabled:false`) karena kernel belum
 /// punya endpoint-nya: WireGuard, VPN, XRay-Core, QoS Manager, ARP Table,
-/// Gateway, DHCP Server, Terminal, Appearance, Packages, User Manager, Speed
+/// Gateway, DHCP Server, Appearance, Packages, User Manager, Speed
 /// Test, Telnet, dan Trace Route. Restart/Shutdown tidak menjadi modul
 /// berhalaman: keduanya aksi daya yang langsung membuka dialog. `/arp`, `/qos`,
 /// dan `/gateway` dipasang karena owner menaruh ketiganya di sidebar; empat
 /// modul konsol (`/terminal`, `/speedtest`, `/telnet`, `/traceroute`) menyusul
-/// karena owner menambahkan menu Terminal dan grup Tools.
+/// karena owner menambahkan menu Terminal dan grup Tools. Hanya `/terminal`
+/// yang sudah naik jadi berdata nyata: ia memakai jalur HTTP yang sama dengan
+/// modul lain, sementara tiga sisanya butuh pemancar paket yang belum ada.
 pub const MODULES: [WebUiModule; 23] = [
     WebUiModule {
         name: "Dashboard",
@@ -114,12 +116,14 @@ pub const MODULES: [WebUiModule; 23] = [
         path: "/dhcpserver",
         enabled: false,
     },
-    // Rupa saja: WebUI tidak punya saluran tulis perintah apa pun selain dua
-    // permukaan (WAN interface dan aksi daya), jadi tidak ada terminal HTTP.
+    // Berdata kernel nyata: terminal ini bukan cangkang di dalam kernel, ia CLI
+    // di atas HTTP. Setiap perintahnya dipetakan ke endpoint baca yang benar-benar
+    // ada di dispatch_get, atau ke dua permukaan tulis kernel, sisanya ditolak
+    // dengan sebab teknis (lihat /js/core/termcmd.js).
     WebUiModule {
         name: "Terminal",
         path: "/terminal",
-        enabled: false,
+        enabled: true,
     },
     // Menu System: rupa lebih dulu sesuai arahan owner. Appearance memakai
     // mesin tema lokal browser (localStorage), bukan endpoint kernel, sehingga
@@ -251,6 +255,17 @@ asset!(
     "rinjani-css-mobile-ui02f",
     "css/mobile.css"
 );
+// Gaya jendela terminal (baris tab, header berisi tombol New/Close, layar
+// gulung, baris prompt). Dimuat malas oleh app.js hanya saat modul Terminal
+// dibuka, karena shell.html sudah memegang 7 882 B dari jatah 7 936 B dan
+// tidak boleh ikut menanggung CSS yang jarang dipakai.
+asset!(
+    CSS_TERMINAL,
+    "/css/terminal.css",
+    "text/css; charset=utf-8",
+    "rinjani-css-terminal-ui02i",
+    "css/terminal.css"
+);
 asset!(
     JS_API,
     "/js/core/api.js",
@@ -338,6 +353,24 @@ asset!(
     "application/javascript; charset=utf-8",
     "rinjani-js-theme-ui02e",
     "js/core/theme.js"
+);
+// Mesin terminal dipecah dua supaya masing-masing muat di buffer respons:
+// termcmd.js memegang isi (tabel perintah, sebab penolakan, pencetak JSON)
+// tanpa menyentuh DOM, term.js memegang tampilan (sesi, tab, layar, input).
+// Keduanya diminta client-side oleh app.js hanya saat modul Terminal dibuka.
+asset!(
+    JS_TERMCMD,
+    "/js/core/termcmd.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-termcmd-ui02i",
+    "js/core/termcmd.js"
+);
+asset!(
+    JS_TERM,
+    "/js/core/term.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-term-ui02i",
+    "js/core/term.js"
 );
 asset!(
     VIEW_SYSTEM,
@@ -472,14 +505,16 @@ asset!(
     "rinjani-view-usermanager-ui02e",
     "views/usermanager.html"
 );
-// Modul konsol baru milik owner (Terminal + grup Tools). Isinya parsial
-// desain-saja: setiap kontrol yang belum punya jalur kernel dipasang `disabled`
-// sehingga halaman tidak pernah tampak seperti sedang mengerjakan sesuatu.
+// Grup Tools + Terminal lama milik owner. Tiga sisanya (Speed Test, Telnet,
+// Trace Route) masih parsial desain-saja: setiap kontrol yang belum punya jalur
+// kernel dipasang `disabled` sehingga halaman tidak pernah tampak seperti sedang
+// mengerjakan sesuatu. terminal.html sudah naik tingkat menjadi jendela CLI
+// nyata — markup-nya hanya cangkang, isinya datang dari term.js/termcmd.js.
 asset!(
     VIEW_TERMINAL,
     "/views/terminal.html",
     "text/html; charset=utf-8",
-    "rinjani-view-terminal-ui02h",
+    "rinjani-view-terminal-ui02i",
     "views/terminal.html"
 );
 asset!(
@@ -520,7 +555,7 @@ asset!(
     "images/logo.svg"
 );
 
-pub const ALL_ASSETS: [&StaticAsset; 46] = [
+pub const ALL_ASSETS: [&StaticAsset; 49] = [
     &SHELL_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
@@ -530,6 +565,7 @@ pub const ALL_ASSETS: [&StaticAsset; 46] = [
     &CSS_ICONS,
     &CSS_ICONS_ACT,
     &CSS_MOBILE,
+    &CSS_TERMINAL,
     &JS_API,
     &JS_UI,
     &JS_WEBFIG,
@@ -542,6 +578,8 @@ pub const ALL_ASSETS: [&StaticAsset; 46] = [
     &JS_SYSTEM,
     &JS_VIEWS,
     &JS_THEME,
+    &JS_TERMCMD,
+    &JS_TERM,
     &VIEW_SYSTEM,
     &VIEW_INTERFACES,
     &VIEW_FIREWALL,

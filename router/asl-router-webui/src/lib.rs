@@ -881,17 +881,22 @@ mod tests {
     #[test]
     fn test_01_modules_registry() {
         assert_eq!(registry::MODULES.len(), 23);
-        // Sembilan modul berdata kernel nyata + empat belas rupa saja yang sengaja
+        // Sepuluh modul berdata kernel nyata + tiga belas rupa saja yang sengaja
         // enabled:false karena kernel tidak punya endpoint-nya (WireGuard, VPN,
-        // XRay, QoS Manager, ARP Table, Gateway, DHCP Server, Terminal,
+        // XRay, QoS Manager, ARP Table, Gateway, DHCP Server,
         // Appearance, Packages, User Manager, Speed Test, Telnet, Trace Route).
         // Restart dan Shutdown tidak lagi menjadi modul berhalaman: keduanya
         // aksi daya yang langsung membuka dialog. Registri tidak boleh melaporkan
         // yang tidak ada sebagai aktif.
-        assert_eq!(registry::MODULES.iter().filter(|m| m.enabled).count(), 9);
-        assert_eq!(registry::MODULES.iter().filter(|m| !m.enabled).count(), 14);
+        assert_eq!(registry::MODULES.iter().filter(|m| m.enabled).count(), 10);
+        assert_eq!(registry::MODULES.iter().filter(|m| !m.enabled).count(), 13);
         assert!(registry::MODULES.iter().all(|m| m.path != "/restart"));
         assert!(registry::MODULES.iter().all(|m| m.path != "/shutdown"));
+        // Terminal naik menjadi berdata nyata pada build ini: setiap perintahnya
+        // dipetakan ke endpoint yang diuji di test_05g, bukan ke keluaran karangan.
+        assert!(registry::MODULES
+            .iter()
+            .any(|m| m.path == "/terminal" && m.enabled));
         // Urutan mengikuti sidebar: NAT anak Firewall, grup Services (ARP Table,
         // Service List, DNS Server, Gateway, DHCP Server), Terminal, grup System,
         // lalu grup Tools.
@@ -931,7 +936,7 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 46);
+        assert_eq!(registry::ALL_ASSETS.len(), 49);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
@@ -1126,7 +1131,6 @@ mod tests {
             ("/views/dhcpserver.html", "desain saja"),
             ("/views/packages.html", "desain saja"),
             ("/views/usermanager.html", "desain saja"),
-            ("/views/terminal.html", "desain saja"),
             ("/views/speedtest.html", "desain saja"),
             ("/views/telnet.html", "desain saja"),
             ("/views/traceroute.html", "desain saja"),
@@ -1135,8 +1139,11 @@ mod tests {
             ("/css/mobile.css", "@media (max-width: 900px)"),
             ("/css/table.css", ".wf-tool"),
             ("/css/icons-act.css", "data-ico=\"cols\""),
+            ("/css/terminal.css", ".term-screen"),
             ("/js/core/table.js", "tbl.setup"),
             ("/js/core/tblcols.js", "tbl.tableOps"),
+            ("/js/core/termcmd.js", "Open Core Router"),
+            ("/js/core/term.js", "term.setup"),
         ] {
             let mut raw = [0u8; 96];
             let mut n = 0usize;
@@ -1163,6 +1170,175 @@ mod tests {
         }
     }
 
+    /// Ambil setiap token berawalan "/api/v1/" dari sebuah skrip, tanpa alokasi
+    /// (katalog ini no_std bahkan saat uji). Karakter yang dianggap bagian path
+    /// sama dengan yang diterima router: huruf, angka, '-', '_', '/'.
+    fn api_tokens<'a>(src: &'a [u8], out: &mut [Option<&'a str>; 32]) -> usize {
+        const PRE: &[u8] = b"/api/v1/";
+        let mut n = 0usize;
+        let mut i = 0usize;
+        while i + PRE.len() <= src.len() {
+            if &src[i..i + PRE.len()] == PRE {
+                let mut j = i + PRE.len();
+                while j < src.len() {
+                    let c = src[j];
+                    if c.is_ascii_alphanumeric() || c == b'/' || c == b'-' || c == b'_' {
+                        j += 1;
+                    } else {
+                        break;
+                    }
+                }
+                if n < out.len() {
+                    out[n] =
+                        Some(core::str::from_utf8(&src[i..j]).expect("token path bukan utf-8"));
+                }
+                n += 1;
+                i = j;
+            } else {
+                i += 1;
+            }
+        }
+        n
+    }
+
+    #[test]
+    fn test_05g_terminal_adalah_cli_di_atas_endpoint_nyata() {
+        // Terminal naik dari rupa-saja menjadi modul berdata. Penjaganya harus
+        // mengikat klaim itu pada isi dispatch_get kernel yang sebenarnya: dua
+        // belas jalur baca dan dua permukaan tulis. Perintah baru apa pun wajib
+        // lewat kernel lebih dulu.
+        const READ: [&str; 12] = [
+            "/api/v1/system",
+            "/api/v1/interfaces",
+            "/api/v1/firewall/rules",
+            "/api/v1/nat",
+            "/api/v1/nat/rules",
+            "/api/v1/nat/conntrack",
+            "/api/v1/wireless",
+            "/api/v1/wireless/devices",
+            "/api/v1/olt",
+            "/api/v1/olt/ons",
+            "/api/v1/services",
+            "/api/v1/writes/last",
+        ];
+        // term.js hanya boleh menyebut satu jalur baca (salam) plus dua jalur
+        // tulis kernel: aksi daya dan antarmuka WAN per nama.
+        const WRITTEN: [&str; 3] = ["/api/v1/system", "/api/v1/power", "/api/v1/interfaces/"];
+
+        let mut toks = [None; 32];
+        let n = api_tokens(registry::JS_TERMCMD.content, &mut toks);
+        assert_eq!(n, READ.len(), "termcmd.js merujuk {n} rujukan endpoint");
+        for t in toks.iter().flatten() {
+            assert!(
+                READ.contains(t),
+                "termcmd.js merujuk endpoint yang tidak ada: {t}"
+            );
+        }
+        for p in READ.iter() {
+            assert!(
+                toks.iter().flatten().any(|t| t == p),
+                "jalur baca {p} hilang dari termcmd.js"
+            );
+        }
+
+        let mut toks2 = [None; 32];
+        // 2x system (salam + pesan galat), 3x power (arm/restart/shutdown),
+        // 1x interfaces/<nama>.
+        assert_eq!(
+            api_tokens(registry::JS_TERM.content, &mut toks2),
+            6,
+            "jumlah panggilan term.js berubah dari yang diizinkan kernel"
+        );
+        for t in toks2.iter().flatten() {
+            assert!(
+                WRITTEN.contains(t),
+                "term.js menulis ke jalur di luar dua permukaan kernel: {t}"
+            );
+        }
+        let eng = core::str::from_utf8(registry::JS_TERM.content).expect("term.js bukan utf-8");
+        for guard in ["action=arm", "action=restart", "action=shutdown"] {
+            assert!(eng.contains(guard), "term.js kehilangan kontrak {guard}");
+        }
+
+        // Tuntutan owner: New dan Close duduk di kartu header bernama, tanpa
+        // chrome jendela (minimize/maximize/close), dan capnya OPEN CORE ROUTER.
+        let view =
+            core::str::from_utf8(registry::VIEW_TERMINAL.content).expect("terminal.html utf-8");
+        for id in [
+            "id=\"term-tabs\"",
+            "id=\"term-host\"",
+            "id=\"term-new\"",
+            "id=\"term-close\"",
+            "id=\"term-screen\"",
+            "id=\"term-input\"",
+            "@OpenCoreRouter",
+        ] {
+            assert!(view.contains(id), "terminal.html kehilangan {id}");
+        }
+        for banned in ["desain saja", "maximize", "minimise", "minimize"] {
+            assert!(
+                !view.contains(banned),
+                "terminal.html masih memuat \"{banned}\""
+            );
+        }
+        // Cap MikroTik dilarang di mana pun, dalam bentuk huruf apa pun.
+        for (nama, bytes) in [
+            ("views/terminal.html", registry::VIEW_TERMINAL.content),
+            ("js/core/termcmd.js", registry::JS_TERMCMD.content),
+            ("js/core/term.js", registry::JS_TERM.content),
+            ("css/terminal.css", registry::CSS_TERMINAL.content),
+        ] {
+            assert!(
+                !contains_ci(bytes, b"mikrotik"),
+                "{nama} memuat cap MikroTik"
+            );
+        }
+        let cmd = core::str::from_utf8(registry::JS_TERMCMD.content).expect("termcmd.js utf-8");
+        assert!(
+            cmd.contains("Open Core Router") && cmd.contains("ASL Core Kernel v1.0.0"),
+            "banner terminal kehilangan cap resmi produk"
+        );
+
+        // Regresi UI-02I: `--pf-panel-head` itu strip TERANG (aqua pucat), jadi
+        // judul/chip/tombol header tidak boleh memakai token putih murni atau
+        // rgba putih — saat verifikasi live tombol New dan Close terrender
+        // putih-di-atas-putih: ada di DOM, tidak terbaca di layar.
+        let css = core::str::from_utf8(registry::CSS_TERMINAL.content).expect("terminal.css utf-8");
+        assert!(
+            css.contains("var(--pf-panel-head-text)"),
+            "header terminal kehilangan token teks yang ikut tema"
+        );
+        assert!(
+            !css.contains("var(--pf-on-accent)") && !css.contains("rgba(255, 255, 255"),
+            "terminal.css memakai lapisan putih mentah di strip terang"
+        );
+        // Dua token ini terukur terlalu terang untuk teks di palet aku: cyan
+        // aksen 2.4:1 (glif banner) dan text-title 3.1:1 (baris perintah).
+        assert!(
+            !css.contains("var(--pf-accent-cyan)") && !css.contains("var(--pf-text-title)"),
+            "terminal.css memakai token teks yang kontrasnya di bawah 4.5:1"
+        );
+    }
+
+    /// Pencocokan kasus-abai untuk larangan cap merek; tanpa alokasi.
+    fn contains_ci(hay: &[u8], needle: &[u8]) -> bool {
+        if needle.is_empty() || hay.len() < needle.len() {
+            return false;
+        }
+        let mut i = 0usize;
+        while i + needle.len() <= hay.len() {
+            if hay[i..i + needle.len()]
+                .iter()
+                .zip(needle.iter())
+                .all(|(h, n)| h.to_ascii_lowercase() == n.to_ascii_lowercase())
+            {
+                return true;
+            }
+            i += 1;
+        }
+        false
+    }
+
     #[test]
     fn test_05e_appjs_menghidupkan_mesin_chrome() {
         // app.js harus memanggil mesin chrome dua kali: sekali saat parsial
@@ -1179,6 +1355,26 @@ mod tests {
         assert!(resp.contains("OPCR.tbl.setup(node)"));
         assert!(resp.contains("OPCR.tbl.onPaint(root)"));
         assert!(resp.contains("OPCR.wf.setup(node)"));
+
+        // Terminal dimuat MALAS: shell.html memegang 7 882 B dari jatah 7 936 B,
+        // jadi CSS+JS terminal tidak boleh ikut tertanam di chrome. app.js yang
+        // memintanya saat halaman terminal dibuka, lalu memanggil setup().
+        for src in [
+            "\"/css/terminal.css\"",
+            "\"/js/core/termcmd.js\"",
+            "\"/js/core/term.js\"",
+        ] {
+            assert!(resp.contains(src), "app.js tidak memuat malas {src}");
+        }
+        assert!(
+            resp.contains("OPCR.term.setup"),
+            "app.js memanggil terminal tanpa penjagaan"
+        );
+        let shell = core::str::from_utf8(registry::SHELL_HTML.content).expect("shell.html utf-8");
+        assert!(
+            !shell.contains("term.js") && !shell.contains("terminal.css"),
+            "shell.html memuat aset terminal secara statis"
+        );
     }
 
     #[test]
