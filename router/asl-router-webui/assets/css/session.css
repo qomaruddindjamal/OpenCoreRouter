@@ -1,0 +1,297 @@
+/* ==========================================================================
+   Rinjani 1.0.0 — Chrome sesi
+   Dua permukaan yang sebelumnya menumpang di layout.css/components.css:
+   dropdown pengguna di header (js/core/login.js) dan halaman login mandiri
+   (/login.html). Semua warna lewat token base.css supaya tema default/dark/
+   senja ikut tanpa aturan khusus; kontras teks selalu pasangan token aksen
+   dengan --pf-on-accent, bukan putih telanjang.
+   ========================================================================== */
+
+/* ------------------------------------------------------- dropdown pengguna */
+.user-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.chip-user {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 3px 8px 3px 3px;
+    border: 1px solid var(--pf-header-border);
+    border-radius: 16px;
+    background: var(--pf-chip-bg);
+    color: var(--pf-text-menu);
+    font-family: var(--pf-font);
+    font-size: 12px;
+    cursor: pointer;
+}
+
+.chip-user:hover,
+.chip-user[aria-expanded="true"] {
+    border-color: var(--pf-accent-blue);
+    color: var(--pf-accent-hover);
+}
+
+/* Penolakan 403: sesi masih hidup, aksinya yang ditolak. Warna bahaya dipakai
+   di sini, bukan kuning: latar warn milik tema putih hanya 3,91:1 terhadap
+   teksnya, sedangkan merah di atas latar err lolos 5,17:1 pada tiga tema. */
+.chip-user.deny {
+    border-color: var(--pf-err);
+    color: var(--pf-err);
+    background: var(--pf-err-bg);
+}
+
+.um-ava {
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    border: 1px solid var(--pf-accent-blue);
+    background: var(--pf-chip-bg);
+    color: var(--pf-text-menu);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 22px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.um-caret {
+    font-size: 9px;
+    color: var(--pf-text-dim);
+}
+
+.user-menu {
+    position: absolute;
+    top: calc(100% + 7px);
+    right: 0;
+    z-index: 60;
+    display: none;
+    width: 236px;
+    padding: 6px;
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 9px;
+    background: var(--pf-panel-bg);
+    box-shadow: 0 10px 26px rgba(3, 28, 38, 0.22);
+}
+
+.user-menu.open {
+    display: block;
+}
+
+.um-head {
+    padding: 7px 9px 9px;
+    border-bottom: 1px solid var(--pf-row-line);
+}
+
+.um-name {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--pf-text-primary);
+    word-break: break-all;
+}
+
+.um-role {
+    display: block;
+    font-family: var(--pf-mono);
+    font-size: 11px;
+    color: var(--pf-text-sub);
+}
+
+.um-item {
+    display: block;
+    width: 100%;
+    padding: 8px 9px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: var(--pf-text-menu);
+    font-size: 12px;
+    text-align: left;
+}
+
+.um-item:hover {
+    background: var(--pf-sidebar-hover);
+    color: var(--pf-text-primary);
+}
+
+.um-item.danger:hover {
+    background: var(--pf-err-bg);
+    color: var(--pf-err);
+}
+
+.um-hint {
+    display: block;
+    font-size: 10px;
+    color: var(--pf-text-dim);
+}
+
+/* -------------------------------------------------------- halaman login */
+.lg-body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: 20px 14px;
+    background:
+        radial-gradient(120% 90% at 50% 0%, var(--pf-sidebar-hover) 0%, var(--pf-bg-main) 58%);
+}
+
+.lg-card {
+    width: 100%;
+    max-width: 372px;
+    padding: 22px 22px 18px;
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 12px;
+    background: var(--pf-panel-bg);
+    box-shadow: 0 14px 34px rgba(3, 28, 38, 0.16);
+}
+
+.lg-brand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    margin-bottom: 18px;
+}
+
+.lg-logo {
+    width: 40px;
+    height: 40px;
+}
+
+.lg-title {
+    display: block;
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    color: var(--pf-text-primary);
+}
+
+.lg-sub {
+    display: block;
+    font-size: 11px;
+    color: var(--pf-text-sub);
+}
+
+.lg-row {
+    margin-bottom: 12px;
+}
+
+.lg-row label {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.7px;
+    text-transform: uppercase;
+    color: var(--pf-text-dim);
+}
+
+.lg-row input {
+    width: 100%;
+    padding: 9px 10px;
+    border: 1px solid var(--pf-panel-border);
+    border-radius: 7px;
+    background: var(--pf-input-bg);
+    color: var(--pf-text-primary);
+    font-family: var(--pf-mono);
+    font-size: 13px;
+}
+
+.lg-row input:focus {
+    outline: none;
+    border-color: var(--pf-accent-blue);
+    box-shadow: 0 0 0 3px var(--pf-ring-accent);
+}
+
+.lg-note {
+    min-height: 38px;
+    margin: 2px 0 14px;
+    padding: 8px 10px;
+    border-radius: 7px;
+    background: var(--pf-chip-bg);
+    color: var(--pf-text-dim);
+    font-size: 12px;
+}
+
+.lg-note.bad {
+    background: var(--pf-err-bg);
+    color: var(--pf-err);
+}
+
+.lg-note.good {
+    background: var(--pf-ok-bg);
+    color: var(--pf-ok);
+}
+
+.lg-btn {
+    width: 100%;
+    padding: 10px;
+    border: 0;
+    border-radius: 8px;
+    background: var(--pf-accent-btn-hover);
+    color: var(--pf-on-accent);
+    font-size: 13px;
+    font-weight: 600;
+}
+
+/* Aksen terang milik tema (putih di atas aksen biru gelapnya hanya 2,72:1 di
+   tema Darkmode) tidak dipakai untuk latar tombol: tombol memakai varian gelap
+   aksen yang lolos 4,62-5,21:1 pada tiga tema, dan keadaan hover/active
+   digelapkan lewat filter, bukan lewat nilai warna tertulis. */
+.lg-btn:hover {
+    filter: brightness(0.92);
+}
+
+.lg-btn:active {
+    filter: brightness(0.86);
+}
+
+.lg-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.lg-foot {
+    margin-top: 16px;
+    font-size: 10px;
+    text-align: center;
+    color: var(--pf-text-dim);
+}
+
+/* --------------------------------------------------------- responsif */
+@media (max-width: 900px) {
+    .chip-user .um-label {
+        display: none;
+    }
+
+    .chip-user {
+        padding: 3px;
+        gap: 0;
+    }
+}
+
+@media (max-width: 560px) {
+    .lg-body {
+        align-items: flex-start;
+        padding: 14px 10px;
+    }
+
+    .lg-card {
+        padding: 16px 15px 14px;
+        border-radius: 10px;
+        box-shadow: none;
+    }
+
+    /* Menu pengguna jadi pita penuh lebar: di layar sempit menu anchored
+       kanan mudah terpotong tepi header. */
+    .user-menu {
+        position: fixed;
+        top: calc(var(--pf-header-h) + 6px);
+        right: 8px;
+        left: 8px;
+        width: auto;
+    }
+}

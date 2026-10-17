@@ -91,16 +91,6 @@
     white-space: nowrap;
 }
 
-.chip-badge {
-    color: var(--pf-accent-blue);
-    border-color: var(--pf-accent-blue);
-    background: var(--pf-chip-bg);
-    font-family: var(--pf-font);
-    font-size: 10px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
 .app-body {
     display: flex;
     padding-top: var(--pf-header-h);

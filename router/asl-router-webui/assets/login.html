@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Masuk &mdash; RINJANI 1.0.0 Open Core Router</title>
+    <link rel="icon" href="/images/logo.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="/css/base.css">
+    <link rel="stylesheet" href="/css/session.css">
+    <script src="/js/core/theme.js"></script>
+</head>
+<body class="lg-body">
+    <main class="lg-card">
+        <div class="lg-brand">
+            <img src="/images/logo.svg" alt="Logo OpenCR" class="lg-logo">
+            <div>
+                <span class="lg-title">RINJANI 1.0.0</span>
+                <span class="lg-sub">Open Core Router &mdash; konsol router</span>
+            </div>
+        </div>
+
+        <p class="lg-note" id="lg-note">Masuk untuk membaca dan menulis konfigurasi.</p>
+
+        <div class="lg-row">
+            <label for="lg-user">Nama pengguna</label>
+            <input type="text" id="lg-user" maxlength="16" spellcheck="false" autocomplete="username" autocapitalize="none">
+        </div>
+        <div class="lg-row">
+            <label for="lg-pw">Kata sandi</label>
+            <input type="password" id="lg-pw" maxlength="64" autocomplete="current-password">
+        </div>
+
+        <button type="button" class="lg-btn" id="lg-go">Masuk</button>
+
+        <p class="lg-foot">Rinjani 1.0.0 &mdash; Powered by ASL Core Kernel v1.0.0<br>
+            Gerbang sesi berada di lapisan server: percobaan gagal dijawab kernel
+            dengan satu kode yang sama dan kuota penelusuran hanya menimpa alamat
+            pengirim.</p>
+    </main>
+
+    <script src="/js/core/api.js"></script>
+    <script>
+        (function () {
+            "use strict";
+            var UKEY = "rinjani-session-user";
+            var NKEY = "rinjani-login-note";
+            // Kunci = kode error kernel. Pesan tidak pernah menyimpulkan
+            // penyebab: yang tampil adalah apa yang kernel katakan.
+            var MSG = {
+                unauthenticated: "Belum ada sesi. Masuk untuk membaca data kernel.",
+                invalid_token: "Token sesi tidak dikenali kernel.",
+                session_expired: "Sesi kedaluwarsa. Masuk kembali.",
+                no_credentials: "Kernel belum menyimpan akun. Buat lewat konsol serial: auth set <nama> <admin|viewer>",
+                invalid_credentials: "Nama pengguna atau kata sandi salah."
+            };
+            var u = document.getElementById("lg-user");
+            var p = document.getElementById("lg-pw");
+            var note = document.getElementById("lg-note");
+            var btn = document.getElementById("lg-go");
+
+            function say(cls, text) {
+                note.setAttribute("class", "lg-note" + (cls ? " " + cls : ""));
+                note.textContent = text;
+            }
+
+            function take(k) {
+                try {
+                    var v = window.sessionStorage.getItem(k);
+                    window.sessionStorage.removeItem(k);
+                    return v;
+                } catch (e) {
+                    return null;
+                }
+            }
+
+            function put(k, v) {
+                try {
+                    window.sessionStorage.setItem(k, v);
+                } catch (e) {
+                    /* mode privat: nama sesi hanya tidak tampil di chrome */
+                }
+            }
+
+            // Alasan pengalihan ditulis chrome SPA sebelum halaman ini dibuka;
+            // hanya sekali baca supaya penyegaran tidak mengulang pesan basi.
+            var why = take(NKEY);
+            if (why) say("bad", MSG[why] ? MSG[why] : "Kernel menutup sesi (" + why + ").");
+
+            // Probe tanpa efek samping: kalau sesi masih hidup (tab lama),
+            // langsung kembali ke konsol daripada menyuruh masuk dua kali.
+            OPCR.api.auth.status(function (ok, d) {
+                if (!ok) return;
+                if (d.authenticated) {
+                    location.replace("/");
+                    return;
+                }
+                if (d.bootstrap_required) say("bad", MSG.no_credentials);
+            });
+
+            function submit() {
+                var name = (u.value || "").trim();
+                var pw = p.value;
+                // Sandi dilepaskan dari field sebelum permintaan berjalan:
+                // tidak ada jejak kredensial di DOM yang tersisa di riwayat.
+                p.value = "";
+                if (!name || !pw) {
+                    say("bad", "Nama pengguna dan kata sandi wajib diisi.");
+                    (name ? p : u).focus();
+                    return;
+                }
+                btn.disabled = true;
+                say("", "Memeriksa ke kernel\u2026");
+                OPCR.api.auth.login(name, pw, function (ok, d, why2) {
+                    btn.disabled = false;
+                    if (ok) {
+                        put(UKEY, name);
+                        say("good", "Diterima kernel. Memuat konsol\u2026");
+                        location.replace("/");
+                        return;
+                    }
+                    say("bad", (MSG[why2] || "Masuk ditolak kernel.") + " [" + why2 + "]");
+                    u.focus();
+                });
+            }
+
+            btn.addEventListener("click", submit);
+            function key(ev) {
+                if (ev.key === "Enter") submit();
+            }
+            u.addEventListener("keydown", key);
+            p.addEventListener("keydown", key);
+            u.focus();
+        })();
+    </script>
+</body>
+</html>
