@@ -119,6 +119,13 @@ pub struct WebSession {
     pub remote_mac: [u8; 6],
     pub remote_ip: [u8; 4],
     pub remote_port: u16,
+    /// Alamat IPv4 lokal tempat sesi ini terminate (salah satu anggota
+    /// `WebRuntime::local` yang cocok saat SYN datang). Semua segmen balasan
+    /// memakai alamat ini, bukan alamat WAN, supaya server yang melayani
+    /// banyak antarmuka tidak pernah mengaku sebagai antarmuka lain.
+    pub local_ip: [u8; 4],
+    /// MAC antarmuka pemilik `local_ip`, dipakai sebagai source MAC balasan.
+    pub local_mac: [u8; 6],
     /// Nomor seq berikutnya yang kita harapkan dari peer.
     pub rcv_nxt: u32,
     /// Nomor seq berikutnya yang akan kita kirim.
@@ -144,6 +151,8 @@ impl WebSession {
             remote_mac: [0; 6],
             remote_ip: [0; 4],
             remote_port: 0,
+            local_ip: [0; 4],
+            local_mac: [0; 6],
             rcv_nxt: 0,
             snd_nxt: 0,
             snd_una: 0,
@@ -265,10 +274,17 @@ impl TcpWebServer {
         None
     }
 
-    fn find_slot(&self, ip: [u8; 4], port: u16) -> Option<usize> {
+    /// Cari slot sesi dengan kunci 4-tuple: alamat lokal tujuan + alamat/port
+    /// peer. Kunci beralamat lokal membuat dua koneksi dari satu klien ke dua
+    /// antarmuka router berbeda tidak saling menimpa.
+    fn find_slot(&self, local_ip: [u8; 4], ip: [u8; 4], port: u16) -> Option<usize> {
         for i in 0..WEB_SESSIONS {
             let s = &self.sessions[i];
-            if s.state != TcpSocketState::Closed && s.remote_ip == ip && s.remote_port == port {
+            if s.state != TcpSocketState::Closed
+                && s.local_ip == local_ip
+                && s.remote_ip == ip
+                && s.remote_port == port
+            {
                 return Some(i);
             }
         }
@@ -279,11 +295,17 @@ impl TcpWebServer {
     /// (sudah ditangani/dijatuhkan secara eksplisit); `Ok(false)` = bukan TCP,
     /// pemanggil boleh meneruskan ke responder ARP/ICMP.
     ///
+    /// `ingress_mac` adalah MAC antarmuka yang menerima frame ini. Hanya jalur
+    /// RST yang memakainya (alamat tujuan bukan milik kita, jadi tidak ada
+    /// entri lokal yang bisa dijadikan sumber); alamat untuk sesi yang diterima
+    /// diambil dari `rt.local` hasil pencocokan.
+    ///
     /// `scratch` adalah buffer frame TX (1518 B) milik pemanggil, sengaja di luar
     /// struktur ini agar kernel tidak menaruh 1.5 KiB di atas stack per-poll.
     pub fn on_frame(
         &mut self,
         frame: &[u8],
+        ingress_mac: [u8; 6],
         rt: &WebRuntime,
         api: &mut ApiDispatcher,
         scratch: &mut [u8; 1518],
@@ -315,39 +337,53 @@ impl TcpWebServer {
         if th.dst_port != self.port {
             return Ok(false);
         }
-        if !self.listening || ip.dst_ip != rt.wan_ip {
-            // Tidak ada binding (WAN DOWN / alamat lain): RST agar peer tidak
-            // menggantung, kecuali WAN belum terbentuk sama sekali.
-            if th.flags & TCP_FLAG_RST == 0 && rt.wan_ip != [0, 0, 0, 0] {
-                self.stats.rst_sent += 1;
-                if let Ok(n) = build_tcp_frame(
-                    eth.src_mac,
-                    rt.wan_mac,
-                    ip.dst_ip,
-                    ip.src_ip,
-                    self.port,
-                    th.src_port,
-                    0,
-                    th.seq.wrapping_add(payload.len() as u32),
-                    TCP_FLAG_RST | TCP_FLAG_ACK,
-                    0,
-                    &[],
-                    scratch,
-                ) {
-                    if send_frame(scratch, n, tx).is_err() {
-                        self.stats.tx_failures += 1;
+        // Aturan alamat lokal: server hanya melayani frame yang tujuan IPv4-nya
+        // benar-benar terpasang pada antarmuka router. Daftarnya dibangun kernel
+        // dari keadaan nyata, jadi tidak ada alamat karangan yang bisa membuka
+        // gerbang, dan server yang sedang tidak listen tidak cocok dengan apa pun.
+        let local_idx = if self.listening {
+            rt.local_match(ip.dst_ip)
+        } else {
+            None
+        };
+        let local = match local_idx {
+            Some(i) => rt.local[i],
+            None => {
+                // Tujuan bukan alamat kita: kirim RST agar peer tidak menggantung,
+                // kecuali router belum memegang alamat lokal mana pun. Tanpa
+                // alamat, kita tidak punya dasar untuk mengaku dan mengirim
+                // balasan adalah kepalsuan.
+                if th.flags & TCP_FLAG_RST == 0 && rt.local_count > 0 {
+                    self.stats.rst_sent += 1;
+                    if let Ok(n) = build_tcp_frame(
+                        eth.src_mac,
+                        ingress_mac,
+                        ip.dst_ip,
+                        ip.src_ip,
+                        self.port,
+                        th.src_port,
+                        0,
+                        th.seq.wrapping_add(payload.len() as u32),
+                        TCP_FLAG_RST | TCP_FLAG_ACK,
+                        0,
+                        &[],
+                        scratch,
+                    ) {
+                        if send_frame(scratch, n, tx).is_err() {
+                            self.stats.tx_failures += 1;
+                        }
                     }
                 }
+                return Ok(true);
             }
-            return Ok(true);
-        }
+        };
         if !tcp_checksum_ok(ip.src_ip, ip.dst_ip, seg_all) {
             self.stats.checksum_errors += 1;
             log("[R28] TCP checksum invalid — segmen dibuang\r\n");
             return Ok(true);
         }
 
-        let slot = match self.find_slot(ip.src_ip, th.src_port) {
+        let slot = match self.find_slot(local.ip, ip.src_ip, th.src_port) {
             Some(i) => i,
             None => {
                 if th.flags & TCP_FLAG_SYN != 0 && th.flags & TCP_FLAG_ACK == 0 {
@@ -365,18 +401,24 @@ impl TcpWebServer {
                     s.remote_mac = eth.src_mac;
                     s.remote_ip = ip.src_ip;
                     s.remote_port = th.src_port;
+                    s.local_ip = local.ip;
+                    s.local_mac = local.mac;
                     s.rcv_nxt = th.seq.wrapping_add(1);
                     s.snd_nxt = isn.wrapping_add(1);
                     s.snd_una = isn;
                     s.peer_window = th.window;
                     self.stats.syn_received += 1;
-                    let r = self.send_ctl(&mut s, rt, TCP_FLAG_SYN | TCP_FLAG_ACK, scratch, tx);
+                    let r = self.send_ctl(&mut s, TCP_FLAG_SYN | TCP_FLAG_ACK, scratch, tx);
                     self.sessions[i] = s;
                     if r.is_ok() {
                         log("[R28] TCP SYN dari ");
                         log_ip(&ip.src_ip, log);
                         log(":");
                         log_u16(th.src_port, log);
+                        log(" pada alamat lokal ");
+                        log_ip(&local.ip, log);
+                        log("#");
+                        log_u16(local.ifindex as u16, log);
                         log(" -> SYN/ACK (SYN-RECEIVED)\r\n");
                     } else {
                         self.stats.tx_failures += 1;
@@ -444,7 +486,7 @@ impl TcpWebServer {
 
         // Kirim respons sepanjang window peer.
         if s.resp_len > s.resp_sent {
-            self.flush_data(slot, &mut s, rt, scratch, tx);
+            self.flush_data(slot, &mut s, scratch, tx);
         }
 
         // Respons ter-ACK penuh -> tutup sisi kita (Connection: close).
@@ -453,7 +495,7 @@ impl TcpWebServer {
             s.fin_sent = true;
             s.state = TcpSocketState::FinWait;
             if self
-                .send_ctl(&mut s, rt, TCP_FLAG_FIN | TCP_FLAG_ACK, scratch, tx)
+                .send_ctl(&mut s, TCP_FLAG_FIN | TCP_FLAG_ACK, scratch, tx)
                 .is_err()
             {
                 s.fin_sent = false;
@@ -462,7 +504,7 @@ impl TcpWebServer {
 
         if fin_peer {
             // ACK atas FIN peer, lalu bebaskan slot.
-            let _ = self.send_ctl(&mut s, rt, TCP_FLAG_ACK, scratch, tx);
+            let _ = self.send_ctl(&mut s, TCP_FLAG_ACK, scratch, tx);
             self.sessions[slot] = WebSession::closed();
             log("[R28] TCP sesi ditutup peer — slot dibebaskan\r\n");
         } else {
@@ -471,14 +513,14 @@ impl TcpWebServer {
         Ok(true)
     }
 
-    /// Pompa per-tick: kirim sisa respons yang tertahan window, tutup sesi yang
-    /// sudah lengkap, dan daur ulang slot yang ditinggal peer.
-    pub fn on_tick(
+    /// Pompa per antarmuka: kirim sisa respons yang tertahan window dan FIN untuk
+    /// sesi yang terminate pada `local_ip`. Sesi milik antarmuka lain sengaja
+    /// tidak disentuh supaya balasan tidak pernah keluar lewat NIC yang salah.
+    pub fn pump(
         &mut self,
-        rt: &WebRuntime,
+        local_ip: [u8; 4],
         scratch: &mut [u8; 1518],
         tx: &mut dyn FnMut(&[u8]) -> Result<(), &'static str>,
-        log: &dyn Fn(&str),
     ) {
         if !self.listening {
             return;
@@ -488,8 +530,11 @@ impl TcpWebServer {
                 continue;
             }
             let mut s = self.sessions[i];
+            if s.local_ip != local_ip {
+                continue;
+            }
             if s.resp_len > s.resp_sent {
-                self.flush_data(i, &mut s, rt, scratch, tx);
+                self.flush_data(i, &mut s, scratch, tx);
             }
             if s.state == TcpSocketState::Established
                 && s.responded
@@ -501,12 +546,25 @@ impl TcpWebServer {
                 s.fin_sent = true;
                 s.state = TcpSocketState::FinWait;
                 if self
-                    .send_ctl(&mut s, rt, TCP_FLAG_FIN | TCP_FLAG_ACK, scratch, tx)
+                    .send_ctl(&mut s, TCP_FLAG_FIN | TCP_FLAG_ACK, scratch, tx)
                     .is_err()
                 {
                     s.fin_sent = false;
                 }
             }
+            self.sessions[i] = s;
+        }
+    }
+
+    /// Daur ulang slot yang ditinggal peer. Dipanggil satu kali per iterasi loop
+    /// kernel dan tidak terikat antarmuka, sehingga umur sesi tetap terhitung
+    /// walaupun antarmuka pemiliknya sedang tidak di-poll.
+    pub fn age_sessions(&mut self, log: &dyn Fn(&str)) {
+        for i in 0..WEB_SESSIONS {
+            if self.sessions[i].state == TcpSocketState::Closed {
+                continue;
+            }
+            let mut s = self.sessions[i];
             let stalled_body = s.state == TcpSocketState::Established
                 && !s.responded
                 && s.req_len > 0
@@ -526,11 +584,12 @@ impl TcpWebServer {
         }
     }
 
-    /// Bangun segmen kontrol murni (SYN/ACK, ACK, FIN/ACK).
+    /// Bangun segmen kontrol murni (SYN/ACK, ACK, FIN/ACK). Alamat sumber dibaca
+    /// dari sesi, bukan dari snapshot WAN, agar sesi pada antarmuka mana pun
+    /// menjawab dengan alamat dan MAC antarmuka tempat ia terminate.
     fn send_ctl(
         &mut self,
         s: &mut WebSession,
-        rt: &WebRuntime,
         flags: u8,
         scratch: &mut [u8; 1518],
         tx: &mut dyn FnMut(&[u8]) -> Result<(), &'static str>,
@@ -542,8 +601,8 @@ impl TcpWebServer {
         };
         let n = build_tcp_frame(
             s.remote_mac,
-            rt.wan_mac,
-            rt.wan_ip,
+            s.local_mac,
+            s.local_ip,
             s.remote_ip,
             self.port,
             s.remote_port,
@@ -568,7 +627,6 @@ impl TcpWebServer {
         &mut self,
         slot: usize,
         s: &mut WebSession,
-        rt: &WebRuntime,
         scratch: &mut [u8; 1518],
         tx: &mut dyn FnMut(&[u8]) -> Result<(), &'static str>,
     ) {
@@ -588,8 +646,8 @@ impl TcpWebServer {
             let seq = s.snd_nxt;
             let built = build_tcp_frame(
                 s.remote_mac,
-                rt.wan_mac,
-                rt.wan_ip,
+                s.local_mac,
+                s.local_ip,
                 s.remote_ip,
                 self.port,
                 s.remote_port,
@@ -2152,6 +2210,16 @@ mod tests {
             wan_up: true,
             wan_source: "static",
             wan_mac: SRV_MAC,
+            // Himpunan alamat lokal: hanya alamat WAN fixture yang hidup.
+            local: [
+                asl_router_api::WebLocalAddr {
+                    ip: SRV_IP,
+                    mac: SRV_MAC,
+                    ifindex: 1,
+                },
+                asl_router_api::WebLocalAddr::empty(),
+            ],
+            local_count: 1,
             http_listening: true,
             http_port: 80,
             serial_cli_active: true,
@@ -2254,12 +2322,16 @@ mod tests {
         n
     }
 
-    /// Bangun segmen klien lalu suapkan ke server; hasil TX tertangkap di `cap`.
+    /// Bangun segmen klien yang ditujukan ke alamat/MAC lokal arbitrer lalu
+    /// suapkan ke server. Ini jalur umum untuk menguji aturan alamat lokal;
+    /// `client_frame` adalah kasus khususnya untuk alamat WAN fixture.
     #[allow(clippy::too_many_arguments)]
-    fn client_frame(
+    fn client_frame_dst(
         server: &mut TcpWebServer,
         rt: &WebRuntime,
         api: &mut ApiDispatcher,
+        dst_mac: [u8; 6],
+        dst_ip: [u8; 4],
         seq: u32,
         ack: u32,
         flags: u8,
@@ -2271,9 +2343,9 @@ mod tests {
         let port = server.port;
         let n = cli_build(
             CLI_MAC,
-            SRV_MAC,
+            dst_mac,
             CLI_IP,
-            SRV_IP,
+            dst_ip,
             CLI_PORT,
             port,
             seq,
@@ -2288,9 +2360,33 @@ mod tests {
         let mut tx = |b: &[u8]| cap.push(b);
         let nolog = |_: &str| {};
         let handled = server
-            .on_frame(&inbound[..n], rt, api, &mut scratch, &mut tx, &nolog)
+            .on_frame(
+                &inbound[..n],
+                dst_mac,
+                rt,
+                api,
+                &mut scratch,
+                &mut tx,
+                &nolog,
+            )
             .expect("on_frame");
         assert!(handled, "frame TCP port server harus diakui server");
+    }
+
+    /// Bangun segmen klien lalu suapkan ke server; hasil TX tertangkap di `cap`.
+    fn client_frame(
+        server: &mut TcpWebServer,
+        rt: &WebRuntime,
+        api: &mut ApiDispatcher,
+        seq: u32,
+        ack: u32,
+        flags: u8,
+        payload: &[u8],
+        cap: &mut Cap,
+    ) {
+        client_frame_dst(
+            server, rt, api, SRV_MAC, SRV_IP, seq, ack, flags, payload, cap,
+        );
     }
 
     /// Rakit seluruh payload TCP dari frame yang tertangkap, urut sesuai seq.
@@ -2587,7 +2683,8 @@ mod tests {
     fn test_13_rst_when_wan_not_bound_and_checksum_rejection() {
         let mut server = TcpWebServer::new(80);
         server.listen(80);
-        // WAN belum terbentuk: alamat nol -> tidak boleh RST dari 0.0.0.0.
+        // WAN belum terbentuk: tidak ada alamat lokal sama sekali -> tidak boleh
+        // ada RST, karena router belum punya dasar untuk mengaku sebagai host.
         let rt_down = WebRuntime {
             wan_mac: SRV_MAC,
             ..Default::default()
@@ -2632,7 +2729,15 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             assert!(server
-                .on_frame(&inbound[..n], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &inbound[..n],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog
+                )
                 .unwrap());
         }
         assert_eq!(cap.n, 1);
@@ -2663,7 +2768,15 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             assert!(server
-                .on_frame(&bad[..bn], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &bad[..bn],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog
+                )
                 .unwrap());
         }
         assert_eq!(cap.n, 0);
@@ -2759,7 +2872,15 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             server
-                .on_frame(&inbound[..n], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &inbound[..n],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
                 .unwrap();
         }
         let req = b"GET / HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n";
@@ -2782,7 +2903,15 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             server
-                .on_frame(&inbound[..rn], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &inbound[..rn],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
                 .unwrap();
         }
         let sent = server.sessions[0].resp_sent;
@@ -2796,8 +2925,7 @@ mod tests {
         cap.reset();
         {
             let mut tx = |b: &[u8]| cap.push(b);
-            let nolog = |_: &str| {};
-            server.on_tick(&rt, &mut scratch, &mut tx, &nolog);
+            server.pump(SRV_IP, &mut scratch, &mut tx);
         }
         assert_eq!(server.sessions[0].resp_sent, server.sessions[0].resp_len);
     }
@@ -2830,7 +2958,15 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             server
-                .on_frame(&inbound[..n], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &inbound[..n],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
                 .unwrap();
         }
         assert_eq!(server.active_sessions(), WEB_SESSIONS as u32);
@@ -2857,16 +2993,23 @@ mod tests {
             let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
             server
-                .on_frame(&inbound[..n], &rt, &mut api, &mut scratch, &mut tx, &nolog)
+                .on_frame(
+                    &inbound[..n],
+                    SRV_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
                 .unwrap();
         }
         assert_eq!(server.stats.session_full_drops, 1);
 
-        // Peer pergi tanpa FIN: tick kedaluwarsa harus mendaur ulang slot.
+        // Peer pergi tanpa FIN: daur ulang umur sesi harus membebaskan slot.
         for _ in 0..=WEB_SESSION_EXPIRY_TICKS {
-            let mut tx = |b: &[u8]| cap.push(b);
             let nolog = |_: &str| {};
-            server.on_tick(&rt, &mut scratch, &mut tx, &nolog);
+            server.age_sessions(&nolog);
         }
         assert_eq!(server.active_sessions(), 0);
     }
@@ -4250,5 +4393,319 @@ mod tests {
         );
         assert!(!api.auth_dirty, "POST dns tidak boleh menulis config");
         assert!(api.take_write().is_none());
+    }
+
+    // -------------------------------------------------------------------------
+    // IFACE-01: aturan alamat lokal (satu server, banyak antarmuka beralamat)
+    // -------------------------------------------------------------------------
+
+    /// Alamat dan MAC antarmuka kedua (eth1). TEST-NET-2 RFC 5737, bukan alamat
+    /// lab; fixtures ini hanya membuktikan aturan, bukan topologi produksi.
+    const LAN_MAC: [u8; 6] = [0x08, 0x00, 0x27, 0x0A, 0x00, 0x03];
+    const LAN_IP: [u8; 4] = [198, 51, 100, 10];
+
+    /// Runtime dengan dua alamat lokal hidup, seperti yang dihasilkan kernel
+    /// ketika WAN memegang alamat dan eth1 siap.
+    fn runtime_two_ifaces() -> WebRuntime<'static> {
+        let mut rt = runtime();
+        rt.lan_present = true;
+        rt.lan_ip = LAN_IP;
+        rt.lan_mac = LAN_MAC;
+        rt.local[1] = asl_router_api::WebLocalAddr {
+            ip: LAN_IP,
+            mac: LAN_MAC,
+            ifindex: 2,
+        };
+        rt.local_count = 2;
+        rt
+    }
+
+    /// Source MAC dari frame yang tertangkap di `cap`.
+    fn src_mac_of(cap: &Cap, i: usize) -> [u8; 6] {
+        let (eth, _) =
+            parse_ethernet_header(&cap.frames[i][..cap.lens[i]]).expect("eth parse frame keluar");
+        eth.src_mac
+    }
+
+    #[test]
+    fn test_27_syn_ke_alamat_wan_menjawab_dengan_alamat_wan() {
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            7000,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(cap.n, 1);
+        let (src, dst, th, _) = seg_of(&cap.frames[0][..cap.lens[0]]);
+        assert_eq!(src, SRV_IP, "SYN/ACK harus bersumber dari alamat WAN");
+        assert_eq!(dst, CLI_IP);
+        assert_eq!(th.flags & TCP_FLAG_SYN, TCP_FLAG_SYN);
+        assert_eq!(src_mac_of(&cap, 0), SRV_MAC);
+    }
+
+    #[test]
+    fn test_28_syn_ke_alamat_lan_menjawab_dengan_mac_lan() {
+        // Aturan inti IFACE-01: alamat antarmuka kedua juga melayani, dan
+        // balasan memakai identitas antarmuka itu, bukan identitas WAN.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime_two_ifaces();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame_dst(
+            &mut server,
+            &rt,
+            &mut api,
+            LAN_MAC,
+            LAN_IP,
+            7100,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(cap.n, 1);
+        let (src, dst, th, _) = seg_of(&cap.frames[0][..cap.lens[0]]);
+        assert_eq!(src, LAN_IP, "SYN/ACK eth1 tidak boleh mengaku alamat WAN");
+        assert_eq!(dst, CLI_IP);
+        assert_eq!(th.flags & TCP_FLAG_SYN, TCP_FLAG_SYN);
+        assert_eq!(src_mac_of(&cap, 0), LAN_MAC);
+        assert_eq!(server.active_sessions(), 1);
+        assert_eq!(server.sessions[0].local_ip, LAN_IP);
+        assert_eq!(server.sessions[0].local_mac, LAN_MAC);
+    }
+
+    #[test]
+    fn test_29_syn_ke_alamat_asing_dijawab_rst_ingress() {
+        // Alamat tujuan bukan milik router -> RST, dengan source MAC antarmuka
+        // yang menerima frame (bukan MAC WAN), meski router melayani dua alamat.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime_two_ifaces();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame_dst(
+            &mut server,
+            &rt,
+            &mut api,
+            LAN_MAC,
+            [198, 51, 100, 99],
+            7200,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(cap.n, 1, "alamat asing harus dijawab RST");
+        let (src, _, th, payload) = seg_of(&cap.frames[0][..cap.lens[0]]);
+        assert_eq!(src, [198, 51, 100, 99]);
+        assert_eq!(th.flags & TCP_FLAG_RST, TCP_FLAG_RST);
+        assert!(payload.is_empty());
+        assert_eq!(src_mac_of(&cap, 0), LAN_MAC);
+        assert_eq!(server.stats.rst_sent, 1);
+        assert_eq!(server.active_sessions(), 0, "RST tidak membuka sesi");
+    }
+
+    #[test]
+    fn test_30_tanpa_alamat_lokal_server_diam_total() {
+        // Daftar lokal kosong = router belum memegang alamat apa pun. Gerbang
+        // hanya membaca daftar ini (bukan `wan_ip`), jadi tidak ada balasan dan
+        // tidak ada RST walau field wan_ip terisi.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt_kosong = WebRuntime {
+            wan_ip: SRV_IP,
+            wan_mac: SRV_MAC,
+            local_count: 0,
+            ..Default::default()
+        };
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame(
+            &mut server,
+            &rt_kosong,
+            &mut api,
+            7300,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(cap.n, 0, "tanpa alamat lokal tidak boleh ada TX");
+        assert_eq!(server.stats.rst_sent, 0);
+        assert_eq!(server.active_sessions(), 0);
+    }
+
+    #[test]
+    fn test_31_peer_sama_ke_dua_alamat_lokal_punya_slot_terpisah() {
+        // Kunci sesi 4-tuple: tanpa alamat lokal di dalamnya, koneksi ke eth1
+        // akan menimpa koneksi ke eth0 karena peer dan port sama.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime_two_ifaces();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            7400,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(src_mac_of(&cap, 0), SRV_MAC);
+        client_frame_dst(
+            &mut server,
+            &rt,
+            &mut api,
+            LAN_MAC,
+            LAN_IP,
+            7400,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        assert_eq!(src_mac_of(&cap, 0), LAN_MAC);
+        assert_eq!(
+            server.active_sessions(),
+            2,
+            "satu peer, dua alamat = dua sesi"
+        );
+        let a = server.sessions[0].local_ip;
+        let b = server.sessions[1].local_ip;
+        assert!(
+            (a == SRV_IP && b == LAN_IP) || (a == LAN_IP && b == SRV_IP),
+            "slot tidak terikat pada alamat yang benar: {a:?} {b:?}"
+        );
+    }
+
+    #[test]
+    fn test_32_pump_tidak_mengirim_data_sesi_antarmuka_lain() {
+        // Retransmit per-tick harus keluar lewat antarmuka pemilik sesi.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime_two_ifaces();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        client_frame_dst(
+            &mut server,
+            &rt,
+            &mut api,
+            LAN_MAC,
+            LAN_IP,
+            7500,
+            0,
+            TCP_FLAG_SYN,
+            &[],
+            &mut cap,
+        );
+        let our_next = seg_of(&cap.frames[0][..cap.lens[0]]).2.seq.wrapping_add(1);
+
+        // ACK handshake + GET dengan window 1000 -> respons tertahan.
+        let mut inbound = [0u8; 1518];
+        let mut scratch = [0u8; 1518];
+        let n = cli_build(
+            CLI_MAC,
+            LAN_MAC,
+            CLI_IP,
+            LAN_IP,
+            CLI_PORT,
+            80,
+            7501,
+            our_next,
+            TCP_FLAG_ACK,
+            1000,
+            &[],
+            &mut inbound,
+        )
+        .unwrap();
+        {
+            let mut tx = |b: &[u8]| cap.push(b);
+            let nolog = |_: &str| {};
+            server
+                .on_frame(
+                    &inbound[..n],
+                    LAN_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
+                .unwrap();
+        }
+        let req = b"GET / HTTP/1.1\r\nHost: 198.51.100.10\r\n\r\n";
+        let rn = cli_build(
+            CLI_MAC,
+            LAN_MAC,
+            CLI_IP,
+            LAN_IP,
+            CLI_PORT,
+            80,
+            7501,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            1000,
+            req,
+            &mut inbound,
+        )
+        .unwrap();
+        {
+            let mut tx = |b: &[u8]| cap.push(b);
+            let nolog = |_: &str| {};
+            server
+                .on_frame(
+                    &inbound[..rn],
+                    LAN_MAC,
+                    &rt,
+                    &mut api,
+                    &mut scratch,
+                    &mut tx,
+                    &nolog,
+                )
+                .unwrap();
+        }
+        let sent = server.sessions[0].resp_sent;
+        assert!(sent > 0, "respons harus mulai terkirim");
+        assert!(
+            sent < server.sessions[0].resp_len,
+            "window 1000 harus menahan sisa respons"
+        );
+        server.sessions[0].peer_window = 32768;
+        server.sessions[0].snd_una = server.sessions[0].snd_nxt;
+
+        // Pompa lewat alamat WAN: sesi eth1 tidak boleh tersentuh.
+        cap.reset();
+        {
+            let mut tx = |b: &[u8]| cap.push(b);
+            server.pump(SRV_IP, &mut scratch, &mut tx);
+        }
+        assert_eq!(cap.n, 0, "sesi eth1 tidak boleh keluar lewat jalur WAN");
+        assert_eq!(server.sessions[0].resp_sent, sent);
+
+        // Pompa lewat alamat eth1: sisa respons jalan, semuanya bersumber eth1.
+        cap.reset();
+        {
+            let mut tx = |b: &[u8]| cap.push(b);
+            server.pump(LAN_IP, &mut scratch, &mut tx);
+        }
+        assert!(cap.n > 0);
+        assert_eq!(server.sessions[0].resp_sent, server.sessions[0].resp_len);
+        for i in 0..cap.n {
+            assert_eq!(seg_of(&cap.frames[i][..cap.lens[i]]).0, LAN_IP);
+            assert_eq!(src_mac_of(&cap, i), LAN_MAC);
+        }
     }
 }

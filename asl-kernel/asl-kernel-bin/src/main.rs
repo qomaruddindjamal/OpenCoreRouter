@@ -158,10 +158,31 @@ fn fill_report(dst: &mut [u8], parts: &[&str]) -> usize {
     n
 }
 
+/// Uji murah apakah frame layak diserahkan ke server WebUI: Ethernet IPv4,
+/// protokol TCP, dan port tujuan milik server. Dipakai pada jalur LAN agar
+/// frame ARP/ICMP yang lewat tidak membangun runtime WebUI (yang menyalin
+/// tabel DNAT/conntrack/ARP/FIB) pada setiap paket.
+#[cfg(target_os = "none")]
+fn frame_tcp_to_port(frame: &[u8], port: u16) -> bool {
+    if let Ok((eth, ip_bytes)) = asl_router_netstack::parse_ethernet_header(frame) {
+        if eth.ethertype != asl_router_netstack::ETHERTYPE_IPV4 {
+            return false;
+        }
+        if let Ok((ip, seg)) = asl_router_netstack::parse_ipv4_header(ip_bytes) {
+            if ip.protocol != asl_router_netstack::IP_PROTO_TCP {
+                return false;
+            }
+            if let Ok((th, _)) = asl_router_netstack::parse_tcp_header(seg) {
+                return th.dst_port == port;
+            }
+        }
+    }
+    false
+}
+
 // -----------------------------------------------------------------------------
 // LIMINE BOOT PROTOCOL REQUESTS
 // -----------------------------------------------------------------------------
-
 #[cfg(target_os = "none")]
 #[used]
 #[link_section = ".limine_requests"]
@@ -1168,6 +1189,10 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut wan_rx_packets: u32 = 0;
     let mut wan_tx_packets: u32 = 0;
     let mut drop_packets: u32 = 0;
+    // GARP dipacu waktu PIT, bukan hitungan putaran poll: loop poll berlari
+    // ribuan putaran per detik, jadi irama berbasis loop membanjiri LAN dengan
+    // broadcast (~17/detik) dan mengubur jurnal konsol.
+    let mut garp_last_ms: u64 = 0;
 
     let mut web_host = [0u8; 32];
     let mut web_wan_name = [0u8; asl_router_persistence::RJCFG_IFACE_NAME_MAX];
@@ -1332,6 +1357,30 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     rcnt += 1;
                 }
             }
+            // Himpunan alamat lokal yang boleh melayani WebUI (aturan IFACE-01).
+            // Hanya alamat yang sedang benar-benar terpasang pada antarmuka yang
+            // nyata-nyata ada yang masuk daftar: eth0 saat WAN memegang alamat,
+            // eth1 saat NIC-nya siap. Slot sisa tetap kosong (ifindex 0) supaya
+            // gerbang server tidak pernah melihat alamat karangan.
+            let mut web_local =
+                [asl_router_api::WebLocalAddr::empty(); asl_router_api::WEB_LOCAL_MAX];
+            let mut lcnt = 0usize;
+            if $wan_present && wan_up && wan_ip != [0, 0, 0, 0] {
+                web_local[lcnt] = asl_router_api::WebLocalAddr {
+                    ip: wan_ip,
+                    mac: our_mac,
+                    ifindex: 1,
+                };
+                lcnt += 1;
+            }
+            if $lan_present && lan_ip_real != [0, 0, 0, 0] {
+                web_local[lcnt] = asl_router_api::WebLocalAddr {
+                    ip: lan_ip_real,
+                    mac: lan_mac,
+                    ifindex: 2,
+                };
+                lcnt += 1;
+            }
             asl_router_api::WebRuntime {
                 hostname: core::str::from_utf8(&web_host[..hlen]).unwrap_or("rinjani"),
                 uptime_ms: $now_ms,
@@ -1352,6 +1401,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 lan_present: $lan_present,
                 lan_ip: lan_ip_real,
                 lan_mac,
+                local: web_local,
+                local_count: lcnt as u8,
                 http_listening: srv.listening,
                 http_port: srv.port,
                 // "aktif" = mesin DHCP masih memegang siklusnya (termasuk lease
@@ -1668,7 +1719,12 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             power::system_reset();
         }
 
-        // [R24] JALUR LAN NYATA: poll RX eth1 (DMA), ARP/ICMP responder, GARP
+        // [R24] JALUR LAN NYATA: poll RX eth1 (DMA), WebUI pada alamat eth1,
+        // ARP/ICMP responder, GARP. Keadaan kehadiran NIC dibaca sekali di sini
+        // karena kedua jalur (LAN dan WAN) membangun runtime dengan angka yang
+        // sama.
+        let lan_present_now = eth1.as_ref().map_or(false, |e| e.ready);
+        let wan_present_now = eth0.as_ref().map_or(false, |e| e.ready);
         if let Some(eth1) = eth1.as_mut() {
             if eth1.ready {
                 let mut serviced = 0u32;
@@ -1704,34 +1760,97 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                     }
                                 }
                             }
-                            match netstack_lan.process_packet(&lan_frame[..n], &mut lan_reply) {
-                                Ok(Some(rlen)) => {
-                                    if eth1.transmit(&lan_reply[..rlen]).is_ok() {
-                                        lan_tx_packets += 1;
-                                        SERIAL.write_str("[R24] LAN REPLY TX (");
-                                        SERIAL.write_u32(rlen as u32);
-                                        SERIAL.write_str(" bytes) lan_rx=");
-                                        SERIAL.write_u32(lan_rx_packets);
-                                        SERIAL.write_str(" lan_tx=");
-                                        SERIAL.write_u32(lan_tx_packets);
-                                        SERIAL.write_str("\n");
+                            // (b) WebUI pada alamat eth1. Server yang sama melayani
+                            // alamat ini; aturan alamat lokal di dalam server yang
+                            // memutuskan boleh tidaknya frame diterima. Runtime
+                            // hanya dibangun untuk frame TCP ke port server, agar
+                            // frame ARP/ICMP tidak memicu salin tabel setiap detik.
+                            let mut web_handled = false;
+                            if let Some(srv) = web_server.as_mut() {
+                                if frame_tcp_to_port(&lan_frame[..n], srv.port) {
+                                    let rt = web_runtime!(
+                                        srv,
+                                        pit.elapsed_ms(),
+                                        lan_present_now,
+                                        wan_present_now,
+                                        serial_cli_beat_ms
+                                    );
+                                    let mut tx = |b: &[u8]| -> Result<(), &'static str> {
+                                        match eth1.transmit(b) {
+                                            Ok(()) => {
+                                                lan_tx_packets += 1;
+                                                Ok(())
+                                            }
+                                            Err(e) => Err(e),
+                                        }
+                                    };
+                                    match srv.on_frame(
+                                        &lan_frame[..n],
+                                        lan_mac,
+                                        &rt,
+                                        &mut api_dispatcher,
+                                        &mut web_scratch,
+                                        &mut tx,
+                                        &weblog,
+                                    ) {
+                                        Ok(handled) => web_handled = handled,
+                                        Err(_) => drop_packets += 1,
                                     }
                                 }
-                                Ok(None) => {}
-                                Err(_) => drop_packets += 1,
+                            }
+                            // (c) Responder ARP/ICMP eth1, dilewati bila frame sudah
+                            // menjadi urusan server Web (jalur TCP tidak pernah
+                            // ditangani netstack LAN).
+                            if !web_handled {
+                                match netstack_lan.process_packet(&lan_frame[..n], &mut lan_reply) {
+                                    Ok(Some(rlen)) => {
+                                        if eth1.transmit(&lan_reply[..rlen]).is_ok() {
+                                            lan_tx_packets += 1;
+                                            SERIAL.write_str("[R24] LAN REPLY TX (");
+                                            SERIAL.write_u32(rlen as u32);
+                                            SERIAL.write_str(" bytes) lan_rx=");
+                                            SERIAL.write_u32(lan_rx_packets);
+                                            SERIAL.write_str(" lan_tx=");
+                                            SERIAL.write_u32(lan_tx_packets);
+                                            SERIAL.write_str("\n");
+                                        }
+                                    }
+                                    Ok(None) => {}
+                                    Err(_) => drop_packets += 1,
+                                }
                             }
                         }
                         None => break,
                     }
                 }
-                if loop_count == 10 || (loop_count > 10 && (loop_count - 10) % 150 == 0) {
+                // Pompa sesi yang terminate pada alamat eth1: sisa data tertahan
+                // window dan FIN keluar lewat eth1, bukan eth0.
+                if let Some(srv) = web_server.as_mut() {
+                    if srv.active_sessions() > 0 {
+                        let mut tx = |b: &[u8]| -> Result<(), &'static str> {
+                            match eth1.transmit(b) {
+                                Ok(()) => {
+                                    lan_tx_packets += 1;
+                                    Ok(())
+                                }
+                                Err(e) => Err(e),
+                            }
+                        };
+                        srv.pump(lan_ip_real, &mut web_scratch, &mut tx);
+                    }
+                }
+                let garp_now = pit.elapsed_ms();
+                if garp_now.saturating_sub(garp_last_ms) >= 5000 {
+                    garp_last_ms = garp_now;
                     if let Ok(gl) = asl_router_netstack::build_arp_gratuitous(
                         lan_mac,
                         lan_ip_real,
                         &mut garp_buf,
                     ) {
                         if eth1.transmit(&garp_buf[..gl]).is_ok() {
-                            SERIAL.write_str("[R24] GARP announced 192.168.56.100 broadcast (");
+                            SERIAL.write_str("[R24] GARP eth1 announced ");
+                            write_ip(lan_ip_real);
+                            SERIAL.write_str(" broadcast (");
                             SERIAL.write_u32(gl as u32);
                             SERIAL.write_str(" bytes)\n");
                         }
@@ -1743,8 +1862,6 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         // [R28] JALUR WAN NYATA pada eth0 (topologi satu NIC bridged).
         // Ingress DMA -> mesin DHCP / TCP-HTTP WebUI / responder ARP+ICMP.
         // Egress  : DISCOVER+REQUEST, segmen TCP, ARP/ICMP reply via eth0.transmit.
-        let lan_present_now = eth1.as_ref().map_or(false, |e| e.ready);
-        let wan_present_now = eth0.as_ref().map_or(false, |e| e.ready);
         if let Some(eth0) = eth0.as_mut() {
             if eth0.ready {
                 let now_ms = pit.elapsed_ms();
@@ -2008,7 +2125,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         }
                     }
 
-                    // (3b) TCP/HTTP WebUI pada alamat WAN.
+                    // (3b) TCP/HTTP WebUI pada alamat WAN eth0.
                     let mut web_handled = false;
                     if let Some(srv) = web_server.as_mut() {
                         let rt = web_runtime!(
@@ -2029,6 +2146,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         };
                         match srv.on_frame(
                             &wan_frame[..n],
+                            our_mac,
                             &rt,
                             &mut api_dispatcher,
                             &mut web_scratch,
@@ -2115,7 +2233,14 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                 if let Ok((ip, _body)) =
                                     asl_router_netstack::parse_ipv4_header(ip_bytes)
                                 {
+                                    // Alamat lokal mana pun bukan paket transit:
+                                    // sejak eth1 juga melayani WebUI, alamat eth1
+                                    // ikut dikecualikan dari pertanyaan FIB.
+                                    let alamat_kita_di_lan = lan_present_now
+                                        && lan_ip_real != [0, 0, 0, 0]
+                                        && ip.dst_ip == lan_ip_real;
                                     let bukan_milik_kita = ip.dst_ip != wan_ip
+                                        && !alamat_kita_di_lan
                                         && ip.dst_ip != [255, 255, 255, 255]
                                         && ip.dst_ip[0] != 224
                                         && ip.dst_ip[0] != 239;
@@ -2179,17 +2304,11 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     }
                 }
 
-                // (4) Pompa waktu TCP: sisa data tertahan window, penutupan sesi,
-                // dan daur ulang slot yang ditinggal peer.
+                // (4) Pompa waktu TCP sisi eth0: sisa data tertahan window dan
+                // penutupan sesi yang terminate pada alamat WAN. Sesi milik eth1
+                // dipompa pada [R24] lewat eth1, bukan dari sini.
                 if let Some(srv) = web_server.as_mut() {
                     if srv.active_sessions() > 0 {
-                        let rt = web_runtime!(
-                            srv,
-                            now_ms,
-                            lan_present_now,
-                            wan_present_now,
-                            serial_cli_beat_ms
-                        );
                         let mut tx = |b: &[u8]| -> Result<(), &'static str> {
                             match eth0.transmit(b) {
                                 Ok(()) => {
@@ -2199,9 +2318,18 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                 Err(e) => Err(e),
                             }
                         };
-                        srv.on_tick(&rt, &mut web_scratch, &mut tx, &weblog);
+                        srv.pump(wan_ip, &mut web_scratch, &mut tx);
                     }
                 }
+            }
+        }
+
+        // Daur ulang umur sesi: satu kali per iterasi loop, tidak terikat
+        // antarmuka, sehingga slot yang ditinggal peer tetap dibebaskan walaupun
+        // hanya satu NIC yang sedang di-poll.
+        if let Some(srv) = web_server.as_mut() {
+            if srv.active_sessions() > 0 {
+                srv.age_sessions(&weblog);
             }
         }
 

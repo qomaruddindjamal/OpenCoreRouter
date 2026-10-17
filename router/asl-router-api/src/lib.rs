@@ -171,6 +171,33 @@ impl WebWriteCmd {
     }
 }
 
+/// Batas himpunan alamat lokal pada Tahap A: eth0 (WAN) dan eth1 (LAN).
+/// Penambah antarmuka ke-3 dan seterusnya menuntut pendaftaran antarmuka nyata
+/// di kernel, bukan sekadar menaikkan angka ini.
+pub const WEB_LOCAL_MAX: usize = 2;
+
+/// Satu alamat lokal router yang boleh melayani WebUI, terpasang pada satu
+/// antarmuka nyata. Kernel hanya mengisi struct ini dari alamat yang sedang
+/// dipegang antarmuka (`ifindex != 0` = entri hidup, `0` = slot kosong),
+/// sehingga lapisan server tidak pernah menerima alamat karangan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct WebLocalAddr {
+    pub ip: [u8; 4],
+    pub mac: [u8; 6],
+    /// Antarmuka pemilik alamat: 1 = eth0 (WAN), 2 = eth1 (LAN).
+    pub ifindex: u8,
+}
+
+impl WebLocalAddr {
+    pub const fn empty() -> Self {
+        Self {
+            ip: [0; 4],
+            mac: [0; 6],
+            ifindex: 0,
+        }
+    }
+}
+
 /// Snapshot state runtime router yang dilaporkan ke WebUI. Kernel mengisi
 /// struktur ini setiap iterasi; `tick_100ms` adalah satuan waktu bucket limiter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -207,6 +234,12 @@ pub struct WebRuntime<'a> {
     pub lan_present: bool,
     pub lan_ip: [u8; 4],
     pub lan_mac: [u8; 6],
+    /// Himpunan alamat lokal yang KINI boleh melayani WebUI. Kernel hanya
+    /// mengisi dari alamat yang benar-benar terpasang pada antarmuka yang
+    /// nyata-nyata ada; slot sisa wajib `ifindex == 0`.
+    pub local: [WebLocalAddr; WEB_LOCAL_MAX],
+    /// Banyak entri hidup di `local` (0 berarti tidak ada alamat yang melayani).
+    pub local_count: u8,
     pub http_listening: bool,
     pub http_port: u16,
     pub dhcp_client_active: bool,
@@ -309,6 +342,8 @@ impl<'a> Default for WebRuntime<'a> {
             lan_present: false,
             lan_ip: [0; 4],
             lan_mac: [0; 6],
+            local: [WebLocalAddr::empty(); WEB_LOCAL_MAX],
+            local_count: 0,
             http_listening: false,
             http_port: 0,
             dhcp_client_active: false,
@@ -356,6 +391,24 @@ impl<'a> Default for WebRuntime<'a> {
             tick_100ms: 0,
             peer_ip: [0, 0, 0, 0],
         }
+    }
+}
+
+impl<'a> WebRuntime<'a> {
+    /// Cocokkan alamat tujuan IPv4 sebuah frame dengan himpunan alamat lokal.
+    /// Hanya entri hidup (`ifindex != 0`) yang dihitung, jadi alamat nol atau
+    /// slot kosong tidak pernah bisa membuka gerbang server.
+    pub fn local_match(&self, dst: [u8; 4]) -> Option<usize> {
+        let n = core::cmp::min(self.local_count as usize, WEB_LOCAL_MAX);
+        let mut i = 0usize;
+        while i < n {
+            let e = self.local[i];
+            if e.ifindex != 0 && e.ip == dst {
+                return Some(i);
+            }
+            i += 1;
+        }
+        None
     }
 }
 
@@ -1346,8 +1399,12 @@ impl ApiDispatcher {
         builder.finish_with_body(&body[..n])
     }
 
-    /// Proteksi CSRF/same-origin sederhana: `Host` wajib sama dengan alamat WAN
+    /// Proteksi CSRF/same-origin sederhana: `Host` wajib sama dengan salah satu
+    /// alamat lokal yang benar-benar melayani (IFACE-01: eth0 WAN dan eth1 LAN)
     /// atau hostname router (dengan atau tanpa port). Tanpa Host -> ditolak.
+    /// Himpunan alamat diambil dari `rt.local`; entri mati (ifindex 0) tidak
+    /// pernah diterima, jadi alamat yang belum dikonfigurasi tidak membuka
+    /// jalur tulis.
     fn same_origin(&self, req: &HttpRequest, rt: &WebRuntime) -> bool {
         let host = match req.host {
             Some(h) => h,
@@ -1359,14 +1416,27 @@ impl ApiDispatcher {
                 return false;
             }
         }
-        let mut ipbuf = [0u8; 15];
-        let ip_len = {
-            let mut j = JsonBuf::new(&mut ipbuf);
-            j.ip(rt.wan_ip);
-            j.finish().unwrap_or(0)
-        };
-        let ip_str = core::str::from_utf8(&ipbuf[..ip_len]).unwrap_or("0.0.0.0");
-        host_name == ip_str || (!rt.hostname.is_empty() && host_name == rt.hostname)
+        if !rt.hostname.is_empty() && host_name == rt.hostname {
+            return true;
+        }
+        let n = core::cmp::min(rt.local_count as usize, WEB_LOCAL_MAX);
+        let mut i = 0usize;
+        while i < n {
+            let entry = rt.local[i];
+            if entry.ifindex != 0 {
+                let mut ipbuf = [0u8; 15];
+                let ip_len = {
+                    let mut j = JsonBuf::new(&mut ipbuf);
+                    j.ip(entry.ip);
+                    j.finish().unwrap_or(0)
+                };
+                if ip_len > 0 && host_name.as_bytes() == &ipbuf[..ip_len] {
+                    return true;
+                }
+            }
+            i += 1;
+        }
+        false
     }
 
     fn ok_json(out_buf: &mut [u8], body: &[u8]) -> Result<usize, &'static str> {
@@ -2342,6 +2412,15 @@ mod tests {
             lan_present: false,
             lan_ip: [0; 4],
             lan_mac: [0; 6],
+            local: [
+                WebLocalAddr {
+                    ip: [198, 51, 100, 77],
+                    mac: [0x08, 0x00, 0x27, 0x11, 0x22, 0x33],
+                    ifindex: 1,
+                },
+                WebLocalAddr::empty(),
+            ],
+            local_count: 1,
             http_listening: true,
             http_port: 80,
             dhcp_client_active: true,
@@ -4506,5 +4585,95 @@ mod tests {
             resp2.contains("\"resolver_src\":\"static-serial\""),
             "{resp2}"
         );
+    }
+
+    #[test]
+    fn test_47_himpunan_alamat_lokal_hanya_mengenali_entri_hidup() {
+        // Gerbang alamat lokal dibaca dari `local`, bukan dari `wan_ip`: fixture
+        // runtime punya satu entri hidup (alamat WAN) dan satu slot kosong.
+        let mut r = rt();
+        assert_eq!(r.local_match([198, 51, 100, 77]), Some(0));
+        assert_eq!(r.local_match([198, 51, 100, 78]), None);
+        assert_eq!(
+            r.local_match([0, 0, 0, 0]),
+            None,
+            "slot kosong bukan alamat"
+        );
+
+        r.local[1] = WebLocalAddr {
+            ip: [198, 51, 100, 10],
+            mac: [0x08, 0x00, 0x27, 0x11, 0x22, 0x34],
+            ifindex: 2,
+        };
+        r.local_count = 2;
+        assert_eq!(r.local_match([198, 51, 100, 10]), Some(1));
+
+        // `local_count` membatasi: entri yang belum dinyatakan hidup tidak boleh
+        // melayani, meski isinya sudah terpasang di array.
+        r.local_count = 1;
+        assert_eq!(r.local_match([198, 51, 100, 10]), None);
+
+        // Entri ber-ifindex 0 (antarmuka tidak ada) tetap mati walau IP cocok.
+        r.local[0] = WebLocalAddr {
+            ip: [198, 51, 100, 77],
+            mac: [0; 6],
+            ifindex: 0,
+        };
+        r.local_count = 1;
+        assert_eq!(r.local_match([198, 51, 100, 77]), None);
+    }
+
+    /// IFACE-01: proteksi same-origin dibaca dari himpunan alamat lokal, bukan
+    /// dari alamat WAN saja. Kalau hanya WAN yang diakui, login dari antarmuka
+    /// kedua mati di 403 `host_mismatch` sebelum kata sandi diperiksa.
+    #[test]
+    fn test_48_login_ke_alamat_lokal_kedua_lolos_same_origin() {
+        const LAN_IP: [u8; 4] = [198, 51, 100, 10];
+        let mut d = admin_sess();
+        let mut buf = [0u8; 512];
+        let mut r = rt_peer(5, [198, 51, 100, 9]);
+        r.local[1] = WebLocalAddr {
+            ip: LAN_IP,
+            mac: [0x08, 0x00, 0x27, 0x0A, 0x00, 0x04],
+            ifindex: 2,
+        };
+        r.local_count = 2;
+        let body = "user=auditor&password=rinjani-aud02-kata-sandi-tes";
+
+        // Host = alamat lokal kedua => same-origin lolos dan sesi terbit.
+        let req = mk(format!(
+            "POST /api/v1/auth/login HTTP/1.1\r\nHost: 198.51.100.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        ));
+        let len = d.dispatch_post(&req, &mut buf, &r).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("HTTP/1.1 200 OK"), "{}", resp);
+        assert!(resp.contains("\"token\""), "{}", resp);
+
+        // Host asing (bukan anggota himpunan lokal) tetap 403 sebelum kredensial.
+        let req = mk(format!(
+            "POST /api/v1/auth/login HTTP/1.1\r\nHost: 203.0.113.9\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        ));
+        let len = d.dispatch_post(&req, &mut buf, &r).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("HTTP/1.1 403 Forbidden"), "{}", resp);
+        assert!(resp.contains("\"error\":\"host_mismatch\""), "{}", resp);
+
+        // Slot mati (ifindex 0) tidak membuka jalur tulis walaupun IP-nya persis
+        // dengan Host yang dikirim klien.
+        let mut mati = rt_peer(6, [198, 51, 100, 9]);
+        mati.local[0].ifindex = 0;
+        let req = mk(format!(
+            "POST /api/v1/auth/login HTTP/1.1\r\nHost: 198.51.100.77\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        ));
+        let len = d.dispatch_post(&req, &mut buf, &mati).unwrap();
+        let resp = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(resp.contains("HTTP/1.1 403 Forbidden"), "{}", resp);
+        assert!(resp.contains("\"error\":\"host_mismatch\""), "{}", resp);
     }
 }
