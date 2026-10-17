@@ -3,7 +3,7 @@
 > **Document ID:** `docs/RND/AUD01_TEST_RESULTS.md`
 > **Release Target:** Code OS Rinjani 1.0.0 (Powered by ASL Core Kernel v1.0.0)
 > **Date:** 2026-10-17
-> **Lingkup:** sprint AUD-01 (9 cacat diperbaiki) pada VM dev `"Open Core Router"`, satu NIC bridged, alamat WAN DHCP tersamar `10.10.MM.NNN`.
+> **Lingkup:** sprint AUD-01 (9 cacat diperbaiki) + bagian AUD-02 (audit ulang sampai WebUI berfungsi) pada VM dev `"Open Core Router"`, satu NIC bridged, alamat WAN DHCP tersamar `10.10.MM.NNN` / gerbang `10.10.MM.GGG`.
 
 ## 1. Gerbang wajib (semua dieksekusi, exit code nyata)
 
@@ -77,3 +77,73 @@ Aksi restart/shutdown **tidak** dieksekusi ke guest pada sesi ini (mandat §14: 
 - **D05 (status LAN)** hanya terverifikasi lewat unit test: VM dev punya satu NIC sehingga cabang LAN tidak tereksekusi di runtime.
 - Konfirmasi rupa visual oleh mata operator tetap `BLOCKED`; harness tidak menghasilkan screenshot dan tab-nya tersembunyi, jadi bukti berupa DOM + computed style, bukan tampilan.
 - Artefak harness yang **bukan** cacat produk: transisi CSS beku saat tab tersembunyi membuat `getComputedStyle(sidebar).transform` tidak pernah maju; dengan `transition:none` kelas `body.nav-open` terbukti menggeser laci ke `left:0` (dicatat sebagai `ART-01` agar tidak divonis bug).
+
+---
+
+# BAGIAN AUD-02 — audit ulang sampai berfungsi (bukti di bawah berasal dari eksekusi nyata, bukan dari bagian AUD-01)
+
+## 7. Gerbang akhir AUD-02 (semua dieksekusi ulang pada kondisi repo terakhir)
+
+| Gerbang | Perintah | Hasil nyata |
+|---|---|---|
+| Format | `cargo fmt --all -- --check` | `exit 0` |
+| Unit workspace | `cargo test --workspace` | `exit 0` — **390 passed / 0 failed / 0 ignored** (33 blok hasil; tidak ada tes yang dihapus, diturunkan, atau di-`#[ignore]`) |
+| Bare-metal check | `cargo check --target x86_64-unknown-none -p asl-kernel-bin` | `exit 0`, 1 warning `dead_code` warisan |
+| Sinkron project ↔ VM | bandingkan byte tiap aset terhadap aset yang dikirim kernel | aset terkirim identik; `shell.html` 7 731 B, `js/core/ui.js` 7 711 B |
+
+Per-crate milik tiga crate yang disentuh AUD-02: `asl-router-api` **78**, `asl-router-webui` **36**, `asl-router-webcore` **10**.
+
+## 8. Tes baru AUD-02 dan cara anti-vakumnya
+
+| Tes | Crate | Yang dijaga | Validasi bukan-tes-vakum |
+|---|---|---|---|
+| `test_35b_seluruh_jalur_baca_menghasilkan_json_berimbang` | api | 18 jalur baca wajib menghasilkan sampul `{"ok":…}` dengan kurung berimbang | cacat `]}}` dimasukkan kembali ke sumber → tes **FAILED** dengan pesan `"/api/v1/auth/users JSON tidak berimbang: {'ok':true,'data':[{...}]}}"`; sesudah dikoreksi → lulus |
+| `test_05bb_fmt_addr_membedakan_rute_default_dari_belum_terikat` | webui | pasangan `ui.js` punya pengubah `addr` **dan** `gateway.html` memakainya di kolom Tujuan; melarang kembali `data-fmt="ip"` di sel itu | pengubah `addr` dihapus sementara → tes gagal pada assertion pertama |
+
+## 9. Rantai asal-usel lease DHCP — bukti tiga permukaan (IP intern disamar: klien `10.10.MM.NNN`, gerbang/DNS `10.10.MM.GGG`)
+
+Permintaan owner: IP, netmask, gateway, dan DNS harus berasal dari sumber nyata saat mode DHCP client, tanpa nilai tambal, dan DNS harus tampak di modul DNS Server.
+
+**a. Konsol serial** (`Analysis/logs/aud02-console.log`, tidak di-commit):
+```
+[R28] DHCP OFFER dari 10.10.MM.GGG ip=10.10.MM.NNN opsi1=ada opsi3=ada opsi6=ada
+[R28] DHCP BOUND eth0=10.10.MM.NNN/24 (netmask sumber: option-1-ack) gw=10.10.MM.GGG (sumber: option-3-ack) dns=10.10.MM.GGG (sumber: option-6-ack)+1 8.8.8.8 lease=1800 s
+[R21] DNS PROXY upstream=10.10.MM.GGG (sumber: option-6-ack)
+[R30] Auth: 0 kredensial ... WebUI TERKUNCI: belum ada kredensial.
+```
+Baris `[R30]` adalah bukti fail-closed: boot tanpa kredensial menolak menyajikan sesi, bukan menyamar sebagai sistem terbuka.
+
+**b. API kernel (bearer, curl nyata):**
+```
+GET /api/v1/dns          -> config_mode=dhcp, lease_source=dhcp, resolver_1=10.10.MM.GGG, resolver_2=8.8.8.8,
+                            resolver_src=option-6-ack, from_dhcp=true, proxy_upstream=10.10.MM.GGG,
+                            proxy_upstream_ready=true, serving=false, cache_entries=0, static_hosts=1
+GET /api/v1/interfaces   -> baris eth0: netmask_src=option-1-ack, gateway=10.10.MM.GGG gateway_src=option-3-ack,
+                            dns1=10.10.MM.GGG dns_src=option-6-ack
+GET /api/v1/routes       -> 10.10.MM.0/24 connected  +  0.0.0.0/0 gw 10.10.MM.GGG static metric 100 (JSON.parse OK)
+GET /api/v1/routes/stats -> default_active=true, default_gw=10.10.MM.GGG
+GET /api/v1/arp/stats    -> entries=1, capacity=16
+GET /api/v1/auth/users   -> {"ok":true,"data":[{"user":"admin","role":"admin","rounds":1024}]}
+```
+Tidak ada angka yang diwarisi dari sumber lain: `resolve_gateway` hanya membaca opsi-3 ACK lalu opsi-3 OFFER, dan penjaga DNS melarang fallback ke resolver publik bila lease tidak membawa opsi-6 (8.8.8.8 di atas memang datang dari opsi-6 lease, bukan tambalan).
+
+**c. Peramban (DOM, bukan asumsi):**
+| Modul | Nilai terikat yang terbaca di DOM |
+|---|---|
+| Interfaces | baris eth0 menampilkan netmask/gateway/DNS beserta label sumber `option-*-ack` |
+| DNS Server | `resolver_1=10.10.MM.GGG`, `resolver_src=option-6-ack`, `proxy_upstream=10.10.MM.GGG` **AKTIF**, `serving=TIDAK AKTIF` (jujur: terima UDP/53 belum dirangkai) |
+| Gateway | `["10.10.MM.0","24","belum terikat","eth0","0","connected"]` dan `["0.0.0.0","0","10.10.MM.GGG","eth0","100","static"]` — rute default tidak lagi dilabeli kosong |
+| User Manager | baris `[, admin, admin, 1024]` muncul setelah cacat sampul JSON diperbaiki |
+| Rail "belum aktif" | `#nav-offgroup` = **5** entri, semua memang belum terpasang; Rute & Gateway serta Tabel ARP dikeluarkan karena terbukti hidup |
+| Terminal CLI | `/ip dns print` mencetak `resolver_1 : 10.10.MM.GGG`, `proxy_upstream_ready: yes`, `serving : no` |
+
+Sapuan penuh **23 view SPA** menghasilkan 0 galat JavaScript. Modul berdata nyata: system, interfaces, wireless (jujur TIDAK), firewall (jujur "WAN terlindungi TIDAK"), nat, services, serviceslist, arp, dnsserver, gateway, olt (jujur TIDAK), usermanager, terminal. Modul rupa-saja dengan footer jujur: wireguard, vpn, xray, qos, dhcpserver, appearance, packages, speedtest, telnet, traceroute.
+
+## 10. Batas bukti AUD-02 (kejujuran)
+
+- Status **RUNTIME-VERIFIED** hanya diberikan untuk hal yang terbaca dari boot VM di atas (rentetan §9). Perbaikan yang hanya terbukti lewat unit test berstatus **UNIT-TESTED**.
+- UDP/53 belum dirangkai ke mekanisme tangkap, karena itu `dns.serving=false` dan `dns_proxy=false` di `/api/v1/system`; proxy hanya terbukti pada hulu (`proxy_upstream_ready`), bukan pada pelayanan kueri.
+- `/api/v1/leases` menjawab `not_found` — halaman DHCP Server tetap rupa-saja dan berada di rail.
+- ICMP echo egress (#81), 802.1Q VLAN / shaper QoS / tangkap paket (#83), serta DEFER-05 & DEFER-06 (#84) belum dikerjakan; modul yang bergantung pada primitive itu **tidak** diaktifkan.
+- Boot disk hasil build sengaja kosong kredensialnya; akun lab dibuat lewat bootstrap serial untuk pengujian dan tidak pernah di-commit. Sandi lab tidak dicatat di dokumen ini.
+- Konfirmasi rupa oleh mata operator tetap `BLOCKED` (harness tanpa permukaan layar); bukti berupa DOM + computed style + byte aset, dan memerlukan reload `ignoreCache` untuk melihat aset baru karena cache peramban mengabulkan ETag lama.
