@@ -184,3 +184,33 @@ Prosedur: `POST /api/v1/power action=arm` → `action=restart` (penjaga dua lang
 
 Login dengan sandi yang sama setelah reboot berhasil: `role = admin`, token 64 karakter, tabel menampilkan `[admin, admin, 1024]`. Ini memisahkan bukti "tertulis" dari bukti "termuat saat boot berikutnya" yang sebelumnya `NOT RUN`.
 
+
+## 12. UI-02J — halaman masuk mandiri, dropdown pengguna, dan kontras chrome sesi
+
+Gerbang pada build ini: `cargo fmt --all --check` exit 0; `cargo test --workspace` **392 lulus / 0 gagal** pada **66** baris hasil (crate `asl-router-webui` **38** tes, termasuk `test_05l` yang baru); `cargo check --target x86_64-unknown-none -p asl-kernel-bin` `Finished` dengan 1 warning `dead_code` warisan (`power.rs:120`). `ALL_ASSETS` **52 → 54**; dua aset baru terlayani utuh dan terikat ETag yang panjangnya == `wc -c` repo: `ETag "rinjani-login-page-ui02j-5560"` / `Content-Length 5560` dan `ETag "rinjani-css-session-ui02j-6457"` / `Content-Length 6457`. Sisa ukuran mata rantai: `js/core/login.js` 5 823 B, `shell.html` 7 765 B (lencana `Community Edition` dicabut, margin gerbang naik dari 156 → **171**), `css/layout.css` 7 461 B (aturan `.chip-badge` ikut dilepas). Pemegang gerbang ukuran aset kini **`term.js` 7 877 B (margin 59)**, bukan shell.
+
+### 12.1 Rantai sesi di VM (image `FD9B0E91…96852EA`, tanpa nilai karangan)
+
+| Langkah | Permintaan nyata | Yang dibaca dari kernel / DOM | Status |
+|---|---|---|---|
+| Fail-closed sebelum bootstrap | `GET /api/v1/system` tanpa token | `[R30] Auth: 0 kredensial` + `[R30] WebUI TERKUNCI`; `[R28] HTTP /api/v1/system -> 401` | halaman masuk tetap terlayani `200`, data kernel tidak — gerbang di lapisan server, bukan peramban |
+| Sandi salah | `POST` jalur tulis login | `HTTP /api/v1/auth/login -> 401 (280 bytes)` | note `lg-note bad` bertuliskan kode kernel: `… [invalid_credentials]`; kolom sandi dikosongkan **sebelum** permintaan berangkat |
+| Login admin | `POST /api/v1/auth/login` | `-> 200 (379 bytes)` | `sessionStorage`: token `/^[0-9a-f]{64}$/` = true, role `admin`; `location.replace("/")` |
+| Dropdown | klik `#chip-user` (event terdisaptasi) | chip `80 × 30`, `right = 821` == tepi kanan `.header-right` (**gap 0**); menu `236 × 176`, `z-index 60`; **hit-test** `elementFromPoint` → `DIV.um-head` `insideMenu=true` | dua `.um-item` `222 × 46` (target sentuh ≥ 40 px) |
+| Settings | item pertama | `location.hash = "#appearance"` → `#view-mount` melukis `H2 "Appearance"` + panel tema | navigasi nyata, bukan dead link |
+| Peran lemah | tab 2 login `viewer`, lalu tulis via `OPCR.api.post('/api/v1/auth/users', …)` | `POST /api/v1/auth/users -> 403 (275 bytes)`, `ok=false why="insufficient_role"` | chip `class="chip-user deny"` + `title="kernel menolak: insufficient_role"`; token **tetap ada**, path **tetap** `/` — `BOUNCE` sengaja tidak memuat `insufficient_role` |
+| Logout | item kedua | `POST /api/v1/auth/logout -> 200` | kembali ke `/login.html` dengan note sekali-pakai (`NKEY` habis baca), `UKEY=null`, token=false, `#chip-user` tidak ada |
+
+Inventaris navigasi **tidak** berubah oleh build ini: `a[data-view]` **26**, `.nav-item` **18**, target `data-view` unik **23** — identik antara `grep shell.html` dan DOM runtime. Konsol peramban: **0 pesan** pada `/login.html` maupun `/` setelah `navigate_page(ignoreCache=true)`.
+
+### 12.2 Kontras chrome sesi: hitungan → render
+
+Pemindai token (`tools/check-contrast-session.mjs`, tidak ter-commit karena berada di `tools/`) menemukan **9 pasangan di bawah 4,5:1** pada minimal satu tema sebelum suntingan — terburuk `.lg-btn` **2,35:1** (senja), yaitu tombol satu-satunya untuk masuk konsol. Setelah substitusi token: **0 pasangan** di bawah ambang untuk ketiga tema, terketat `.um-role`/`.lg-sub` **4,52** (default) dan `.lg-btn` **4,77** (senja). Dua pasangan di antaranya **dirender** di peramban (tema `dark`) dan angkanya cocok persis dengan hitungan: `.lg-btn` **5,21**, `.chip-user.deny` **5,94**, `.um-caret` **7,80**, `.um-ava` **9,04**. Penjaga yang masuk suite: `test_02c` melarang **seluruh** karakter `#` di `session.css` (`lib.rs:1073`) dan `test_05l` menuntut 11 kopling nama kelas `login.js`↔`session.css` + 2 kopling kunci `sessionStorage` `login.js`↔`login.html` — cacat §4.30 (dropdown tak pernah tampil karena satu nama kelas beda) tidak bisa berulang diam-diam.
+
+### 12.3 Batas bukti UI-02J (kejujuran)
+
+- Status **RUNTIME-VERIFIED** hanya untuk yang terukur di atas image build J pada tema **dark**. Tema **default** dan **senja** berhenti di tingkat **UNIT-TESTED/hitungan token**: harness tidak mengganti `localStorage["rinjani-theme-mode"]` saat probe, dan pita senja bergantung jam browser operator.
+- Breakpoint **≤ 560 px** hanya terbukti sebagai aturan CSSOM yang terparsai (`.lg-body`, `.lg-card`, `.user-menu`); `matchMedia('(max-width:560px)')` = false pada viewport harness 831 px dan jendela peramban tidak dapat diubah ukurannya → **belum terukur pada layar sungguhan**.
+- `click`/`press_key` native peramban **tidak** sampai ke halaman pada harness ini (`visibilityState=hidden`); seluruh interaksi memakai `KeyboardEvent`/`MouseEvent` terdisaptasi ke handler milik berkas produksi. Yang terbukti adalah perilaku handler + geometri DOM, **bukan** rupa yang dilihat mata — konfirmasi visual operator tetap `BLOCKED`.
+- `node tools/check-term.js` **NOT RUN** pada build J (tidak ada satu pun berkas terminal yang disunting; bukti CLI terakhir tetap sesi build I). Boot **dari ISO** juga `NOT RUN` — ISO `7 297 024 B` (`183BF504…4C21C0`) adalah artefak distribusi yang dibentuk dari biner yang sama, verifikasi nyata memakai disk image.
+- Bootstrap meninggalkan **dua** akun lab di RJCFG01 (`admin` + `viewer2` untuk uji 403); store berkapasitas 4 slot. Tidak ada kredensial di dokumen ini, di aset, maupun di jurnal serial yang di-stage (`grep -c` pola sandi = 0; gema kernel atas baris sandi memang tidak ada — `main.rs:1142`). Kejadian pertama penggunaan `--send-secret` pada sesi ini **bocor** karena listener host masih proses lama; sudah diredaksi dan listener dijalankan ulang dari kode tertambal sebelum uji di atas (lihat laporan UI-02 §4.31).

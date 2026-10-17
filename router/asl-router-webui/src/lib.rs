@@ -977,7 +977,7 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 52);
+        assert_eq!(registry::ALL_ASSETS.len(), 54);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
@@ -987,7 +987,7 @@ mod tests {
 
     #[test]
     fn test_02c_chrome_sesi_terpasang_dan_hanya_menampilkan_kode_kernel() {
-        // P0.1 di lapisan klien: kartu masuk harus dimuat chrome (bukan
+        // UI-02J di lapisan klien: chrome sesi harus dimuat (bukan
         // tersisa-malas) supaya penolakan 401 pertama dari kernel selalu punya
         // jalan masuk, dan tidak boleh ada akun/kata sandi bawaan yang
         // ditanamkan di aset yang terlayani.
@@ -1005,22 +1005,45 @@ mod tests {
             pos_api < pos_login && pos_login < pos_app,
             "login.js harus termuat setelah klien API dan sebelum router app.js"
         );
+        // Lencana "Community Edition" dilepas atas perintah owner: header hanya
+        // boleh membawa fakta yang dibaca dari kernel (hostname, alamat bind).
+        assert!(
+            !shell.contains("Community Edition"),
+            "badge pemasaran masih terlayani"
+        );
+        assert!(
+            !shell.contains("chip-badge"),
+            "kelas badge mati masih ikut terlayani"
+        );
+        assert!(
+            shell.contains("/css/session.css"),
+            "shell memuat chrome sesi tanpa gayanya"
+        );
 
         let js = core::str::from_utf8(registry::JS_LOGIN.content).expect("login.js utf-8");
         for need in [
-            "OPCR.api.onGate = open",
+            "OPCR.api.onGate = function",
             "OPCR.api.auth.status",
-            "OPCR.api.auth.login",
             "OPCR.api.auth.logout",
-            "no_credentials",
+            "\"/login.html\"",
+            "BOUNCE",
             "insufficient_role",
             "session_expired",
+            "\"Settings\"",
+            "\"Logout\"",
         ] {
             assert!(js.contains(need), "login.js kehilangan {need}");
         }
-        // Nilai masuk hanya lewat body form klien API; tidak ada markup dari
-        // data, tidak ada jejak konsol, dan tidak ada kredensial bawaan.
-        for banned in ["innerHTML", "console.log", "password=\"", "Bearer "] {
+        // Chrome sesi tidak pernah mengumpulkan kredensial: ia hanya memindahkan
+        // kode kernel ke halaman masuk. Tidak ada markup dari data, tidak ada
+        // jejak konsol, dan tidak ada kolom sandi di dalam konsol.
+        for banned in [
+            "innerHTML",
+            "console.log",
+            "OPCR.api.auth.login",
+            "type=\"password\"",
+            "Bearer ",
+        ] {
             assert!(!js.contains(banned), "login.js memuat {banned}");
         }
 
@@ -1030,10 +1053,25 @@ mod tests {
             "api.js tidak menempelkan token sesi"
         );
 
-        let css = core::str::from_utf8(registry::CSS_WEBFIG.content).expect("webfig.css utf-8");
+        let css = core::str::from_utf8(registry::CSS_SESSION.content).expect("session.css utf-8");
+        for need in [
+            ".chip-user",
+            ".user-menu",
+            ".um-item",
+            ".lg-card",
+            ".lg-row input",
+            "@media (max-width: 900px)",
+            "@media (max-width: 560px)",
+        ] {
+            assert!(css.contains(need), "session.css kehilangan {need}");
+        }
+        // Warna chrome sesi membaca token tema, bukan nilai warna tertulis: satu
+        // karakter pagar pun tidak boleh muncul, karena ia pasti berarti heksa
+        // atau tautan id — dan tema gelap akan meninggalkannya sebagai teks
+        // putih di atas latar putih.
         assert!(
-            css.contains("input[type=\"password\"]"),
-            "kolom kata sandi tidak distil"
+            !css.contains("#"),
+            "session.css memuat warna/tautan literal, bukan token tema"
         );
     }
 
@@ -1292,6 +1330,154 @@ mod tests {
         assert!(
             !wf.contains("OPCR.useredit.remove()"),
             "Remove menghapus tanpa peneguhan operator"
+        );
+    }
+
+    /// UI-02J: halaman masuk berdiri sendiri di `/login.html` (bukan kartu
+    /// di dalam shell) dan dropdown pengguna hanya membawa Settings + Logout.
+    /// Yang diuji: jalur dispatch nyata, kolom sandi yang benar-benar
+    /// `type="password"`, tidak ada kredensial bawaan, dan chrome sesi tidak
+    /// pernah menendang keluar sesi yang masih hidup (`insufficient_role`).
+    #[test]
+    fn test_05l_login_mandiri_dan_dropdown_pengguna() {
+        let mut buf = [0u8; WEB_RESP_MAX];
+
+        let req = HttpRequest::parse(b"GET /login.html HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/login.html tidak terdaftar")
+            .expect("/login.html terlalu besar untuk buffer respons");
+        assert!(
+            len >= registry::LOGIN_HTML.content.len(),
+            "/login.html terpotong di buffer respons"
+        );
+        let page = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            page.contains("Content-Type: text/html; charset=utf-8"),
+            "/login.html bukan dokumen HTML"
+        );
+        // Dokumen mandiri: chrome konsol (rail + mount view) tidak ikut terbawa.
+        assert!(
+            !page.contains("view-mount"),
+            "/login.html justru menyajikan shell"
+        );
+        assert!(page.contains("RINJANI 1.0.0"), "identitas produk hilang");
+        assert!(
+            page.contains("ASL Core Kernel v1.0.0"),
+            "baris daya kernel hilang dari halaman masuk"
+        );
+        for need in [
+            "/css/base.css",
+            "/css/session.css",
+            "/js/core/theme.js",
+            "/js/core/api.js",
+            "id=\"lg-user\"",
+            "id=\"lg-pw\"",
+            "id=\"lg-go\"",
+            "id=\"lg-note\"",
+            "rinjani-login-note",
+            "OPCR.api.auth.login(",
+            "OPCR.api.auth.status(",
+        ] {
+            assert!(page.contains(need), "/login.html kehilangan {need}");
+        }
+        assert!(
+            page.contains("<script src=\"/js/core/theme.js\"></script>"),
+            "tema harus dipasang sebelum <body> supaya tidak berkedip"
+        );
+        assert_eq!(
+            page.matches("type=\"password\"").count(),
+            1,
+            "kata sandi harus satu field bertipe password, bukan teks"
+        );
+        assert!(
+            page.contains("autocomplete=\"current-password\""),
+            "peramban tidak boleh menawarkan sandi baru di halaman masuk"
+        );
+        // Tidak ada nilai bawaan di kolom, tidak ada jejak konsol, tidak ada
+        // alamat riil, dan `innerHTML` tidak dipakai untuk menulis isi.
+        assert!(
+            !page.contains("value=\""),
+            "/login.html menanam nilai bawaan"
+        );
+        assert!(!page.contains("innerHTML"), "/login.html menulis innerHTML");
+        assert!(
+            !page.contains("console.log"),
+            "/login.html mencat ke konsol"
+        );
+        assert!(
+            !page.contains("192.168.") && !page.contains("10.0."),
+            "/login.html memuat alamat karangan"
+        );
+
+        // Style chrome sesi benar-benar terlayani (bukan hanya terdaftar).
+        let req = HttpRequest::parse(b"GET /css/session.css HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/css/session.css tidak terdaftar")
+            .expect("session.css terlalu besar untuk buffer respons");
+        let css = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            css.contains("Content-Type: text/css"),
+            "session.css bukan stylesheet"
+        );
+
+        // Chrome sesi di konsol: logout pindah dari submenu System ke dropdown.
+        let js = core::str::from_utf8(registry::JS_LOGIN.content).expect("login.js utf-8");
+        assert!(
+            !js.contains("data-logout"),
+            "tombol Keluar lama masih menumpang submenu System"
+        );
+        // Sesi yang masih hidup tidak boleh ditendang hanya karena satu aksi
+        // ditolak: `insufficient_role` bukan kunci peta pengalihan.
+        assert!(
+            js.contains("BOUNCE[why]"),
+            "gerbang pengalihan tidak dibaca"
+        );
+        assert!(
+            !js.contains("insufficient_role: 1"),
+            "insufficient_role salah dianggap sebagai sesi mati"
+        );
+        assert!(
+            js.contains("location.replace(PAGE)"),
+            "chrome kembali ke halaman masuk dengan replace, bukan push"
+        );
+
+        // Kopling kelas JS<->CSS. Dropdown disembunyikan oleh CSS-nya sendiri,
+        // jadi satu nama kelas yang salah tulis di salah satu berkas membuat
+        // menu tidak pernah tampil tanpa satu pun pesan galat (§4.30).
+        let css_src =
+            core::str::from_utf8(registry::CSS_SESSION.content).expect("session.css utf-8");
+        for (js_cls, css_sel) in [
+            ("chip-user", ".chip-user"),
+            ("user-menu", ".user-menu"),
+            ("user-wrap", ".user-wrap"),
+            ("um-ava", ".um-ava"),
+            ("um-label", ".um-label"),
+            ("um-role", ".um-role"),
+            ("um-caret", ".um-caret"),
+            ("um-head", ".um-head"),
+            ("um-name", ".um-name"),
+            ("um-item", ".um-item"),
+            ("um-hint", ".um-hint"),
+        ] {
+            assert!(js.contains(js_cls), "login.js melepas kelas {js_cls}");
+            assert!(
+                css_src.contains(css_sel),
+                "session.css tidak mendefinisikan {css_sel} yang dipakai login.js"
+            );
+        }
+
+        // Halaman masuk dan chrome memakai kunci sessionStorage yang sama;
+        // kalau salah satu berganti nama, alasan penolakan kernel hilang diam.
+        let page_src =
+            core::str::from_utf8(registry::LOGIN_HTML.content).expect("login.html utf-8");
+        assert!(
+            js.contains("\"rinjani-login-note\"") && page_src.contains("\"rinjani-login-note\""),
+            "kunci alasan pengalihan tidak seirama antar berkas"
+        );
+        assert!(
+            js.contains("\"rinjani-session-user\"")
+                && page_src.contains("\"rinjani-session-user\""),
+            "kunci nama sesi tidak seirama antar berkas"
         );
     }
 

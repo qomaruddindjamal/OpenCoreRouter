@@ -198,6 +198,16 @@ asset!(
     "rinjani-shell-ui02",
     "shell.html"
 );
+// Halaman masuk mandiri (UI-02J): dokumen berdiri sendiri, bukan parsial view
+// yang di-mount ke shell. Isinya hanya kartu + skrip inline yang bicara ke
+// `POST /api/v1/auth/login`; keputusan boleh/tidak boleh selalu di kernel.
+asset!(
+    LOGIN_HTML,
+    "/login.html",
+    "text/html; charset=utf-8",
+    "rinjani-login-page-ui02j",
+    "login.html"
+);
 asset!(
     CSS_BASE,
     "/css/base.css",
@@ -258,6 +268,16 @@ asset!(
     "rinjani-css-icons-act-ui02g",
     "css/icons-act.css"
 );
+// Chrome sesi (UI-02J): dropdown pengguna di header dan kartu masuk mandiri.
+// Dipisah dari layout.css/components.css karena gerbang respons mengukur tiap
+// aset dan kedua berkas itu sudah mepet jatah 7 936 B.
+asset!(
+    CSS_SESSION,
+    "/css/session.css",
+    "text/css; charset=utf-8",
+    "rinjani-css-session-ui02j",
+    "css/session.css"
+);
 // Aturan responsif dipisah agar layout.css tetap muat di buffer respons;
 // memuat drawer navigasi, scrim, dan target sentuh >= 40 px.
 asset!(
@@ -269,8 +289,8 @@ asset!(
 );
 // Gaya jendela terminal (baris tab, header berisi tombol New/Close, layar
 // gulung, baris prompt). Dimuat malas oleh app.js hanya saat modul Terminal
-// dibuka, karena shell.html sudah memegang 7 882 B dari jatah 7 936 B dan
-// tidak boleh ikut menanggung CSS yang jarang dipakai.
+// dibuka, karena shell.html memegang 7 765 B dari jatah 7 936 B dan tidak
+// boleh ikut menanggung CSS yang jarang dipakai.
 asset!(
     CSS_TERMINAL,
     "/css/terminal.css",
@@ -590,8 +610,9 @@ asset!(
     "images/logo.svg"
 );
 
-pub const ALL_ASSETS: [&StaticAsset; 52] = [
+pub const ALL_ASSETS: [&StaticAsset; 54] = [
     &SHELL_HTML,
+    &LOGIN_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
     &CSS_COMPONENTS,
@@ -600,6 +621,7 @@ pub const ALL_ASSETS: [&StaticAsset; 52] = [
     &CSS_ICONS,
     &CSS_ICONS_ACT,
     &CSS_MOBILE,
+    &CSS_SESSION,
     &CSS_TERMINAL,
     &JS_API,
     &JS_UI,
