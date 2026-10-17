@@ -21,10 +21,10 @@ pub struct WebUiModule {
 }
 
 /// Modul yang dikenal WebUI, mengikuti urutan sidebar. Dua puluh tiga entri:
-/// sepuluh berdata kernel nyata (`enabled:true`, view-nya membaca endpoint
-/// sungguhan) dan tiga belas rupa saja (`enabled:false`) karena kernel belum
-/// punya endpoint-nya: WireGuard, VPN, XRay-Core, QoS Manager, ARP Table,
-/// Gateway, DHCP Server, Appearance, Packages, User Manager, Speed
+/// tiga belas berdata kernel nyata (`enabled:true`, view-nya membaca endpoint
+/// sungguhan) dan sepuluh rupa saja (`enabled:false`) karena kernel belum
+/// punya endpoint-nya: WireGuard, VPN, XRay-Core, QoS Manager,
+/// DHCP Server, Appearance, Packages, Speed
 /// Test, Telnet, dan Trace Route. Restart/Shutdown tidak menjadi modul
 /// berhalaman: keduanya aksi daya yang langsung membuka dialog. `/arp`, `/qos`,
 /// dan `/gateway` dipasang karena owner menaruh ketiganya di sidebar; empat
@@ -32,6 +32,10 @@ pub struct WebUiModule {
 /// karena owner menambahkan menu Terminal dan grup Tools. Hanya `/terminal`
 /// yang sudah naik jadi berdata nyata: ia memakai jalur HTTP yang sama dengan
 /// modul lain, sementara tiga sisanya butuh pemancar paket yang belum ada.
+/// `/usermanager` menyusul jadi berdata nyata pada AUD-02 karena `AuthStore`
+/// kini membaca dan menulis akun lewat `/api/v1/auth/users`, `/arp` karena
+/// kernel punya `ArpTable` nyata yang dibaca lewat `/api/v1/arp`, dan
+/// `/gateway` karena isi FIB kernel kini dilaporkan lewat `/api/v1/routes`.
 pub const MODULES: [WebUiModule; 23] = [
     WebUiModule {
         name: "Dashboard",
@@ -89,12 +93,13 @@ pub const MODULES: [WebUiModule; 23] = [
         path: "/services",
         enabled: true,
     },
-    // Rupa saja: kernel punya penjawab ARP (build_arp_reply/gratuitous) tetapi
-    // tidak punya struktur tabel ARP maupun endpoint baca untuk isinya.
+    // Berdata kernel nyata: kernel punya ArpTable yang diisi dari frame ARP
+    // yang masuk, dan `GET /api/v1/arp` + `/api/v1/arp/stats` melaporkan isi
+    // tabel itu apa adanya (0 baris bila belum ada tetangga yang bicara).
     WebUiModule {
         name: "ARP Table",
         path: "/arp",
-        enabled: false,
+        enabled: true,
     },
     WebUiModule {
         name: "Service List",
@@ -106,10 +111,13 @@ pub const MODULES: [WebUiModule; 23] = [
         path: "/dnsserver",
         enabled: true,
     },
+    // Berdata kernel nyata: FIB kernel nyata (`asl-router-lpm`) kini dibaca lewat
+    // `GET /api/v1/routes` + `/api/v1/routes/stats`; halaman ini menampilkan isi
+    // tabel rute apa adanya, termasuk 0 baris saat WAN belum beralamat.
     WebUiModule {
         name: "Gateway",
         path: "/gateway",
-        enabled: false,
+        enabled: true,
     },
     WebUiModule {
         name: "DHCP Server",
@@ -138,10 +146,14 @@ pub const MODULES: [WebUiModule; 23] = [
         path: "/packages",
         enabled: false,
     },
+    // Naik kelas pada AUD-02 P0.1-D: `AuthStore` kernel sudah punya jalur baca
+    // dan tulis nyata (`GET`/`POST /api/v1/auth/users`), jadi halaman ini menarik
+    // daftar akun sungguhan. Aksi tulis lewat formulir web belum dipasang dan
+    // halamannya mengatakan itu apa adanya.
     WebUiModule {
         name: "User Manager",
         path: "/usermanager",
-        enabled: false,
+        enabled: true,
     },
     // Grup Tools milik owner: tiga-tiganya butuh jalur kirim paket yang belum
     // ada di kernel (klien TCP, gema ICMP keluar, penghasil beban), sehingga
@@ -327,6 +339,13 @@ asset!(
     "js/core/nav.js"
 );
 asset!(
+    JS_LOGIN,
+    "/js/core/login.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-login-aud02",
+    "js/core/login.js"
+);
+asset!(
     JS_APP,
     "/js/core/app.js",
     "application/javascript; charset=utf-8",
@@ -425,7 +444,7 @@ asset!(
     VIEW_ARP,
     "/views/arp.html",
     "text/html; charset=utf-8",
-    "rinjani-view-arp-ui02g",
+    "rinjani-view-arp-aud02",
     "views/arp.html"
 );
 asset!(
@@ -474,7 +493,7 @@ asset!(
     VIEW_GATEWAY,
     "/views/gateway.html",
     "text/html; charset=utf-8",
-    "rinjani-view-gateway-ui02f",
+    "rinjani-view-gateway-aud02",
     "views/gateway.html"
 );
 asset!(
@@ -502,7 +521,7 @@ asset!(
     VIEW_USERMANAGER,
     "/views/usermanager.html",
     "text/html; charset=utf-8",
-    "rinjani-view-usermanager-ui02e",
+    "rinjani-view-usermanager-aud02",
     "views/usermanager.html"
 );
 // Grup Tools + Terminal lama milik owner. Tiga sisanya (Speed Test, Telnet,
@@ -555,7 +574,7 @@ asset!(
     "images/logo.svg"
 );
 
-pub const ALL_ASSETS: [&StaticAsset; 49] = [
+pub const ALL_ASSETS: [&StaticAsset; 50] = [
     &SHELL_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
@@ -574,6 +593,7 @@ pub const ALL_ASSETS: [&StaticAsset; 49] = [
     &JS_PLOT,
     &JS_IFEDIT,
     &JS_NAV,
+    &JS_LOGIN,
     &JS_APP,
     &JS_SYSTEM,
     &JS_VIEWS,

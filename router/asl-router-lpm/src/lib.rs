@@ -10,13 +10,28 @@
 
 pub const MAX_ROUTES: usize = 64;
 
+/// Nomor antarmuka keluar yang dipakai kernel. Ini konvensi OpenCR, bukan
+/// penomoran sistem lain: nomor diberikan menurut urutan NIC yang benar-benar
+/// terikat saat init — 1 = eth0 (tautan keluar ke provider), 2 = eth1 (jaring
+/// internal). `eth1` hanya eksisten pada topologi dua NIC, sehingga rute ke
+/// `IF_LAN` wajib dianggap tidak terpasang bila antarmukanya tidak ada.
+/// Indeks tabel ARP memakai skema berbeda (`ARP_IF_WAN`/`ARP_IF_LAN` mulai 0);
+/// penerjemahannya ada di kernel, bukan di crate ini.
+pub const IF_WAN: u8 = 1;
+pub const IF_LAN: u8 = 2;
+
 /// Target antarmuka keluaran paket
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum NextHop {
     Drop,
     Local,
-    Interface(u8), // ID interface: 0 = Loopback/Host, 1 = NIC0 (LAN), 2 = NIC1 (WAN)
-    Gateway { interface: u8, next_hop_ip: [u8; 4] },
+    /// Rute langsung: kirim ke antarmuka bernomor `IF_*` di atas.
+    Interface(u8),
+    /// Rute via gateway: kirim ke `next_hop_ip` lewat antarmuka `interface`.
+    Gateway {
+        interface: u8,
+        next_hop_ip: [u8; 4],
+    },
 }
 
 /// Struktur satu entri rute dalam tabel FIB

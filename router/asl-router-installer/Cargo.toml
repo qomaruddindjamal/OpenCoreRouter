@@ -6,6 +6,7 @@ authors.workspace = true
 license.workspace = true
 
 [dependencies]
+asl-router-crypto = { path = "../asl-router-crypto" }
 asl-router-gpt = { path = "../asl-router-gpt" }
 asl-router-persistence = { path = "../asl-router-persistence" }
 

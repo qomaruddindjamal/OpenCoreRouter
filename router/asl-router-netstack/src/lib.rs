@@ -408,6 +408,10 @@ pub struct DhcpMessage {
     pub router_ip: Option<[u8; 4]>,
     pub subnet_mask: Option<[u8; 4]>,
     pub lease_time: Option<u32>,
+    /// Opsi 6 (Domain Name Server). `dns2` hanya terisi bila server mengirim
+    /// lebih dari satu resolver.
+    pub dns1: Option<[u8; 4]>,
+    pub dns2: Option<[u8; 4]>,
 }
 
 pub fn parse_dhcp_message(payload: &[u8]) -> Result<DhcpMessage, &'static str> {
@@ -441,6 +445,8 @@ pub fn parse_dhcp_message(payload: &[u8]) -> Result<DhcpMessage, &'static str> {
     let mut router_ip: Option<[u8; 4]> = None;
     let mut subnet_mask: Option<[u8; 4]> = None;
     let mut lease_time: Option<u32> = None;
+    let mut dns1: Option<[u8; 4]> = None;
+    let mut dns2: Option<[u8; 4]> = None;
 
     if has_magic && payload.len() > 240 {
         let mut idx = 240;
@@ -481,6 +487,17 @@ pub fn parse_dhcp_message(payload: &[u8]) -> Result<DhcpMessage, &'static str> {
                     sm.copy_from_slice(&payload[val_start..val_start + 4]);
                     subnet_mask = Some(sm);
                 }
+                6 if len >= 4 => {
+                    // Opsi 6 berisi 1..n resolver; ambil maksimal dua.
+                    let mut d = [0u8; 4];
+                    d.copy_from_slice(&payload[val_start..val_start + 4]);
+                    dns1 = Some(d);
+                    if len >= 8 {
+                        let mut d2 = [0u8; 4];
+                        d2.copy_from_slice(&payload[val_start + 4..val_start + 8]);
+                        dns2 = Some(d2);
+                    }
+                }
                 51 if len >= 4 => {
                     let lt = u32::from_be_bytes([
                         payload[val_start],
@@ -514,8 +531,17 @@ pub fn parse_dhcp_message(payload: &[u8]) -> Result<DhcpMessage, &'static str> {
         router_ip,
         subnet_mask,
         lease_time,
+        dns1,
+        dns2,
     })
 }
+
+/// Parameter Request List (opsi 55) yang diminta klien OpenCR. Regresi cacat
+/// runtime: tanpa daftar ini server sering hanya mengembalikan alamat, sehingga
+/// gateway (opsi 3) dan DNS (opsi 6) tidak pernah tiba dan harus ditebak.
+const DHCP_PRL: [u8; 8] = [1, 3, 6, 15, 26, 42, 51, 54];
+/// Panjang opsi 55 di trên: kode + panjang + 8 kode.
+const DHCP_PRL_LEN: usize = 2 + DHCP_PRL.len();
 
 pub fn build_dhcp_discover(
     client_mac: [u8; 6],
@@ -537,7 +563,8 @@ pub fn build_dhcp_discover_with_hostname(
     } else {
         2 + host_bytes.len()
     };
-    let dhcp_len = 240 + 4 + host_opt_len; // 240 header + 3 opt53 + opt12 + 1 end
+    // 240 header + opt53(3) + opt55 PRL(2+8) + opt12 + end(1)
+    let dhcp_len = 240 + 3 + DHCP_PRL_LEN + host_opt_len + 1;
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
     let total_len = 14 + ip_len;
@@ -586,12 +613,18 @@ pub fn build_dhcp_discover_with_hostname(
     out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
     out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
 
-    // Options: 53 (Message Type = 1 Discover) + 12 (Host Name) + 255 (End)
+    // Options: 53 (Message Type = 1 Discover) + 55 (Parameter Request List)
+    // + 12 (Host Name) + 255 (End)
     let mut opt_idx = dhcp_start + 240;
     out[opt_idx] = 53;
     out[opt_idx + 1] = 1;
     out[opt_idx + 2] = DHCP_DISCOVER;
     opt_idx += 3;
+
+    out[opt_idx] = 55;
+    out[opt_idx + 1] = DHCP_PRL.len() as u8;
+    out[opt_idx + 2..opt_idx + 2 + DHCP_PRL.len()].copy_from_slice(&DHCP_PRL);
+    opt_idx += DHCP_PRL_LEN;
 
     if !host_bytes.is_empty() {
         out[opt_idx] = 12; // Option 12: Host Name (RFC 2132)
@@ -629,7 +662,8 @@ pub fn build_dhcp_request_with_hostname(
     } else {
         2 + host_bytes.len()
     };
-    let dhcp_len = 240 + 16 + host_opt_len; // 240 header + opt53(3) + opt50(6) + opt54(6) + opt12 + 1 end
+    // 240 header + opt53(3) + opt50(6) + opt54(6) + opt55(2+8) + opt12 + end(1)
+    let dhcp_len = 240 + 15 + DHCP_PRL_LEN + host_opt_len + 1;
     let udp_len = 8 + dhcp_len;
     let ip_len = 20 + udp_len;
     let total_len = 14 + ip_len;
@@ -678,7 +712,8 @@ pub fn build_dhcp_request_with_hostname(
     out[dhcp_start + 28..dhcp_start + 34].copy_from_slice(&client_mac);
     out[dhcp_start + 236..dhcp_start + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
 
-    // Options: 53 (Request) + 50 (Requested IP) + 54 (Server Identifier) + 12 + 255 (End)
+    // Options: 53 (Request) + 50 (Requested IP) + 54 (Server Identifier) +
+    // 55 (Parameter Request List) + 12 + 255 (End)
     let mut opt_idx = dhcp_start + 240;
     out[opt_idx] = 53;
     out[opt_idx + 1] = 1;
@@ -696,6 +731,11 @@ pub fn build_dhcp_request_with_hostname(
     out[opt_idx + 1] = 4;
     out[opt_idx + 2..opt_idx + 6].copy_from_slice(&server_ip);
     opt_idx += 6;
+
+    out[opt_idx] = 55;
+    out[opt_idx + 1] = DHCP_PRL.len() as u8;
+    out[opt_idx + 2..opt_idx + 2 + DHCP_PRL.len()].copy_from_slice(&DHCP_PRL);
+    opt_idx += DHCP_PRL_LEN;
 
     if !host_bytes.is_empty() {
         out[opt_idx] = 12; // Option 12: Host Name
@@ -723,18 +763,128 @@ pub enum DhcpClientState {
     },
     Requesting {
         xid: u32,
-        offered_ip: [u8; 4],
-        server_ip: [u8; 4],
+        offer: DhcpOffer,
         elapsed_ticks: u32,
         retries: u8,
     },
     Bound {
         ip: [u8; 4],
         netmask: [u8; 4],
+        netmask_src: LeaseParamSource,
         gateway: [u8; 4],
+        gateway_src: LeaseParamSource,
+        dns1: Option<[u8; 4]>,
+        dns2: Option<[u8; 4]>,
+        dns_src: LeaseParamSource,
+        /// 0 berarti server tidak mengirim opsi 51 sama sekali.
         lease_time: u32,
     },
     HaltedNoOffer,
+}
+
+/// Parameter yang dibawa DHCPOFFER dan harus diingat sampai ACK tiba. Server
+/// yang sah sering mengirim opsi 1/3/6/51 hanya di OFFER dan mengosongkannya di
+/// ACK (ACK singkat); tanpa penyimpanan ini klien kehilangan nilai yang
+/// benar-benar ditetapkan server dan hanya bisa mengarang alamat.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct DhcpOffer {
+    pub ip: [u8; 4],
+    pub server_ip: [u8; 4],
+    pub netmask: Option<[u8; 4]>,
+    pub router: Option<[u8; 4]>,
+    pub dns1: Option<[u8; 4]>,
+    pub dns2: Option<[u8; 4]>,
+    pub lease_time: Option<u32>,
+    /// Field `siaddr` BOOTP dari OFFER; nol berarti server tidak mengisinya.
+    pub siaddr: [u8; 4],
+}
+
+/// Asal satu parameter lease. Wajib ikut dilaporkan supaya operator bisa
+/// membedakan nilai yang ditetapkan server dengan nilai turunan atau simpulan.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LeaseParamSource {
+    /// Opsi dengan kode ini ada di DHCPACK pesan terakhir.
+    Ack(u8),
+    /// Opsi hanya ada di DHCPOFFER; ACK tidak membawanya.
+    Offer(u8),
+    /// Netmask kelas jaringan turunan dari alamat yang ditawarkan (warisan
+    /// classful), BUKAN nilai yang dikirim server.
+    Classful,
+    /// Tidak ada sumber nyata: nilai tetap nol dan konsumen harus jujur
+    /// menampilkannya sebagai ketiadaan.
+    Absent,
+}
+
+impl LeaseParamSource {
+    /// Label singkat untuk log dan API.
+    pub fn label(self) -> &'static str {
+        match self {
+            LeaseParamSource::Ack(1) => "option-1-ack",
+            LeaseParamSource::Offer(1) => "option-1-offer",
+            LeaseParamSource::Ack(3) => "option-3-ack",
+            LeaseParamSource::Offer(3) => "option-3-offer",
+            LeaseParamSource::Ack(6) => "option-6-ack",
+            LeaseParamSource::Offer(6) => "option-6-offer",
+            LeaseParamSource::Ack(51) => "option-51-ack",
+            LeaseParamSource::Offer(51) => "option-51-offer",
+            LeaseParamSource::Ack(_) => "ack",
+            LeaseParamSource::Offer(_) => "offer",
+            LeaseParamSource::Classful => "classful-turunan",
+            LeaseParamSource::Absent => "none",
+        }
+    }
+}
+
+/// Rantai resolusi gateway lease: HANYA opsi 3. `siaddr` adalah alamat boot
+/// server dan opsi 54 adalah identifier server DHCP — keduanya bukan pernyataan
+/// gateway, sehingga dulu menghasilkan gerbang yang tidak sesuai dengan gateway
+/// jaringan sebenarnya. Tanpa opsi 3 gateway tetap nol dan kernel tidak memasang
+/// rute default.
+fn resolve_gateway(ack: &DhcpMessage, offer: &DhcpOffer) -> ([u8; 4], LeaseParamSource) {
+    if let Some(g) = ack.router_ip {
+        return (g, LeaseParamSource::Ack(3));
+    }
+    if let Some(g) = offer.router {
+        return (g, LeaseParamSource::Offer(3));
+    }
+    ([0, 0, 0, 0], LeaseParamSource::Absent)
+}
+
+/// Rantai resolusi resolver DNS lease (opsi 6). Tidak ada penebakan server
+/// publik: tanpa opsi 6 di ACK maupun OFFER, DNS dianggap tidak diketahui.
+fn resolve_dns(
+    ack: &DhcpMessage,
+    offer: &DhcpOffer,
+) -> (Option<[u8; 4]>, Option<[u8; 4]>, LeaseParamSource) {
+    if ack.dns1.is_some() {
+        return (ack.dns1, ack.dns2, LeaseParamSource::Ack(6));
+    }
+    if offer.dns1.is_some() {
+        return (offer.dns1, offer.dns2, LeaseParamSource::Offer(6));
+    }
+    (None, None, LeaseParamSource::Absent)
+}
+
+/// Netmask: opsi 1 ACK, lalu opsi 1 OFFER, lalu warisan classful dari alamat
+/// yang ditawarkan. Classful ditandai apa adanya, bukan disamarkan sebagai
+/// kiriman server.
+fn resolve_netmask(ack: &DhcpMessage, offer: &DhcpOffer) -> ([u8; 4], LeaseParamSource) {
+    if let Some(m) = ack.subnet_mask {
+        return (m, LeaseParamSource::Ack(1));
+    }
+    if let Some(m) = offer.netmask {
+        return (m, LeaseParamSource::Offer(1));
+    }
+    let first = offer.ip[0];
+    if first < 128 {
+        ([255, 0, 0, 0], LeaseParamSource::Classful)
+    } else if first < 192 {
+        ([255, 255, 0, 0], LeaseParamSource::Classful)
+    } else if first < 224 {
+        ([255, 255, 255, 0], LeaseParamSource::Classful)
+    } else {
+        ([0, 0, 0, 0], LeaseParamSource::Absent)
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -806,8 +956,7 @@ impl DhcpClientEngine {
             }
             DhcpClientState::Requesting {
                 xid,
-                offered_ip,
-                server_ip,
+                offer,
                 elapsed_ticks,
                 retries,
             } => {
@@ -817,8 +966,7 @@ impl DhcpClientEngine {
                 } else {
                     self.state = DhcpClientState::Requesting {
                         xid,
-                        offered_ip,
-                        server_ip,
+                        offer,
                         elapsed_ticks: new_elapsed,
                         retries,
                     };
@@ -851,27 +999,42 @@ impl DhcpClientEngine {
                     let server_ip = dhcp.server_ip.unwrap_or(ip.src_ip);
                     self.state = DhcpClientState::Requesting {
                         xid,
-                        offered_ip,
-                        server_ip,
+                        offer: DhcpOffer {
+                            ip: offered_ip,
+                            server_ip,
+                            netmask: dhcp.subnet_mask,
+                            router: dhcp.router_ip,
+                            dns1: dhcp.dns1,
+                            dns2: dhcp.dns2,
+                            lease_time: dhcp.lease_time,
+                            siaddr: dhcp.siaddr,
+                        },
                         elapsed_ticks: 0,
                         retries: 0,
                     };
                     return Ok(Some(self.state));
                 }
             }
-            DhcpClientState::Requesting {
-                xid, offered_ip, ..
-            } => {
+            DhcpClientState::Requesting { xid, offer, .. } => {
                 if dhcp.xid == xid && dhcp.msg_type == Some(DHCP_ACK) {
-                    let netmask = dhcp.subnet_mask.unwrap_or([255, 255, 255, 0]);
-                    let gateway =
-                        dhcp.router_ip
-                            .unwrap_or([offered_ip[0], offered_ip[1], offered_ip[2], 1]);
-                    let lease_time = dhcp.lease_time.unwrap_or(86400);
+                    let ip = if dhcp.yiaddr != [0, 0, 0, 0] {
+                        dhcp.yiaddr
+                    } else {
+                        offer.ip
+                    };
+                    let (netmask, netmask_src) = resolve_netmask(&dhcp, &offer);
+                    let (gateway, gateway_src) = resolve_gateway(&dhcp, &offer);
+                    let (dns1, dns2, dns_src) = resolve_dns(&dhcp, &offer);
+                    let lease_time = dhcp.lease_time.or(offer.lease_time).unwrap_or(0);
                     self.state = DhcpClientState::Bound {
-                        ip: offered_ip,
+                        ip,
                         netmask,
+                        netmask_src,
                         gateway,
+                        gateway_src,
+                        dns1,
+                        dns2,
+                        dns_src,
                         lease_time,
                     };
                     return Ok(Some(self.state));
@@ -1455,6 +1618,243 @@ pub fn build_icmp_time_exceeded(
     Ok(total_len)
 }
 
+/// Bangun frame hasil penerusan L3 (transit) dari paket IPv4 yang baru saja
+/// diterima di satu antarmuka, untuk dikirim keluar lewat antarmuka lain.
+///
+/// Yang berubah hanya dua hal, keduanya wajib oleh RFC 791:
+/// 1. TTL dikurangi satu;
+/// 2. checksum header IPv4 dihitung ulang atas header baru itu.
+///
+/// Isi paket (termasuk opsi header dan muatan) disalin apa adanya — router
+/// tidak boleh mengubah data milik pengirim. Header L2 baru memakai MAC
+/// tetangga hasil resolusi sebagai tujuan dan MAC antarmuka keluar sebagai
+/// sumber, sehingga frame tidak pernah kembali lewat antarmuka asal.
+///
+/// `ip_packet` wajib slice paket IPv4 penuh (dimulai dari oket versi/IHL),
+/// biasanya `eth_payload` hasil `parse_ethernet_header`.
+pub fn build_ipv4_forward_frame(
+    ip_hdr: &Ipv4Header,
+    ip_packet: &[u8],
+    dst_mac: [u8; 6],
+    src_mac: [u8; 6],
+    out: &mut [u8],
+) -> Result<usize, &'static str> {
+    let ihl_bytes = (ip_hdr.ihl as usize) * 4;
+    if ihl_bytes < 20 {
+        return Err("IPv4 IHL terlalu kecil untuk diteruskan");
+    }
+    let ip_len = ip_hdr.total_length as usize;
+    if ip_len < ihl_bytes {
+        return Err("IPv4 total_length lebih kecil daripada IHL");
+    }
+    if ip_packet.len() < ip_len {
+        return Err("IPv4 paket terpotong; tidak boleh diteruskan");
+    }
+    let frame_len = 14 + ip_len;
+    if out.len() < frame_len {
+        return Err("Buffer terlalu kecil untuk frame hasil penerusan");
+    }
+
+    out[0..6].copy_from_slice(&dst_mac);
+    out[6..12].copy_from_slice(&src_mac);
+    out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+    out[14..14 + ihl_bytes].copy_from_slice(&ip_packet[..ihl_bytes]);
+    out[14 + ihl_bytes..frame_len].copy_from_slice(&ip_packet[ihl_bytes..ip_len]);
+
+    // [14+8] = TTL. `ip_hdr.ttl` sudah divalidasi > 1 oleh pemanggil.
+    out[14 + 8] = ip_hdr.ttl - 1;
+    // Slot checksum header IPv4 (oktet 10..12 header) dinolkan dulu.
+    out[14 + 10] = 0;
+    out[14 + 11] = 0;
+    let csum = compute_internet_checksum(&out[14..14 + ihl_bytes]);
+    out[14 + 10..14 + 12].copy_from_slice(&csum.to_be_bytes());
+
+    Ok(frame_len)
+}
+
+// -----------------------------------------------------------------------------
+// ARP NEIGHBOR TABLE (TABEL SAHABAT) — state hasil lalu lintas nyata
+// -----------------------------------------------------------------------------
+//
+// Bukan tiruan Linux: tabel ini hanya menyimpan pasangan (IP, MAC) yang benar-
+// benar terlihat pada field *sender* frame ARP yang masuk. Tidak ada probing
+// aktif, jadi isi tabel adalah bukti pasif bahwa tetangga itu bicara.
+
+/// Kapasitas tabel. Statis, tanpa heap, sesuai doktrin kernel.
+pub const ARP_TABLE_MAX: usize = 16;
+/// Umur maksimum entri dalam tick 100 ms (20 s). Tetangga yang masih bicara
+/// menyegarkan entrimya lewat `observe`; yang diam hilang dari tabel.
+pub const ARP_TIMEOUT_TICKS: u64 = 200;
+/// Indeks antarmuka tempat tetangga terlihat.
+pub const ARP_IF_WAN: u8 = 0;
+pub const ARP_IF_LAN: u8 = 1;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArpEntry {
+    /// `[0,0,0,0]` menandai slot kosong.
+    pub ip: [u8; 4],
+    pub mac: [u8; 6],
+    pub ifindex: u8,
+    /// Opcode frame terakhir yang menyegarkan entri (1=request, 2=reply).
+    pub last_opcode: u16,
+    /// Tick 100 ms saat frame terakhir terlihat.
+    pub last_tick: u64,
+    /// Berapa kali tetangga ini terlihat (termasuk penyegaran).
+    pub seen: u32,
+}
+
+impl ArpEntry {
+    const EMPTY: Self = Self {
+        ip: [0; 4],
+        mac: [0; 6],
+        ifindex: 0,
+        last_opcode: 0,
+        last_tick: 0,
+        seen: 0,
+    };
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ArpTable {
+    pub entries: [ArpEntry; ARP_TABLE_MAX],
+    /// Berapa kali tabel penuh sehingga tetangga tertua digusur. Kapasitas yang
+    /// habis harus terlihat, bukan hilang diam-diam.
+    pub evictions: u32,
+    /// Frame ARP yang tidak bisa dijadikan tetangga: header tidak konsisten,
+    /// milik diri sendiri, atau alamat nol/broadcast.
+    pub rejected: u32,
+}
+
+impl ArpTable {
+    pub const fn new() -> Self {
+        Self {
+            entries: [ArpEntry::EMPTY; ARP_TABLE_MAX],
+            evictions: 0,
+            rejected: 0,
+        }
+    }
+
+    /// Hanya ARP Ethernet/IPv4 dengan panjang field baku yang boleh masuk
+    /// tabel; operan/hybrid dibuang supaya tidak ada entri separuh jalan.
+    fn learnable(arp: &ArpPacket) -> bool {
+        arp.htype == ARP_HTYPE_ETHERNET
+            && arp.ptype == ARP_PTYPE_IPV4
+            && arp.hlen == 6
+            && arp.plen == 4
+            && (arp.opcode == ARP_OP_REQUEST || arp.opcode == ARP_OP_REPLY)
+    }
+
+    /// Belajar dari satu frame ARP yang baru masuk. `true` bila entri baru
+    /// dibuat (bukan sekadar disegarkan).
+    pub fn observe(
+        &mut self,
+        arp: &ArpPacket,
+        ifindex: u8,
+        tick: u64,
+        our_ip: [u8; 4],
+        our_mac: [u8; 6],
+    ) -> bool {
+        if !Self::learnable(arp) {
+            self.rejected = self.rejected.wrapping_add(1);
+            return false;
+        }
+        let ip = arp.sender_ip;
+        // Alamat nol, broadcast, dan milik sendiri bukan tetangga.
+        if ip == [0, 0, 0, 0]
+            || ip == [255, 255, 255, 255]
+            || ip == our_ip
+            || arp.sender_mac == [0; 6]
+            || arp.sender_mac == our_mac
+        {
+            self.rejected = self.rejected.wrapping_add(1);
+            return false;
+        }
+        let mut free = None;
+        let mut oldest = 0usize;
+        let mut oldest_tick = u64::MAX;
+        for i in 0..ARP_TABLE_MAX {
+            let e = self.entries[i];
+            if e.ip == ip {
+                // Tetangga yang sama: segarkan, catat antarmuka dan asal frame.
+                self.entries[i] = ArpEntry {
+                    ip,
+                    mac: arp.sender_mac,
+                    ifindex,
+                    last_opcode: arp.opcode,
+                    last_tick: tick,
+                    seen: e.seen.wrapping_add(1),
+                };
+                return false;
+            }
+            if e.ip == [0, 0, 0, 0] && free.is_none() {
+                free = Some(i);
+            }
+            if e.last_tick < oldest_tick {
+                oldest_tick = e.last_tick;
+                oldest = i;
+            }
+        }
+        let idx = match free {
+            Some(i) => i,
+            None => {
+                self.evictions = self.evictions.wrapping_add(1);
+                oldest
+            }
+        };
+        self.entries[idx] = ArpEntry {
+            ip,
+            mac: arp.sender_mac,
+            ifindex,
+            last_opcode: arp.opcode,
+            last_tick: tick,
+            seen: 1,
+        };
+        true
+    }
+
+    /// Buang entri yang melewati umur maksimum; mengembalikan jumlah yang dibuang.
+    pub fn reap(&mut self, tick: u64) -> usize {
+        let mut gone = 0usize;
+        for i in 0..ARP_TABLE_MAX {
+            let e = self.entries[i];
+            if e.ip == [0, 0, 0, 0] {
+                continue;
+            }
+            if tick.wrapping_sub(e.last_tick) >= ARP_TIMEOUT_TICKS {
+                self.entries[i] = ArpEntry::EMPTY;
+                gone += 1;
+            }
+        }
+        gone
+    }
+
+    /// MAC tetangga yang masih segar untuk alamat IPv4 sasaran. Fondasi jalur
+    /// keluar (ICMP echo, forwarding): tanpa ini router tidak bisa membungkus
+    /// paket untuk host lain.
+    pub fn resolve(&self, ip: [u8; 4], tick: u64) -> Option<[u8; 6]> {
+        for i in 0..ARP_TABLE_MAX {
+            let e = self.entries[i];
+            if e.ip == ip && tick.wrapping_sub(e.last_tick) < ARP_TIMEOUT_TICKS {
+                return Some(e.mac);
+            }
+        }
+        None
+    }
+
+    /// Jumlah entri yang masih segar pada tick ini.
+    pub fn count(&self, tick: u64) -> usize {
+        let mut n = 0usize;
+        for i in 0..ARP_TABLE_MAX {
+            let e = self.entries[i];
+            if e.ip != [0, 0, 0, 0] && tick.wrapping_sub(e.last_tick) < ARP_TIMEOUT_TICKS {
+                n += 1;
+            }
+        }
+        n
+    }
+}
+
 // -----------------------------------------------------------------------------
 // ARBITRARY DISPATCHER / NETSTACK RUNTIME
 // -----------------------------------------------------------------------------
@@ -1811,6 +2211,29 @@ impl<const CACHE_SIZE: usize, const HOSTS_SIZE: usize> DnsProxyEngine<CACHE_SIZE
         };
 
         engine
+    }
+
+    /// Inang statik yang benar-benar aktif, dibaca dari tabel — bukan dari
+    /// asumsi bahwa isi awal mesin tidak berubah.
+    pub fn host_count(&self) -> u32 {
+        let mut n = 0u32;
+        for h in self.hosts.iter() {
+            if h.active {
+                n += 1;
+            }
+        }
+        n
+    }
+
+    /// Rekaman cache yang masih aktif. Angka nol berarti cache memang kosong.
+    pub fn cache_count(&self) -> u32 {
+        let mut n = 0u32;
+        for c in self.cache.iter() {
+            if c.active {
+                n += 1;
+            }
+        }
+        n
     }
 
     pub fn add_static_host(&mut self, name: &str, ip: [u8; 4]) -> Result<(), &'static str> {
@@ -2867,8 +3290,16 @@ mod tests {
             client.state,
             DhcpClientState::Requesting {
                 xid,
-                offered_ip: [192, 0, 2, 100],
-                server_ip: [192, 0, 2, 254],
+                offer: DhcpOffer {
+                    ip: [192, 0, 2, 100],
+                    server_ip: [192, 0, 2, 254],
+                    netmask: Some([255, 255, 255, 0]),
+                    router: Some([192, 0, 2, 254]),
+                    dns1: Some([192, 0, 2, 254]),
+                    dns2: None,
+                    lease_time: Some(86400),
+                    siaddr: [192, 0, 2, 254],
+                },
                 elapsed_ticks: 0,
                 retries: 0,
             }
@@ -2918,8 +3349,16 @@ mod tests {
         // Advance to Requesting
         client.state = DhcpClientState::Requesting {
             xid,
-            offered_ip: [192, 0, 2, 100],
-            server_ip: [192, 0, 2, 254],
+            offer: DhcpOffer {
+                ip: [192, 0, 2, 100],
+                server_ip: [192, 0, 2, 254],
+                netmask: Some([255, 255, 255, 0]),
+                router: Some([192, 0, 2, 254]),
+                dns1: Some([192, 0, 2, 254]),
+                dns2: None,
+                lease_time: Some(86400),
+                siaddr: [192, 0, 2, 254],
+            },
             elapsed_ticks: 0,
             retries: 0,
         };
@@ -2960,8 +3399,16 @@ mod tests {
         let mut client = DhcpClientEngine::new(mac, config);
         client.state = DhcpClientState::Requesting {
             xid: 0x1234,
-            offered_ip: [192, 0, 2, 100],
-            server_ip: [192, 0, 2, 254],
+            offer: DhcpOffer {
+                ip: [192, 0, 2, 100],
+                server_ip: [192, 0, 2, 254],
+                netmask: None,
+                router: None,
+                dns1: None,
+                dns2: None,
+                lease_time: None,
+                siaddr: [0, 0, 0, 0],
+            },
             elapsed_ticks: 0,
             retries: 0,
         };
@@ -3153,5 +3600,805 @@ mod tests {
         assert!(tcp_checksum_ok(ip.src_ip, ip.dst_ip, seg));
         let (_, data) = parse_tcp_header(seg).unwrap();
         assert_eq!(data.len(), TCP_MAX_PAYLOAD);
+    }
+
+    fn arp_frame(op: u16, smac: [u8; 6], sip: [u8; 4], tip: [u8; 4]) -> ArpPacket {
+        ArpPacket {
+            htype: ARP_HTYPE_ETHERNET,
+            ptype: ARP_PTYPE_IPV4,
+            hlen: 6,
+            plen: 4,
+            opcode: op,
+            sender_mac: smac,
+            sender_ip: sip,
+            target_mac: [0; 6],
+            target_ip: tip,
+        }
+    }
+
+    #[test]
+    fn test_52_arp_table_learn_refresh_and_resolve() {
+        let mut t = ArpTable::new();
+        let me = [192, 0, 2, 10];
+        let mme = [2, 2, 2, 2, 2, 2];
+        let mhost = [1, 1, 1, 1, 1, 1];
+        // Request who-has pun sudah memuat field sender yang sah.
+        assert!(t.observe(
+            &arp_frame(ARP_OP_REQUEST, mhost, [192, 0, 2, 20], me),
+            ARP_IF_WAN,
+            100,
+            me,
+            mme
+        ));
+        assert_eq!(t.count(100), 1);
+        assert_eq!(t.resolve([192, 0, 2, 20], 100), Some(mhost));
+        // Penyegaran dari reply: satu baris, seen bertambah, asal tercatat.
+        assert!(!t.observe(
+            &arp_frame(ARP_OP_REPLY, mhost, [192, 0, 2, 20], me),
+            ARP_IF_WAN,
+            150,
+            me,
+            mme
+        ));
+        assert_eq!(t.count(150), 1, "tetangga sama tidak boleh dua baris");
+        assert_eq!(t.entries[0].seen, 2);
+        assert_eq!(t.entries[0].last_opcode, ARP_OP_REPLY);
+        assert_eq!(t.entries[0].last_tick, 150);
+        assert_eq!(t.evictions, 0);
+    }
+
+    #[test]
+    fn test_53_arp_table_menolak_milik_sendiri_nol_broadcast_dan_header_asli() {
+        let mut t = ArpTable::new();
+        let me = [192, 0, 2, 10];
+        let mme = [2, 2, 2, 2, 2, 2];
+        // Alamat kita sendiri (mis. GARP berulang) bukan tetangga.
+        assert!(!t.observe(
+            &arp_frame(ARP_OP_REQUEST, mme, me, me),
+            ARP_IF_WAN,
+            10,
+            me,
+            mme
+        ));
+        // Sender IP nol/broadcast dan MAC nol bukan kandidat.
+        assert!(!t.observe(
+            &arp_frame(ARP_OP_REQUEST, [3, 3, 3, 3, 3, 3], [0, 0, 0, 0], me),
+            ARP_IF_WAN,
+            11,
+            me,
+            mme
+        ));
+        assert!(!t.observe(
+            &arp_frame(ARP_OP_REPLY, [3, 3, 3, 3, 3, 3], [255, 255, 255, 255], me),
+            ARP_IF_WAN,
+            12,
+            me,
+            mme
+        ));
+        assert!(!t.observe(
+            &arp_frame(ARP_OP_REPLY, [0, 0, 0, 0, 0, 0], [192, 0, 2, 30], me),
+            ARP_IF_WAN,
+            13,
+            me,
+            mme
+        ));
+        // ARP untuk protokol lain / panjang field lain ditolak mentah-mentah.
+        let mut odd = arp_frame(ARP_OP_REQUEST, [4, 4, 4, 4, 4, 4], [192, 0, 2, 40], me);
+        odd.hlen = 20;
+        assert!(!t.observe(&odd, ARP_IF_WAN, 14, me, mme));
+        let mut op3 = arp_frame(3, [5, 5, 5, 5, 5, 5], [192, 0, 2, 50], me);
+        op3.opcode = 3;
+        assert!(!t.observe(&op3, ARP_IF_WAN, 15, me, mme));
+        assert_eq!(t.count(15), 0, "tidak ada baris dari frame tolakan");
+        assert_eq!(t.rejected, 6);
+    }
+
+    #[test]
+    fn test_54_arp_table_kedaluwarsa_dan_hilang_dari_resolve() {
+        let mut t = ArpTable::new();
+        let mhost = [1, 1, 1, 1, 1, 1];
+        t.observe(
+            &arp_frame(ARP_OP_REQUEST, mhost, [10, 0, 2, 5], [10, 0, 2, 1]),
+            ARP_IF_LAN,
+            50,
+            [10, 0, 2, 1],
+            [2, 2, 2, 2, 2, 2],
+        );
+        assert_eq!(
+            t.resolve([10, 0, 2, 5], 50 + ARP_TIMEOUT_TICKS - 1),
+            Some(mhost)
+        );
+        // Tepat pada umur maksimum entri dianggap basi.
+        assert_eq!(t.count(50 + ARP_TIMEOUT_TICKS), 0);
+        assert_eq!(t.resolve([10, 0, 2, 5], 50 + ARP_TIMEOUT_TICKS), None);
+        assert_eq!(t.reap(50 + ARP_TIMEOUT_TICKS), 1);
+        assert_eq!(t.count(50 + ARP_TIMEOUT_TICKS), 0);
+        assert_eq!(t.entries[0], ArpEntry::EMPTY);
+    }
+
+    #[test]
+    fn test_55_arp_table_penuh_menggusur_tetangga_tertua() {
+        let mut t = ArpTable::new();
+        let me = [192, 0, 2, 1];
+        let mme = [9, 9, 9, 9, 9, 9];
+        for i in 0..ARP_TABLE_MAX {
+            t.observe(
+                &arp_frame(
+                    ARP_OP_REQUEST,
+                    [0xA0 + i as u8, 1, 2, 3, 4, 5],
+                    [10, 0, 0, i as u8 + 2],
+                    me,
+                ),
+                ARP_IF_WAN,
+                (i as u64) + 1,
+                me,
+                mme,
+            );
+        }
+        assert_eq!(t.count(100), ARP_TABLE_MAX);
+        assert_eq!(t.evictions, 0);
+        // Satu pendatang baru: yang paling lama tidak terlihat yang digusur.
+        assert!(t.observe(
+            &arp_frame(ARP_OP_REPLY, [7, 7, 7, 7, 7, 7], [10, 0, 9, 9], me),
+            ARP_IF_WAN,
+            100,
+            me,
+            mme
+        ));
+        assert_eq!(t.evictions, 1);
+        assert_eq!(t.count(100), ARP_TABLE_MAX);
+        assert_eq!(t.resolve([10, 0, 0, 2], 100), None, "tertua digusur");
+        assert_eq!(t.resolve([10, 0, 9, 9], 100), Some([7, 7, 7, 7, 7, 7]));
+    }
+
+    /// Susun frame IPv4 transito yang checksum-nya sah (dipakai dua tes di bawah).
+    fn fwd_frame(ttl: u8, payload_len: usize) -> ([u8; 128], usize) {
+        let mut f = [0u8; 128];
+        f[0..6].copy_from_slice(&[0xAA, 0xAA, 0xAA, 0xAA, 0xAA, 0xAA]);
+        f[6..12].copy_from_slice(&[0x08, 0x00, 0x27, 0x11, 0x22, 0x33]);
+        f[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+        let ip_len = 20 + payload_len;
+        f[14] = 0x45;
+        f[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+        f[18..20].copy_from_slice(&0x1234u16.to_be_bytes());
+        f[20..22].copy_from_slice(&0x4000u16.to_be_bytes());
+        f[22] = ttl;
+        f[23] = IP_PROTO_ICMP;
+        f[26..30].copy_from_slice(&[10, 0, 0, 5]);
+        f[30..34].copy_from_slice(&[10, 0, 0, 9]);
+        for i in 0..payload_len {
+            f[34 + i] = (i as u8) ^ 0x5A;
+        }
+        let csum = compute_internet_checksum(&f[14..14 + 20]);
+        f[24..26].copy_from_slice(&csum.to_be_bytes());
+        (f, 14 + ip_len)
+    }
+
+    #[test]
+    fn test_56_build_ipv4_forward_frame_kurangi_ttl_dan_hitung_ulang_checksum() {
+        // Syarat penerusan nyata (RFC 791): TTL turun satu, checksum header
+        // dihitung ulang, muatan tidak boleh tersentuh, L2 diganti milik
+        // antarmuka keluar. Kalau salah satu dilanggar, tes ini gagal.
+        let (f, flen) = fwd_frame(8, 12);
+        let (eth, ip_bytes) = parse_ethernet_header(&f[..flen]).expect("eth");
+        let (ip, _body) = parse_ipv4_header(ip_bytes).expect("ip masuk valid");
+        assert_eq!(ip.ttl, 8);
+
+        let dst_mac = [0x08, 0x00, 0x27, 0x44, 0x55, 0x66];
+        let src_mac = [0x08, 0x00, 0x27, 0xEE, 0xDD, 0xCC];
+        let mut out = [0u8; 160];
+        let n = build_ipv4_forward_frame(&ip, ip_bytes, dst_mac, src_mac, &mut out)
+            .expect("frame transito dibangun");
+        assert_eq!(n, flen, "panjang frame keluar harus sama dengan masuk");
+
+        // L2: tujuan = MAC tetangga, sumber = MAC antarmuka keluar, bukan MAC masuk.
+        let (oeth, oip_bytes) = parse_ethernet_header(&out[..n]).expect("eth keluar");
+        assert_eq!(oeth.dst_mac, dst_mac);
+        assert_eq!(oeth.src_mac, src_mac);
+        assert_eq!(oeth.ethertype, ETHERTYPE_IPV4);
+        assert_ne!(oeth.src_mac, eth.src_mac);
+
+        // L3: parser wajib menerima checksum hasil (checksum valid => parse ok).
+        let (oip, obody) = parse_ipv4_header(oip_bytes).expect("checksum header keluar valid");
+        assert_eq!(oip.ttl, 7, "TTL harus berkurang tepat satu");
+        assert_eq!(oip.src_ip, [10, 0, 0, 5], "sumber tidak boleh diubah");
+        assert_eq!(oip.dst_ip, [10, 0, 0, 9], "tujuan tidak boleh diubah");
+        assert_eq!(oip.identification, 0x1234, "ID tidak boleh berubah");
+        assert_eq!(oip.total_length, ip.total_length);
+        assert_eq!(oip.protocol, IP_PROTO_ICMP);
+        assert_eq!(
+            obody,
+            &ip_bytes[20..20 + 12],
+            "muatan harus disalin apa adanya"
+        );
+    }
+
+    #[test]
+    fn test_57_build_ipv4_forward_frame_menolak_paket_cacat_sebelum_menulis() {
+        // Fail-closed: paket terpotong, IHL bohong, atau buffer kecil tidak boleh
+        // menghasilkan frame setengah jadi yang bisa ikut terkirim.
+        let (f, flen) = fwd_frame(5, 10);
+        let (_eth, ip_bytes) = parse_ethernet_header(&f[..flen]).expect("eth");
+        let (ip, _) = parse_ipv4_header(ip_bytes).expect("ip");
+        let dst_mac = [1, 2, 3, 4, 5, 6];
+        let src_mac = [7, 8, 9, 10, 11, 12];
+
+        // Paket terpotong: total_length claim 30 B tapi byte yang ada cuma 20 B.
+        let mut out = [0u8; 160];
+        assert_eq!(
+            build_ipv4_forward_frame(&ip, &ip_bytes[..20], dst_mac, src_mac, &mut out),
+            Err("IPv4 paket terpotong; tidak boleh diteruskan")
+        );
+        assert_eq!(out, [0u8; 160], "gagal harus gagal total, bukan separuh");
+
+        // Buffer keluar terlalu kecil (kurang 1 byte dari kebutuhan).
+        let mut tight = [0u8; 14 + 29];
+        assert_eq!(
+            build_ipv4_forward_frame(&ip, ip_bytes, dst_mac, src_mac, &mut tight),
+            Err("Buffer terlalu kecil untuk frame hasil penerusan")
+        );
+
+        // IHL < 5 tidak mungkin lewat parser, jadi ditolak lewat header tangan.
+        let bad = Ipv4Header {
+            ihl: 4,
+            total_length: 40,
+            ttl: 3,
+            ..ip
+        };
+        assert_eq!(
+            build_ipv4_forward_frame(&bad, ip_bytes, dst_mac, src_mac, &mut out),
+            Err("IPv4 IHL terlalu kecil untuk diteruskan")
+        );
+
+        // total_length < IHL juga ditolak.
+        let short = Ipv4Header {
+            ihl: 5,
+            total_length: 10,
+            ..ip
+        };
+        assert_eq!(
+            build_ipv4_forward_frame(&short, ip_bytes, dst_mac, src_mac, &mut out),
+            Err("IPv4 total_length lebih kecil daripada IHL")
+        );
+    }
+
+    const T_MASK: [u8; 4] = [255, 255, 255, 0];
+    const T_OFFERED: [u8; 4] = [192, 0, 2, 100];
+    const T_LEASE_1800: [u8; 4] = [0, 0, 7, 8];
+
+    /// Bingkai DHCP reply mentah dengan daftar opsi yang ditentukan tes.
+    /// Builder produksi selalu menyertakan opsi 1/3/51 sehingga tidak bisa
+    /// dipakai membangun ACK yang sengaja tidak membawa opsi 3 — justru bentuk
+    /// yang membuat deteksi gateway salah di lapangan.
+    fn raw_reply_frame(
+        xid: u32,
+        msg_type: u8,
+        siaddr: [u8; 4],
+        src_ip: [u8; 4],
+        opts: &[(u8, [u8; 4])],
+        out: &mut [u8],
+    ) -> usize {
+        let dhcp_len = 240 + 3 + opts.len() * 6 + 1;
+        let udp_len = 8 + dhcp_len;
+        let ip_len = 20 + udp_len;
+        let total = 14 + ip_len;
+
+        out[..total].fill(0);
+        out[0..6].copy_from_slice(&[0xFF; 6]);
+        out[6..12].copy_from_slice(&[0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+
+        out[14] = 0x45;
+        out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+        out[22] = 64;
+        out[23] = IP_PROTO_UDP;
+        out[26..30].copy_from_slice(&src_ip);
+        out[30..34].copy_from_slice(&[255, 255, 255, 255]);
+        let csum = compute_internet_checksum(&out[14..34]);
+        out[24..26].copy_from_slice(&csum.to_be_bytes());
+
+        out[34..36].copy_from_slice(&UDP_PORT_DHCP_SERVER.to_be_bytes());
+        out[36..38].copy_from_slice(&UDP_PORT_DHCP_CLIENT.to_be_bytes());
+        out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+
+        let d = 42usize;
+        out[d] = DHCP_OP_BOOTREPLY;
+        out[d + 1] = 1;
+        out[d + 2] = 6;
+        out[d + 4..d + 8].copy_from_slice(&xid.to_be_bytes());
+        out[d + 16..d + 20].copy_from_slice(&T_OFFERED);
+        out[d + 20..d + 24].copy_from_slice(&siaddr);
+        out[d + 28..d + 34].copy_from_slice(&[0x08, 0x00, 0x27, 0x5E, 0x08, 0x33]);
+        out[d + 236..d + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+        let mut i = d + 240;
+        out[i] = 53;
+        out[i + 1] = 1;
+        out[i + 2] = msg_type;
+        i += 3;
+        for (code, val) in opts {
+            out[i] = *code;
+            out[i + 1] = 4;
+            out[i + 2..i + 6].copy_from_slice(val);
+            i += 6;
+        }
+        out[i] = 255;
+
+        total
+    }
+
+    /// Klien yang sudah lewat Selecting dan menerima OFFER dengan isi yang
+    /// diberikan; mengembalikan mesin klien beserta buffer.
+    fn client_after_offer(
+        offer_opts: &[(u8, [u8; 4])],
+        offer_siaddr: [u8; 4],
+        server_ip: [u8; 4],
+        offer_buf: &mut [u8],
+    ) -> DhcpClientEngine {
+        let mut client = DhcpClientEngine::new(
+            [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33],
+            DhcpClientConfig::default(),
+        );
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_OFFER,
+            offer_siaddr,
+            server_ip,
+            offer_opts,
+            offer_buf,
+        );
+        client.start_discover(0x4C494E4B);
+        client
+            .handle_incoming_packet(&offer_buf[..n])
+            .expect("OFFER seharusnya terparse");
+        client
+    }
+
+    /// Isi lease yang terlihat konsumen, termasuk sumber tiap parameter.
+    struct LeaseSeen {
+        ip: [u8; 4],
+        netmask: [u8; 4],
+        netmask_src: LeaseParamSource,
+        gateway: [u8; 4],
+        gateway_src: LeaseParamSource,
+        dns1: Option<[u8; 4]>,
+        dns2: Option<[u8; 4]>,
+        dns_src: LeaseParamSource,
+        lease_time: u32,
+    }
+
+    fn bound_of(client: &DhcpClientEngine) -> LeaseSeen {
+        match client.state {
+            DhcpClientState::Bound {
+                ip,
+                netmask,
+                netmask_src,
+                gateway,
+                gateway_src,
+                dns1,
+                dns2,
+                dns_src,
+                lease_time,
+            } => LeaseSeen {
+                ip,
+                netmask,
+                netmask_src,
+                gateway,
+                gateway_src,
+                dns1,
+                dns2,
+                dns_src,
+                lease_time,
+            },
+            other => panic!("klien harus Bound, ternyata {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_58_gateway_ack_menang_atas_offer() {
+        // Server yang mengubah router di ACK sedang menetapkan ulang lease ini;
+        // nilai ACK yang dipakai, bukan nilai OFFER yang diingat.
+        let mut client = client_after_offer(
+            &[(1, T_MASK), (3, [192, 0, 2, 254]), (51, T_LEASE_1800)],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(1, T_MASK), (3, [198, 51, 100, 9])],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+
+        let seen = bound_of(&client);
+        assert_eq!(seen.gateway, [198, 51, 100, 9]);
+        assert_eq!(seen.gateway_src, LeaseParamSource::Ack(3));
+        assert_eq!(seen.gateway_src.label(), "option-3-ack");
+    }
+
+    #[test]
+    fn test_59_gateway_dipulih_dari_offer_saat_ack_tanpa_opsi_3() {
+        // Regresi cacat runtime 2026-10-17: ACK dari router bridged tidak
+        // membawa opsi 3, klien lama lalu mengarang alamat berakhiran .1 dan
+        // gateway yang dilaporkan bukan gateway jaringan. Yang benar: pakai
+        // opsi 3 yang sudah ditawarkan, beserta netmask dan masa sewa OFFER.
+        let mut client = client_after_offer(
+            &[(1, T_MASK), (3, [192, 0, 2, 254]), (51, T_LEASE_1800)],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(54, [192, 0, 2, 254])],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+
+        let seen = bound_of(&client);
+        assert_eq!(
+            seen.gateway,
+            [192, 0, 2, 254],
+            "gateway harus warisan OFFER"
+        );
+        assert_eq!(seen.gateway_src, LeaseParamSource::Offer(3));
+        assert_eq!(
+            seen.netmask, T_MASK,
+            "netmask ACK kosong dipulih dari OFFER"
+        );
+        assert_eq!(seen.netmask_src, LeaseParamSource::Offer(1));
+        assert_eq!(
+            seen.lease_time, 1800,
+            "masa sewa ACK kosong dipulih dari OFFER"
+        );
+        assert_ne!(
+            seen.gateway,
+            [192, 0, 2, 1],
+            "tidak boleh ada alamat jala karangan"
+        );
+    }
+
+    #[test]
+    fn test_60_siaddr_dan_identifier_server_bukan_gateway() {
+        // siaddr adalah alamat boot server dan opsi 54 adalah identifier DHCP.
+        // Keduanya bukan pernyataan gateway: memakai salah satunya sebagai
+        // gerbang menghasilkan gateway yang tidak ada di jaringan — cacat yang
+        // dilaporkan operator. Tanpa opsi 3 gateway wajib nol, bersumber "none",
+        // dan kernel tidak memasang rute default.
+        let mut client = client_after_offer(
+            &[(1, T_MASK)],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [198, 51, 100, 7],
+            [192, 0, 2, 254],
+            &[(54, [192, 0, 2, 254])],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+        let seen = bound_of(&client);
+        assert_eq!(
+            seen.gateway,
+            [0, 0, 0, 0],
+            "siaddr atau identifier server dijadikan gateway"
+        );
+        assert_eq!(seen.gateway_src, LeaseParamSource::Absent);
+        assert_eq!(seen.gateway_src.label(), "none");
+
+        // Opsi 3 yang benar-benar ada tetap dipakai, dan sumbernya ditandai.
+        let mut client2 = client_after_offer(
+            &[(1, T_MASK), (3, [198, 51, 100, 1])],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack2 = [0u8; 512];
+        let n2 = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(54, [192, 0, 2, 254])],
+            &mut ack2,
+        );
+        client2.handle_incoming_packet(&ack2[..n2]).unwrap();
+        let seen2 = bound_of(&client2);
+        assert_eq!(seen2.gateway, [198, 51, 100, 1]);
+        assert_eq!(seen2.gateway_src, LeaseParamSource::Offer(3));
+        assert_eq!(seen2.gateway_src.label(), "option-3-offer");
+    }
+
+    #[test]
+    fn test_61_tanpa_sumber_gateway_tetap_nol_bukan_angka_jala() {
+        // Fail-closed: tanpa opsi 3, tanpa siaddr, tanpa identifier server maka
+        // tidak ada gateway. Rute default tidak akan dipasang oleh kernel, dan
+        // sumbernya dilaporkan sebagai "none".
+        let mut client =
+            client_after_offer(&[(1, T_MASK)], [0, 0, 0, 0], [0, 0, 0, 0], &mut [0u8; 512]);
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            &[],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+
+        let seen = bound_of(&client);
+        assert_eq!(seen.gateway, [0, 0, 0, 0]);
+        assert_eq!(seen.gateway_src, LeaseParamSource::Absent);
+        assert_eq!(seen.gateway_src.label(), "none");
+        assert!(client.is_bound(), "lease tetap sah tanpa gateway");
+    }
+
+    #[test]
+    fn test_62_dns_lease_diambil_dari_ack_lalu_dari_offer() {
+        // Opsi 6 adalah satu-satunya sumber resolver yang sah. ACK yang
+        // membawanya menang; kalau tidak ada, nilai OFFER yang dipakai.
+        let mut client = client_after_offer(
+            &[(1, T_MASK), (6, [192, 0, 2, 53])],
+            [192, 0, 2, 254],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(6, [198, 51, 100, 1])],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+        let seen = bound_of(&client);
+        assert_eq!(seen.dns1, Some([198, 51, 100, 1]));
+        assert_eq!(seen.dns2, None);
+        assert_eq!(seen.dns_src, LeaseParamSource::Ack(6));
+
+        // ACK tanpa opsi 6: resolver OFFER tetap dipakai, bukan dibuang.
+        let mut client2 = client_after_offer(
+            &[(1, T_MASK), (6, [192, 0, 2, 53])],
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack2 = [0u8; 512];
+        let n2 = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(3, [192, 0, 2, 254])],
+            &mut ack2,
+        );
+        client2.handle_incoming_packet(&ack2[..n2]).unwrap();
+        let seen2 = bound_of(&client2);
+        assert_eq!(seen2.dns1, Some([192, 0, 2, 53]), "DNS OFFER harus diingat");
+        assert_eq!(seen2.dns_src, LeaseParamSource::Offer(6));
+        assert_eq!(seen2.dns_src.label(), "option-6-offer");
+    }
+
+    #[test]
+    fn test_63_dua_resolver_dan_ketiadaan_dns_dibedakan() {
+        // Opsi 6 berbentang 8 byte memuat dua resolver; keduanya harus terbaca.
+        let mut client = client_after_offer(
+            &[(1, T_MASK)],
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &mut [0u8; 512],
+        );
+        let mut ack8 = [0u8; 600];
+        let mut pair = [0u8; 8];
+        pair[..4].copy_from_slice(&[192, 0, 2, 53]);
+        pair[4..].copy_from_slice(&[192, 0, 2, 54]);
+        let total = raw_reply_frame_wide(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(6, pair)],
+            &mut ack8,
+        );
+        client.handle_incoming_packet(&ack8[..total]).unwrap();
+        let seen = bound_of(&client);
+        assert_eq!(seen.dns1, Some([192, 0, 2, 53]));
+        assert_eq!(seen.dns2, Some([192, 0, 2, 54]));
+        assert_eq!(seen.dns_src, LeaseParamSource::Ack(6));
+
+        // Tanpa opsi 6 di mana pun: None, bukan server publik karangan.
+        let mut client2 =
+            client_after_offer(&[(1, T_MASK)], [0, 0, 0, 0], [0, 0, 0, 0], &mut [0u8; 512]);
+        let mut ack2 = [0u8; 512];
+        let n2 = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [0, 0, 0, 0],
+            &[],
+            &mut ack2,
+        );
+        client2.handle_incoming_packet(&ack2[..n2]).unwrap();
+        let seen2 = bound_of(&client2);
+        assert_eq!(seen2.dns1, None);
+        assert_eq!(seen2.dns2, None);
+        assert_eq!(seen2.dns_src, LeaseParamSource::Absent);
+    }
+
+    #[test]
+    fn test_64_netmask_classful_ditandai_dan_lease_tanpa_opsi_nol() {
+        // Server yang tidak mengirim opsi 1/51: netmask warisan classful DILAPORKAN
+        // sebagai turunan, dan masa sewa 0 (tidak dikenal), bukan 86400 karangan.
+        let mut client = client_after_offer(&[], [0, 0, 0, 0], [192, 0, 2, 254], &mut [0u8; 512]);
+        let mut ack = [0u8; 512];
+        let n = raw_reply_frame(
+            0x4C494E4B,
+            DHCP_ACK,
+            [0, 0, 0, 0],
+            [192, 0, 2, 254],
+            &[(3, [192, 0, 2, 254])],
+            &mut ack,
+        );
+        client.handle_incoming_packet(&ack[..n]).unwrap();
+        let seen = bound_of(&client);
+        assert_eq!(seen.ip, T_OFFERED);
+        assert_eq!(seen.netmask, [255, 255, 255, 0], "class C turunan");
+        assert_eq!(seen.netmask_src, LeaseParamSource::Classful);
+        assert_eq!(seen.netmask_src.label(), "classful-turunan");
+        assert_eq!(seen.lease_time, 0, "opsi 51 absen bukan berarti 24 jam");
+        assert_eq!(seen.gateway, [192, 0, 2, 254]);
+    }
+
+    #[test]
+    fn test_65_discover_request_memuat_parameter_request_list() {
+        // Tanpa opsi 55, server nyata sering hanya mengembalikan alamat sehingga
+        // gateway dan DNS tidak pernah tiba. Kedua pesan klien wajib memuat PRL.
+        let mac = [0x08, 0x00, 0x27, 0x5E, 0x08, 0x33];
+        let mut disc = [0u8; 512];
+        let dl = build_dhcp_discover(mac, 0x11223344, &mut disc).unwrap();
+        assert!(
+            has_prl(&disc[42 + 240..dl]),
+            "DISCOVER tidak memuat opsi 55"
+        );
+
+        let mut req = [0u8; 512];
+        let rl = build_dhcp_request(
+            mac,
+            [192, 0, 2, 100],
+            [192, 0, 2, 254],
+            0x11223344,
+            &mut req,
+        )
+        .unwrap();
+        assert!(has_prl(&req[42 + 240..rl]), "REQUEST tidak memuat opsi 55");
+
+        // Panjang trên harus tetap konsisten dengan isi opsi (tidak ada byte sisa).
+        let (_e, ipb) = parse_ethernet_header(&disc[..dl]).unwrap();
+        let (ip, _) = parse_ipv4_header(ipb).unwrap();
+        assert_eq!(ip.total_length as usize, dl - 14);
+    }
+
+    #[test]
+    fn test_66_pembilang_proksi_dns_membaca_tabel_sebenarnya() {
+        // Endpoint baca DNS menampilkan jumlah inang dan rekaman cache dari
+        // mesinnya, jadi pembilang harus menghitung isi tabel — bukan membalas
+        // konstanta yang kebetulan cocok pada build hari ini.
+        let mut eng = DnsProxyEngine::<4, 3>::new([192, 0, 2, 1], [0, 0, 0, 0]);
+        assert_eq!(eng.host_count(), 1, "hanya rinjani.lan yang aktif di awal");
+        assert_eq!(eng.cache_count(), 0, "cache kosong sampai ada rekaman");
+        assert_eq!(
+            eng.upstream_dns,
+            [0, 0, 0, 0],
+            "upstream tetap nol sebelum ada lease"
+        );
+
+        eng.add_static_host("test.lan", [198, 51, 100, 9]).unwrap();
+        assert_eq!(eng.host_count(), 2);
+        assert!(eng.delete_static_host("test.lan"));
+        assert_eq!(eng.host_count(), 1);
+
+        // Konsumen kernel menulis ulang satu field ini dari opsi 6; Nil nol
+        // berarti belum ada sumber, bukan belum ada mesin.
+        eng.upstream_dns = [192, 0, 2, 254];
+        assert_eq!(eng.upstream_dns, [192, 0, 2, 254]);
+    }
+
+    /// Cari opsi 55 dengan isi persis [1,3,6,15,26,42,51,54] pada wilayah opsi.
+    fn has_prl(opts: &[u8]) -> bool {
+        let mut i = 0usize;
+        while i + 2 < opts.len() {
+            let code = opts[i];
+            if code == 255 {
+                return false;
+            }
+            if code == 0 {
+                i += 1;
+                continue;
+            }
+            let len = opts[i + 1] as usize;
+            if code == 55 && len == 8 && i + 10 <= opts.len() {
+                return opts[i + 2..i + 10] == [1, 3, 6, 15, 26, 42, 51, 54];
+            }
+            i += 2 + len;
+        }
+        false
+    }
+
+    /// Varian bingkai dengan satu opsi dapat melebar (untuk opsi 6 dua resolver).
+    fn raw_reply_frame_wide(
+        xid: u32,
+        msg_type: u8,
+        siaddr: [u8; 4],
+        src_ip: [u8; 4],
+        opts: &[(u8, [u8; 8])],
+        out: &mut [u8],
+    ) -> usize {
+        let mut lens = [0usize; 4];
+        let mut k = 0usize;
+        for (code, _) in opts {
+            lens[k] = if *code == 6 { 8 } else { 4 };
+            k += 1;
+        }
+        let opt_bytes: usize = lens.iter().take(opts.len()).map(|l| 2 + l).sum();
+        let dhcp_len = 240 + 3 + opt_bytes + 1;
+        let udp_len = 8 + dhcp_len;
+        let ip_len = 20 + udp_len;
+        let total = 14 + ip_len;
+
+        out[..total].fill(0);
+        out[0..6].copy_from_slice(&[0xFF; 6]);
+        out[6..12].copy_from_slice(&[0x08, 0x00, 0x27, 0xAA, 0xBB, 0xCC]);
+        out[12..14].copy_from_slice(&ETHERTYPE_IPV4.to_be_bytes());
+        out[14] = 0x45;
+        out[16..18].copy_from_slice(&(ip_len as u16).to_be_bytes());
+        out[22] = 64;
+        out[23] = IP_PROTO_UDP;
+        out[26..30].copy_from_slice(&src_ip);
+        out[30..34].copy_from_slice(&[255, 255, 255, 255]);
+        let csum = compute_internet_checksum(&out[14..34]);
+        out[24..26].copy_from_slice(&csum.to_be_bytes());
+        out[34..36].copy_from_slice(&UDP_PORT_DHCP_SERVER.to_be_bytes());
+        out[36..38].copy_from_slice(&UDP_PORT_DHCP_CLIENT.to_be_bytes());
+        out[38..40].copy_from_slice(&(udp_len as u16).to_be_bytes());
+
+        let d = 42usize;
+        out[d] = DHCP_OP_BOOTREPLY;
+        out[d + 1] = 1;
+        out[d + 2] = 6;
+        out[d + 4..d + 8].copy_from_slice(&xid.to_be_bytes());
+        out[d + 16..d + 20].copy_from_slice(&T_OFFERED);
+        out[d + 20..d + 24].copy_from_slice(&siaddr);
+        out[d + 28..d + 34].copy_from_slice(&[0x08, 0x00, 0x27, 0x5E, 0x08, 0x33]);
+        out[d + 236..d + 240].copy_from_slice(&DHCP_MAGIC_COOKIE);
+
+        let mut i = d + 240;
+        out[i] = 53;
+        out[i + 1] = 1;
+        out[i + 2] = msg_type;
+        i += 3;
+        for (j, (code, val)) in opts.iter().enumerate() {
+            out[i] = *code;
+            out[i + 1] = lens[j] as u8;
+            out[i + 2..i + 2 + lens[j]].copy_from_slice(&val[..lens[j]]);
+            i += 2 + lens[j];
+        }
+        out[i] = 255;
+        total
     }
 }

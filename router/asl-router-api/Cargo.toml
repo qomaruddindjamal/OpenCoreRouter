@@ -7,6 +7,7 @@ license.workspace = true
 
 [dependencies]
 asl-router-webcore = { path = "../asl-router-webcore" }
+asl-router-crypto = { path = "../asl-router-crypto" }
 asl-router-lpm = { path = "../asl-router-lpm" }
 asl-router-nat = { path = "../asl-router-nat" }
 asl-router-persistence = { path = "../asl-router-persistence" }

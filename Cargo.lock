@@ -58,6 +58,7 @@ version = "0.1.0"
 name = "asl-router-api"
 version = "0.1.0"
 dependencies = [
+ "asl-router-crypto",
  "asl-router-hwinv",
  "asl-router-lpm",
  "asl-router-nat",
@@ -65,6 +66,10 @@ dependencies = [
  "asl-router-tcam",
  "asl-router-webcore",
 ]
+
+[[package]]
+name = "asl-router-crypto"
+version = "0.1.0"
 
 [[package]]
 name = "asl-router-drivers-ata"
@@ -119,6 +124,7 @@ dependencies = [
 name = "asl-router-installer"
 version = "0.1.0"
 dependencies = [
+ "asl-router-crypto",
  "asl-router-fat32",
  "asl-router-gpt",
  "asl-router-persistence",
@@ -223,6 +229,7 @@ name = "asl-router-webui"
 version = "0.1.0"
 dependencies = [
  "asl-router-api",
+ "asl-router-crypto",
  "asl-router-netstack",
  "asl-router-webcore",
 ]

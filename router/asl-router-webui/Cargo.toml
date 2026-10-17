@@ -9,3 +9,6 @@ license.workspace = true
 asl-router-webcore = { path = "../asl-router-webcore" }
 asl-router-api = { path = "../asl-router-api" }
 asl-router-netstack = { path = "../asl-router-netstack" }
+
+[dev-dependencies]
+asl-router-crypto = { path = "../asl-router-crypto" }

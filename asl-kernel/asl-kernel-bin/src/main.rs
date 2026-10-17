@@ -61,6 +61,20 @@ fn write_ip(ip: [u8; 4]) {
     }
 }
 
+/// Counter TSC 64-bit. Dipakai sebagai sumber entropi dan penciri waktu antar
+/// iterasi; bukan timer terkalibrasi — frekuensinya tidak dipastikan di sini.
+#[cfg(target_os = "none")]
+fn cpu_tsc() -> u64 {
+    #[cfg(target_arch = "x86_64")]
+    unsafe {
+        core::arch::x86_64::_rdtsc()
+    }
+    #[cfg(not(target_arch = "x86_64"))]
+    {
+        0
+    }
+}
+
 /// Urai oktet desimal bertitik ("192.0.2.10") dari byte CLI. Tanpa alokasi.
 #[cfg(target_os = "none")]
 fn parse_dotted(b: &[u8]) -> Option<[u8; 4]> {
@@ -571,6 +585,20 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut wan_gw = [0u8; 4];
     let mut wan_netmask = [0u8; 4];
     let mut wan_source: &'static str = "none";
+    // Asal alamat gateway: label sumber lease DHCP (option-3-ack / option-3-offer
+    // / none) atau nama permukaan konfigurasi statis. siaddr dan identifier server
+    // BUKAN sumber gateway: keduanya bukan pernyataan router. Tanpanya label,
+    // operator tidak bisa membedakan gateway yang ditetapkan server dengan simpulan.
+    let mut wan_gw_src: &'static str = "none";
+    // Asal netmask ikut dilabeli: `classful-turunan` berarti kernel menyimpulkan
+    // dari kelas alamat yang ditawarkan, BUKAN menerima opsi 1 dari server.
+    let mut wan_netmask_src: &'static str = "none";
+    // Resolver DNS hanya boleh datang dari opsi 6. Tidak ada server publik
+    // cadangan dan tidak ada pewarisan gateway: tanpa opsi 6 nilainya tetap nol
+    // dan upstream proksi tidak dipasang.
+    let mut wan_dns1 = [0u8; 4];
+    let mut wan_dns2 = [0u8; 4];
+    let mut wan_dns_src: &'static str = "none";
     let mut wan_conflict = false;
     let lan_ip = [192, 168, 56, 1];
 
@@ -599,6 +627,8 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         wan_gw = [192, 0, 2, 254];
         wan_netmask = [255, 255, 255, 0];
         wan_source = "dev-fallback";
+        wan_gw_src = "dev-fallback";
+        wan_netmask_src = "dev-fallback";
     }
 
     let our_ip = wan_ip;
@@ -635,7 +665,7 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut router_fib = asl_router_lpm::RoutingEngine::new();
     let mut fib_wan_routes_added = false;
     if wan_up {
-        let _ = router_fib.add_static_route([0, 0, 0, 0], 0, wan_gw, 1, 100);
+        let _ = router_fib.add_static_route([0, 0, 0, 0], 0, wan_gw, asl_router_lpm::IF_WAN, 100);
         if let Some(pfx) = mask_to_prefix(wan_netmask) {
             let net = [
                 wan_ip[0] & wan_netmask[0],
@@ -643,14 +673,14 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 wan_ip[2] & wan_netmask[2],
                 wan_ip[3] & wan_netmask[3],
             ];
-            let _ = router_fib.add_connected_route(net, pfx, 1);
+            let _ = router_fib.add_connected_route(net, pfx, asl_router_lpm::IF_WAN);
         }
         fib_wan_routes_added = true;
     }
     // Connected route LAN hanya bila eth1 benar-benar ada; pada topologi satu
     // NIC bridged tidak ada rute yang boleh dikarang.
     if lan_iface_present {
-        let _ = router_fib.add_connected_route([192, 168, 56, 0], 24, 2);
+        let _ = router_fib.add_connected_route([192, 168, 56, 0], 24, asl_router_lpm::IF_LAN);
     }
     SERIAL.write_str("[R15] FORWARD ENGINE ACTIVE (LPM FIB: rute WAN=");
     SERIAL.write_str(if fib_wan_routes_added {
@@ -702,14 +732,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str(if lan_iface_present { "ada" } else { "absent" });
     SERIAL.write_str(", BELUM ADA JALUR RX — tabel lease ada, pool tidak melayani\n");
 
-    // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, upstream=192.0.2.254)
-    let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new(lan_ip, wan_gw);
-    SERIAL.write_str(
-        "[R21] DNS PROXY SIAP (eth1 :53, cache=16, hosts=8, upstream=192.0.2.254) eth1=",
-    );
+    // [R21]: DNS PROXY & LRU CACHE (RFC 1035 — eth1 :53, cache=16, hosts=8).
+    // Upstream sengaja NOL saat mesin dibuat: resolver hanya boleh berasal dari
+    // opsi 6 lease DHCP (lihat pompa [R28]) atau perintah operator. Membakar
+    // alamat gateway atau templat publik ke sini akan melaporkan DNS yang tidak
+    // pernah ditetapkan jaringan.
+    let mut _dns_proxy = asl_router_netstack::DnsProxyEngine::<16, 8>::new(lan_ip, [0, 0, 0, 0]);
+    SERIAL.write_str("[R21] DNS PROXY SIAP (eth1 :53, cache=16, hosts=8, upstream=belum — menunggu opsi 6 dari lease) eth1=");
     SERIAL.write_str(if lan_iface_present { "ada" } else { "absent" });
     SERIAL.write_str(", BELUM ADA JALUR RX — proxy tidak melayani query\n");
-    SERIAL.write_str("[R21] DNS PROXY UP (eth1 :53, cache=16, upstream=192.0.2.254)\n");
 
     // [R22]: BLOCK STORAGE SUBSYSTEM — virtio-blk PCI (bila ada di hardware),
     // selain itu ATA/IDE PIO nyata pada PIIX4 (VBox tidak meng-emulasi virtio-blk).
@@ -1023,6 +1054,14 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             wan_gw = gw;
             wan_up = true;
             wan_source = "static-journal";
+            wan_gw_src = "static-journal";
+            wan_netmask_src = "static-journal";
+            // Journal lama boleh menyimpan dns_upstream dari templat default
+            // build sebelumnya; nilai itu BUKAN milik operator dan tidak
+            // disalurkan ke proksi. Resolver tetap nol sampai ada jalur tulis.
+            wan_dns1 = [0, 0, 0, 0];
+            wan_dns2 = [0, 0, 0, 0];
+            wan_dns_src = "none";
             wan_static_mode = true;
             netstack.our_ip = ip;
             nat_engine.wan_ip = ip;
@@ -1034,10 +1073,11 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     ip[3] & mask[3],
                 ],
                 pfx,
-                1,
+                asl_router_lpm::IF_WAN,
             );
             if gw != [0, 0, 0, 0] {
-                let _ = router_fib.add_static_route([0, 0, 0, 0], 0, gw, 1, 100);
+                let _ =
+                    router_fib.add_static_route([0, 0, 0, 0], 0, gw, asl_router_lpm::IF_WAN, 100);
             }
             fib_wan_routes_added = true;
             SERIAL.write_str("[R29] WAN statik DARI JOURNAL diterapkan: ");
@@ -1064,11 +1104,50 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     }
 
     // [R12]: NET POLL LOOP & SERIAL CLI
+    //
+    // [R30]: KREDENSIAL & ENTROPI SESI. Blok auth RJCFG01 dipulihkan lebih dulu
+    // supaya akun yang pernah dibuat operator tetap hidup setelah reboot; sesi
+    // TIDAK pernah ikut tersimpan di disk. Seed token AuthStore adalah konstanta
+    // boot yang dapat direproduksi, jadi entropi perangkat keras harus diaduk
+    // sebelum satu token pun dilayani: counter TSC dibaca berkali-kali, dicampur
+    // MAC, LBA jurnal, dan jumlah akun. Ini pencampuran entropi nyata, bukan
+    // klaim CSPRNG tersertifikasi. Tanpa satu pun akun, seluruh jalur API tetap
+    // tertutup (401 no_credentials) sampai operator menjalankan 'auth set' di
+    // konsol serial — tidak ada akun bawaan.
+    api_dispatcher.auth.load_from(&rjcfg_journal.active_config);
+    {
+        let mut bytes = [0u8; 32];
+        bytes[0..8].copy_from_slice(&cpu_tsc().to_le_bytes());
+        bytes[8..16].copy_from_slice(&cpu_tsc().to_le_bytes());
+        bytes[16..22].copy_from_slice(&our_mac);
+        bytes[22..26].copy_from_slice(&(rjcfg01_lba.unwrap_or(0) as u32).to_le_bytes());
+        bytes[26..30].copy_from_slice(&api_dispatcher.auth.user_count().to_le_bytes());
+        bytes[30..32].copy_from_slice(&[0x52, 0x4A]); // penanda blokir silang seed
+        api_dispatcher.auth.add_entropy(&bytes);
+        bytes.fill(0);
+        SERIAL.write_str("[R30] Auth: ");
+        SERIAL.write_u32(api_dispatcher.auth.user_count());
+        SERIAL.write_str(
+            " kredensial dimuat dari RJCFG01, entropi token diaduk dari TSC+MAC+jurnal\n",
+        );
+        if !api_dispatcher.auth.has_users() {
+            SERIAL.write_str("[R30] WebUI TERKUNCI: belum ada kredensial. Jalankan 'auth set <nama> <admin|viewer>' di konsol ini.\n");
+        }
+    }
     SERIAL.write_str("[R12] NET POLL LOOP\n");
     SERIAL.write_str("rinjani-cli> ");
 
     let mut cli_line = [0u8; 256];
     let mut cli_len: usize = 0;
+    // Masukan kata sandi pada konsol serial ('auth set'): byte dikumpulkan dalam
+    // mode tanpa-gema dan tidak pernah masuk ke pemindai perintah. Hanya turunan
+    // PBKDF2 yang disimpan ke jurnal; buffer ini dinolkan segera setelah dipakai.
+    let mut auth_pw = [0u8; asl_router_api::auth::AUTH_PASSWORD_MAX];
+    let mut auth_pw_len: usize = 0;
+    let mut auth_pw_wait = false;
+    let mut auth_pw_user = [0u8; asl_router_persistence::RJCFG_AUTH_USER_MAX];
+    let mut auth_pw_user_len: usize = 0;
+    let mut auth_pw_role = asl_router_persistence::RJCFG_AUTH_ROLE_VIEWER;
     let mut lan_frame = [0u8; 1536];
     let mut lan_reply = [0u8; 1536];
     let mut garp_buf = [0u8; 64];
@@ -1113,6 +1192,32 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     let mut web_report = [0u8; 96];
     let mut web_report_len: usize = 0;
     let mut web_write_ok = false;
+    // Tabel tetangga ARP: diisi dari frame ARP yang benar-benar masuk pada
+    // eth0/eth1. Router tidak punya daftar host yang dikarang sendiri.
+    let mut arp_table = asl_router_netstack::ArpTable::new();
+    let mut web_arp = [asl_router_api::ArpSnapshot {
+        ip: [0; 4],
+        mac: [0; 6],
+        ifindex: 0,
+        reply: false,
+        seen: 0,
+        last_tick: 0,
+    }; asl_router_api::ARP_SNAPSHOT_MAX];
+    // Salinan FIB untuk WebUI + pencacah penerusan. Pencacah hanya naik bila
+    // datapath benar-benar menanyakan keputusan rute ke `router_fib`, jadi
+    // angka nol berarti nol — bukan rute yang belum dilaporkan.
+    let mut web_routes = [asl_router_api::RouteSnapshot {
+        network: [0; 4],
+        prefix_len: 0,
+        ifindex: 0,
+        gateway: [0; 4],
+        metric: 0,
+        kind: 0,
+    }; asl_router_api::ROUTE_SNAPSHOT_MAX];
+    let mut fib_lookups: u32 = 0;
+    let mut fib_forwards: u32 = 0;
+    let mut fib_drops: u32 = 0;
+    let mut fwd_buf = [0u8; 1518];
     // [R30] Aksi daya dari WebUI: kinds & batas waktu eksekusi dipegang kernel,
     // bukan dispatcher, supaya ACK sempat terkirim sebelum mesin mati.
     let mut power_kind: Option<u8> = None;
@@ -1172,6 +1277,61 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                     ccnt += 1;
                 }
             }
+            // Tabel ARP: daur ulang entri kedaluwarsa lalu salin yang masih
+            // segar. Jumlah baris yang ditampilkan WebUI = jumlah tetangga yang
+            // benar-benar teramati pada tick ini.
+            let arp_tick = $now_ms / 100;
+            arp_table.reap(arp_tick);
+            let mut acnt = 0usize;
+            for k in 0..asl_router_netstack::ARP_TABLE_MAX {
+                let e = &arp_table.entries[k];
+                if e.ip == [0, 0, 0, 0] {
+                    continue;
+                }
+                if acnt < web_arp.len() {
+                    web_arp[acnt] = asl_router_api::ArpSnapshot {
+                        ip: e.ip,
+                        mac: e.mac,
+                        ifindex: e.ifindex,
+                        reply: e.last_opcode == asl_router_netstack::ARP_OP_REPLY,
+                        seen: e.seen,
+                        last_tick: e.last_tick,
+                    };
+                    acnt += 1;
+                }
+            }
+            // FIB: salin rute aktif apa adanya. Nomor antarmuka kernel tidak
+            // diterjemahkan di sini supaya tidak ada nama antarmuka yang
+            // dikarang untuk rute yang antarmukanya tidak ada.
+            let mut rcnt = 0usize;
+            for k in 0..asl_router_lpm::MAX_ROUTES {
+                let r = &router_fib.fib.routes[k];
+                if !r.is_active {
+                    continue;
+                }
+                let (ifindex, gateway, kind) = match r.next_hop {
+                    asl_router_lpm::NextHop::Interface(i) => {
+                        (i, [0; 4], asl_router_api::ROUTE_KIND_CONNECTED)
+                    }
+                    asl_router_lpm::NextHop::Gateway {
+                        interface,
+                        next_hop_ip,
+                    } => (interface, next_hop_ip, asl_router_api::ROUTE_KIND_STATIC),
+                    asl_router_lpm::NextHop::Local => (0, [0; 4], asl_router_api::ROUTE_KIND_LOCAL),
+                    asl_router_lpm::NextHop::Drop => (0, [0; 4], asl_router_api::ROUTE_KIND_DROP),
+                };
+                if rcnt < web_routes.len() {
+                    web_routes[rcnt] = asl_router_api::RouteSnapshot {
+                        network: r.network,
+                        prefix_len: r.prefix_len,
+                        ifindex,
+                        gateway,
+                        metric: r.metric,
+                        kind,
+                    };
+                    rcnt += 1;
+                }
+            }
             asl_router_api::WebRuntime {
                 hostname: core::str::from_utf8(&web_host[..hlen]).unwrap_or("rinjani"),
                 uptime_ms: $now_ms,
@@ -1181,6 +1341,11 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 wan_ip,
                 wan_netmask,
                 wan_gw,
+                wan_gw_src,
+                wan_netmask_src,
+                wan_dns1,
+                wan_dns2,
+                wan_dns_src,
                 wan_up,
                 wan_source,
                 wan_mac: our_mac,
@@ -1195,6 +1360,16 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 dhcp_client_active: !wan_static_mode && !dhcp_client.is_halted(),
                 wan_config_static: wan_static_mode,
                 dns_active: false,
+                // Dibaca langsung dari mesin proksi: membuktikan resolver dari
+                // lease benar-benar tersalur, dan jujur menyatakan bahwa jalur
+                // terima query (:53) belum tersambung ke poll loop.
+                dns_upstream: _dns_proxy.upstream_dns,
+                dns_cache_hits: _dns_proxy.cache_hits,
+                dns_cache_misses: _dns_proxy.cache_misses,
+                dns_cache_entries: _dns_proxy.cache_count(),
+                dns_cache_capacity: _dns_proxy.cache.len() as u32,
+                dns_host_count: _dns_proxy.host_count(),
+                dns_host_capacity: _dns_proxy.hosts.len() as u32,
                 mdns_active: false,
                 // Heartbeat nyata: diisi di situs pemindai CLI serial pada setiap
                 // iterasi loop. Literal `true` akan melaporkan CLI hidup meski
@@ -1208,6 +1383,18 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 nat_session_count: nat_engine.active_sessions as u32,
                 nat_capacity: asl_router_nat::MAX_CONNTRACK_ENTRIES as u32,
                 nat_table_full_drops: nat_engine.table_full_drops,
+                arp_list: &web_arp[..acnt],
+                arp_count: arp_table.count(arp_tick) as u32,
+                arp_capacity: asl_router_netstack::ARP_TABLE_MAX as u32,
+                arp_evictions: arp_table.evictions,
+                arp_rejected: arp_table.rejected,
+                arp_timeout_s: (asl_router_netstack::ARP_TIMEOUT_TICKS / 10) as u32,
+                route_list: &web_routes[..rcnt],
+                route_count: router_fib.fib.count as u32,
+                route_capacity: asl_router_lpm::MAX_ROUTES as u32,
+                route_lookups: fib_lookups,
+                route_forwards: fib_forwards,
+                route_drops: fib_drops,
                 // Datapath kernel belum memanggil process_egress/ingress
                 // (lihat [R16]); mengklaim sebaliknya akan memalsukan status.
                 nat_forwarding_wired: false,
@@ -1225,6 +1412,9 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 sessions_active: srv.active_sessions(),
                 requests_served: srv.stats.requests_served,
                 tick_100ms: $now_ms / 100,
+                // Identitas peer diisi server web per permintaan (salinan rt di
+                // jalur dispatch), bukan di sini.
+                peer_ip: [0, 0, 0, 0],
             }
         }};
     }
@@ -1286,6 +1476,15 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 wan_up = true;
                 wan_conflict = false;
                 wan_source = "static-webui";
+                wan_gw_src = "static-webui";
+                wan_netmask_src = "static-webui";
+                // Beralih ke statik MELEPAS resolver lease: tidak boleh ada
+                // angka DHCP yang diwarisi diam-diam lalu dilaporkan sebagai
+                // milik konfigurasi baru.
+                wan_dns1 = [0, 0, 0, 0];
+                wan_dns2 = [0, 0, 0, 0];
+                wan_dns_src = "none";
+                _dns_proxy.upstream_dns = [0, 0, 0, 0];
                 dad_active = true;
                 dad_deadline_ms = now_ms + 1_000;
                 netstack.our_ip = cmd.ip;
@@ -1299,11 +1498,17 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             cmd.ip[3] & cmd.netmask[3],
                         ],
                         pfx,
-                        1,
+                        asl_router_lpm::IF_WAN,
                     );
                 }
                 if cmd.gw != [0, 0, 0, 0] {
-                    let _ = router_fib.add_static_route([0, 0, 0, 0], 0, cmd.gw, 1, 100);
+                    let _ = router_fib.add_static_route(
+                        [0, 0, 0, 0],
+                        0,
+                        cmd.gw,
+                        asl_router_lpm::IF_WAN,
+                        100,
+                    );
                 }
                 fib_wan_routes_added = true;
                 // DAD (RFC 5227) dijalankan seperti 'wan static' pada CLI.
@@ -1333,6 +1538,14 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                 wan_up = false;
                 wan_conflict = false;
                 wan_source = "none";
+                wan_gw_src = "none";
+                wan_netmask_src = "none";
+                wan_dns1 = [0, 0, 0, 0];
+                wan_dns2 = [0, 0, 0, 0];
+                wan_dns_src = "none";
+                // Kembali ke DHCP berarti semua parameter lease belum diketahui:
+                // upstream proksi ikut dinolkan sampai opsi 6 benar-benar tiba.
+                _dns_proxy.upstream_dns = [0, 0, 0, 0];
                 dad_active = false;
                 netstack.our_ip = [0, 0, 0, 0];
                 nat_engine.wan_ip = [0, 0, 0, 0];
@@ -1395,6 +1608,25 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
             SERIAL.write_str("\n");
         }
 
+        // [R31] KREDUNSIAL BERUBAH LEWAT WEBUI: dispatcher sudah menerapkan
+        // perubahan ke AuthStore tetapi tidak punya akses blok, jadi kernel di
+        // sini yang menyalin blok auth ke RJCFG01. Nasib persistensi dilaporkan
+        // apa adanya ke `/api/v1/writes/last`, tidak diasumsikan berhasil.
+        if api_dispatcher.auth_dirty {
+            let note = auth_persist_journal(
+                &mut api_dispatcher,
+                &mut rjcfg_journal,
+                &mut ata_dev,
+                rjcfg01_lba,
+                block_is_ata,
+            );
+            web_write_ok = note == "tertulis dan terbaca kembali pada RJCFG01";
+            web_report_len = fill_report(&mut web_report, &["kredensial: ", note]);
+            SERIAL.write_str("[R31] Kredensial WebUI dipersist: ");
+            SERIAL.write_str(note);
+            SERIAL.write_str("\n");
+        }
+
         // [R30] JALUR DAYA WEBUI: API sudah menjaga arming 2 langkah
         // (handle_power). Kernel hanya mengeksekusi aksi yang lolos penjaga itu,
         // POWER_EXEC_MS setelah ACK agar browser menerima respons lebih dulu,
@@ -1440,11 +1672,38 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
         if let Some(eth1) = eth1.as_mut() {
             if eth1.ready {
                 let mut serviced = 0u32;
+                // Tick tabel ARP dari PIT nyata, satuan sama dengan WebRuntime.
+                let lan_tick = pit.elapsed_ms() / 100;
                 while serviced < 8 {
                     match eth1.poll_rx(&mut lan_frame) {
                         Some(n) => {
                             serviced += 1;
                             lan_rx_packets += 1;
+                            // Belajar tetangga dari frame ARP yang masuk di LAN.
+                            if let Ok((eth, arp_bytes)) =
+                                asl_router_netstack::parse_ethernet_header(&lan_frame[..n])
+                            {
+                                if eth.ethertype == asl_router_netstack::ETHERTYPE_ARP {
+                                    if let Ok(a) = asl_router_netstack::parse_arp_packet(arp_bytes)
+                                    {
+                                        if arp_table.observe(
+                                            &a,
+                                            asl_router_netstack::ARP_IF_LAN,
+                                            lan_tick,
+                                            lan_ip_real,
+                                            lan_mac,
+                                        ) {
+                                            SERIAL.write_str("[R32] ARP eth1: tetangga baru ");
+                                            write_ip(a.sender_ip);
+                                            SERIAL.write_str(" mac=");
+                                            write_mac_hex(a.sender_mac);
+                                            SERIAL.write_str(" opcode=");
+                                            SERIAL.write_u32(a.opcode as u32);
+                                            SERIAL.write_str("\n");
+                                        }
+                                    }
+                                }
+                            }
                             match netstack_lan.process_packet(&lan_frame[..n], &mut lan_reply) {
                                 Ok(Some(rlen)) => {
                                     if eth1.transmit(&lan_reply[..rlen]).is_ok() {
@@ -1521,27 +1780,32 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                 dhcp_next_tx_ms = now_ms + 4_000;
                             }
                         }
-                        asl_router_netstack::DhcpClientState::Requesting {
-                            xid,
-                            offered_ip,
-                            server_ip,
-                            ..
-                        } => {
+                        asl_router_netstack::DhcpClientState::Requesting { xid, offer, .. } => {
                             if !dhcp_request_tx {
                                 dhcp_request_tx = true;
                                 if let Ok(n) = asl_router_netstack::build_dhcp_request(
                                     our_mac,
-                                    offered_ip,
-                                    server_ip,
+                                    offer.ip,
+                                    offer.server_ip,
                                     xid,
                                     &mut dhcp_buf,
                                 ) {
                                     if eth0.transmit(&dhcp_buf[..n]).is_ok() {
                                         wan_tx_packets += 1;
                                         SERIAL.write_str("[R28] DHCP REQUEST TX ip_diminta=");
-                                        write_ip(offered_ip);
+                                        write_ip(offer.ip);
                                         SERIAL.write_str(" server=");
-                                        write_ip(server_ip);
+                                        write_ip(offer.server_ip);
+                                        SERIAL.write_str(" opsi3_offer=");
+                                        SERIAL.write_str(match offer.router {
+                                            Some(_) => "ada",
+                                            None => "tidak",
+                                        });
+                                        SERIAL.write_str(" opsi6_offer=");
+                                        SERIAL.write_str(match offer.dns1 {
+                                            Some(_) => "ada",
+                                            None => "tidak",
+                                        });
                                         SERIAL.write_str("\n");
                                     }
                                 }
@@ -1593,25 +1857,53 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         if let Ok(Some(st)) = dhcp_client.handle_incoming_packet(&wan_frame[..n]) {
                             match st {
                                 asl_router_netstack::DhcpClientState::Requesting {
-                                    offered_ip,
-                                    server_ip,
-                                    ..
+                                    offer, ..
                                 } => {
                                     SERIAL.write_str("[R28] DHCP OFFER dari ");
-                                    write_ip(server_ip);
+                                    write_ip(offer.server_ip);
                                     SERIAL.write_str(" ip=");
-                                    write_ip(offered_ip);
+                                    write_ip(offer.ip);
+                                    SERIAL.write_str(" opsi1=");
+                                    SERIAL.write_str(match offer.netmask {
+                                        Some(_) => "ada",
+                                        None => "tidak",
+                                    });
+                                    SERIAL.write_str(" opsi3=");
+                                    SERIAL.write_str(match offer.router {
+                                        Some(_) => "ada",
+                                        None => "tidak",
+                                    });
+                                    SERIAL.write_str(" opsi6=");
+                                    SERIAL.write_str(match offer.dns1 {
+                                        Some(_) => "ada",
+                                        None => "tidak",
+                                    });
                                     SERIAL.write_str(" — REQUEST akan dikirim\n");
                                 }
                                 asl_router_netstack::DhcpClientState::Bound {
                                     ip,
                                     netmask,
+                                    netmask_src,
                                     gateway,
+                                    gateway_src,
+                                    dns1,
+                                    dns2,
+                                    dns_src,
                                     lease_time,
                                 } => {
                                     wan_ip = ip;
                                     wan_netmask = netmask;
+                                    wan_netmask_src = netmask_src.label();
                                     wan_gw = gateway;
+                                    wan_gw_src = gateway_src.label();
+                                    wan_dns1 = dns1.unwrap_or([0, 0, 0, 0]);
+                                    wan_dns2 = dns2.unwrap_or([0, 0, 0, 0]);
+                                    wan_dns_src = dns_src.label();
+                                    // Salurkan resolver ke MESIN proksi, bukan
+                                    // hanya menyimpannya. Tanpa opsi 6 upstream
+                                    // dinolkan: proksi tidak boleh meneruskan ke
+                                    // alamat yang tidak pernah ditetapkan jaringan.
+                                    _dns_proxy.upstream_dns = wan_dns1;
                                     wan_up = true;
                                     wan_source = "dhcp";
                                     dad_active = false;
@@ -1625,14 +1917,18 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                                 ip[2] & netmask[2],
                                                 ip[3] & netmask[3],
                                             ];
-                                            let _ = router_fib.add_connected_route(net, pfx, 1);
+                                            let _ = router_fib.add_connected_route(
+                                                net,
+                                                pfx,
+                                                asl_router_lpm::IF_WAN,
+                                            );
                                         }
                                         if gateway != [0, 0, 0, 0] {
                                             let _ = router_fib.add_static_route(
                                                 [0, 0, 0, 0],
                                                 0,
                                                 gateway,
-                                                1,
+                                                asl_router_lpm::IF_WAN,
                                                 100,
                                             );
                                         }
@@ -1642,11 +1938,49 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                     write_ip(ip);
                                     SERIAL.write_str("/");
                                     SERIAL.write_u32(mask_to_prefix(netmask).unwrap_or(0) as u32);
-                                    SERIAL.write_str(" gw=");
-                                    write_ip(gateway);
+                                    SERIAL.write_str(" (netmask sumber: ");
+                                    SERIAL.write_str(netmask_src.label());
+                                    SERIAL.write_str(") gw=");
+                                    if gateway == [0, 0, 0, 0] {
+                                        SERIAL.write_str("none — tanpa rute default");
+                                    } else {
+                                        write_ip(gateway);
+                                        SERIAL.write_str(" (sumber: ");
+                                        SERIAL.write_str(gateway_src.label());
+                                        SERIAL.write_str(")");
+                                    }
+                                    SERIAL.write_str(" dns=");
+                                    match dns1.filter(|d| *d != [0, 0, 0, 0]) {
+                                        Some(d) => {
+                                            write_ip(d);
+                                            SERIAL.write_str(" (sumber: ");
+                                            SERIAL.write_str(dns_src.label());
+                                            SERIAL.write_str(")");
+                                            if let Some(d2) = dns2.filter(|x| *x != [0, 0, 0, 0]) {
+                                                SERIAL.write_str("+1 ");
+                                                write_ip(d2);
+                                            }
+                                        }
+                                        None => {
+                                            SERIAL.write_str("none — server tidak mengirim opsi 6");
+                                        }
+                                    }
                                     SERIAL.write_str(" lease=");
                                     SERIAL.write_u32(lease_time);
                                     SERIAL.write_str(" s — WebUI siap pada alamat WAN\n");
+                                    // Bukti penyaluran ke MESIN, bukan hanya ke
+                                    // variabel runtime.
+                                    SERIAL.write_str("[R21] DNS PROXY upstream=");
+                                    if wan_dns1 == [0, 0, 0, 0] {
+                                        SERIAL.write_str(
+                                            "0.0.0.0 (lease tidak membawa opsi 6; tidak ada penebakan)\n",
+                                        );
+                                    } else {
+                                        write_ip(_dns_proxy.upstream_dns);
+                                        SERIAL.write_str(" (sumber: ");
+                                        SERIAL.write_str(wan_dns_src);
+                                        SERIAL.write_str(")\n");
+                                    }
                                 }
                                 asl_router_netstack::DhcpClientState::HaltedNoOffer => {
                                     // RFC 2131: NAK berarti alamat yang diminta tidak
@@ -1706,24 +2040,43 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         }
                     }
 
-                    // (3c) DAD: ARP Reply untuk alamat kita dari MAC lain = konflik.
-                    if wan_ip != [0, 0, 0, 0] && !wan_conflict {
-                        if let Ok((eth, arp_bytes)) =
-                            asl_router_netstack::parse_ethernet_header(&wan_frame[..n])
-                        {
-                            if eth.ethertype == asl_router_netstack::ETHERTYPE_ARP {
-                                if let Ok(a) = asl_router_netstack::parse_arp_packet(arp_bytes) {
-                                    if a.opcode == 2
-                                        && a.sender_ip == wan_ip
-                                        && a.sender_mac != our_mac
-                                    {
-                                        wan_conflict = true;
-                                        SERIAL.write_str("[R28] WARNING DAD: ");
-                                        write_ip(wan_ip);
-                                        SERIAL.write_str(" sudah dipakai host lain mac=");
-                                        write_mac_hex(a.sender_mac);
-                                        SERIAL.write_str(" —WebUI mungkin tidak tercapai\n");
-                                    }
+                    // (3c) ARP eth0: tabel tetangga belajar dari SETIAP frame
+                    // ARP yang masuk (bukan hanya yang menargetkan kita), lalu
+                    // reply untuk alamat kita tetap diperiksa sebagai konflik
+                    // DAD.
+                    if let Ok((eth, arp_bytes)) =
+                        asl_router_netstack::parse_ethernet_header(&wan_frame[..n])
+                    {
+                        if eth.ethertype == asl_router_netstack::ETHERTYPE_ARP {
+                            if let Ok(a) = asl_router_netstack::parse_arp_packet(arp_bytes) {
+                                let fresh = arp_table.observe(
+                                    &a,
+                                    asl_router_netstack::ARP_IF_WAN,
+                                    now_ms / 100,
+                                    wan_ip,
+                                    our_mac,
+                                );
+                                if fresh {
+                                    SERIAL.write_str("[R32] ARP eth0: tetangga baru ");
+                                    write_ip(a.sender_ip);
+                                    SERIAL.write_str(" mac=");
+                                    write_mac_hex(a.sender_mac);
+                                    SERIAL.write_str(" opcode=");
+                                    SERIAL.write_u32(a.opcode as u32);
+                                    SERIAL.write_str("\n");
+                                }
+                                if wan_ip != [0, 0, 0, 0]
+                                    && !wan_conflict
+                                    && a.opcode == 2
+                                    && a.sender_ip == wan_ip
+                                    && a.sender_mac != our_mac
+                                {
+                                    wan_conflict = true;
+                                    SERIAL.write_str("[R28] WARNING DAD: ");
+                                    write_ip(wan_ip);
+                                    SERIAL.write_str(" sudah dipakai host lain mac=");
+                                    write_mac_hex(a.sender_mac);
+                                    SERIAL.write_str(" —WebUI mungkin tidak tercapai\n");
                                 }
                             }
                         }
@@ -1746,6 +2099,82 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             }
                             Ok(None) => {}
                             Err(_) => drop_packets += 1,
+                        }
+                    }
+
+                    // (3e) Transit L3: paket IPv4 yang bukan ditujukan ke alamat
+                    // kita ditanyakan ke FIB. Keputusan selalu dicatat, dan
+                    // paket hanya benar-benar dikirim keluar bila rute menunjuk
+                    // eth1 yang nyata-nyata ada, TTL masih sisa, dan MAC
+                    // tuannya sudah dikenal dari tabel tetangga.
+                    if wan_ip != [0, 0, 0, 0] {
+                        if let Ok((eth, ip_bytes)) =
+                            asl_router_netstack::parse_ethernet_header(&wan_frame[..n])
+                        {
+                            if eth.ethertype == asl_router_netstack::ETHERTYPE_IPV4 {
+                                if let Ok((ip, _body)) =
+                                    asl_router_netstack::parse_ipv4_header(ip_bytes)
+                                {
+                                    let bukan_milik_kita = ip.dst_ip != wan_ip
+                                        && ip.dst_ip != [255, 255, 255, 255]
+                                        && ip.dst_ip[0] != 224
+                                        && ip.dst_ip[0] != 239;
+                                    if bukan_milik_kita {
+                                        fib_lookups += 1;
+                                        let hop = router_fib.route_packet(ip.dst_ip);
+                                        let (out_if, nexthop_ip) = match hop {
+                                            asl_router_lpm::NextHop::Gateway {
+                                                interface,
+                                                next_hop_ip,
+                                            } => (interface, next_hop_ip),
+                                            asl_router_lpm::NextHop::Interface(interface) => {
+                                                (interface, ip.dst_ip)
+                                            }
+                                            _ => (0, [0, 0, 0, 0]),
+                                        };
+                                        let via_lan = out_if == asl_router_lpm::IF_LAN;
+                                        let lan_ready =
+                                            eth1.as_ref().map(|e| e.ready).unwrap_or(false);
+                                        let nmac = if via_lan {
+                                            arp_table.resolve(nexthop_ip, now_ms / 100)
+                                        } else {
+                                            None
+                                        };
+                                        let sent = match nmac {
+                                            Some(mac) if lan_ready && ip.ttl > 1 => {
+                                                match asl_router_netstack::build_ipv4_forward_frame(
+                                                    &ip,
+                                                    ip_bytes,
+                                                    mac,
+                                                    lan_mac,
+                                                    &mut fwd_buf,
+                                                ) {
+                                                    Ok(fl) => match eth1.as_mut() {
+                                                        Some(e1) => {
+                                                            e1.transmit(&fwd_buf[..fl]).is_ok()
+                                                        }
+                                                        None => false,
+                                                    },
+                                                    Err(_) => false,
+                                                }
+                                            }
+                                            _ => false,
+                                        };
+                                        if sent {
+                                            fib_forwards += 1;
+                                            SERIAL.write_str("[R33] FIB teruskan ");
+                                            write_ip(ip.dst_ip);
+                                            SERIAL.write_str(" via eth1 ttl=");
+                                            SERIAL.write_u32((ip.ttl - 1) as u32);
+                                            SERIAL.write_str(" fwd=");
+                                            SERIAL.write_u32(fib_forwards);
+                                            SERIAL.write_str("\n");
+                                        } else {
+                                            fib_drops += 1;
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
@@ -1791,7 +2220,90 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
 
         // SERIAL CLI INTERACTIVE COMMAND SCANNER
         serial_cli_beat_ms = pit.elapsed_ms();
+        // Aduk entropi token secara berkala: satu pembacaan TSC tiap 1024 tick
+        // membuat pemerahan token berikutnya tidak bergantung pada seed boot saja.
+        if loop_count & 1023 == 0 {
+            let mut t = cpu_tsc().to_le_bytes();
+            api_dispatcher.auth.add_entropy(&t);
+            t.fill(0);
+        }
+        let mut cli_byte: Option<u8> = None;
         if let Some(ch) = SERIAL.read_byte() {
+            if auth_pw_wait {
+                // Mode kata sandi: byte tidak digemakan dan tidak diserahkan ke
+                // pemindai perintah, sehingga sandi tidak pernah menjadi perintah.
+                if ch == b'\r' || ch == b'\n' {
+                    auth_pw_wait = false;
+                    SERIAL.write_str("\r\n");
+                    let name =
+                        core::str::from_utf8(&auth_pw_user[..auth_pw_user_len]).unwrap_or("");
+                    let role = asl_router_api::auth::Role::from_code(auth_pw_role);
+                    if auth_pw_len == 0 {
+                        auth_pw_len = 0;
+                        SERIAL.write_str(
+                            "% auth set dibatalkan (kata sandi kosong), tidak ada akun dibuat\r\n",
+                        );
+                    } else if auth_pw_len < asl_router_api::auth::AUTH_PASSWORD_MIN {
+                        auth_pw.fill(0);
+                        auth_pw_len = 0;
+                        SERIAL.write_str("% auth set ditolak: kata sandi minimal ");
+                        SERIAL.write_u32(asl_router_api::auth::AUTH_PASSWORD_MIN as u32);
+                        SERIAL.write_str(" karakter\r\n");
+                    } else {
+                        let rounds = asl_router_api::auth::AUTH_DEFAULT_ROUNDS;
+                        let salt = api_dispatcher.auth.new_salt();
+                        let hash = asl_router_api::auth::AuthStore::derive(
+                            &auth_pw[..auth_pw_len],
+                            &salt,
+                            rounds,
+                        );
+                        auth_pw.fill(0);
+                        auth_pw_len = 0;
+                        match (role, name) {
+                            (Some(role), nm) if !nm.is_empty() => {
+                                match api_dispatcher.auth.set_user(nm, role, &salt, rounds, &hash) {
+                                    Ok(()) => {
+                                        let note = auth_persist_journal(
+                                            &mut api_dispatcher,
+                                            &mut rjcfg_journal,
+                                            &mut ata_dev,
+                                            rjcfg01_lba,
+                                            block_is_ata,
+                                        );
+                                        SERIAL.write_str("% auth: akun '");
+                                        SERIAL.write_str(nm);
+                                        SERIAL.write_str("' role ");
+                                        SERIAL.write_str(role.name());
+                                        SERIAL.write_str(", iterasi PBKDF2 ");
+                                        SERIAL.write_u32(rounds);
+                                        SERIAL.write_str(", persistensi: ");
+                                        SERIAL.write_str(note);
+                                        SERIAL.write_str("\r\n");
+                                    }
+                                    Err(why) => {
+                                        SERIAL.write_str("% auth set ditolak: ");
+                                        SERIAL.write_str(why);
+                                        SERIAL.write_str("\r\n");
+                                    }
+                                }
+                            }
+                            _ => SERIAL.write_str("% auth set ditolak: nama/role tidak sah\r\n"),
+                        }
+                    }
+                    auth_pw_user_len = 0;
+                } else if ch == 8 || ch == 127 {
+                    if auth_pw_len > 0 {
+                        auth_pw_len -= 1;
+                    }
+                } else if (32..127).contains(&ch) && auth_pw_len < auth_pw.len() {
+                    auth_pw[auth_pw_len] = ch;
+                    auth_pw_len += 1;
+                }
+            } else {
+                cli_byte = Some(ch);
+            }
+        }
+        if let Some(ch) = cli_byte {
             if ch == b'\r' || ch == b'\n' {
                 SERIAL.write_str("\r\n");
                 if cli_len > 0 {
@@ -1822,6 +2334,12 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         );
                         SERIAL.write_str("  config show      - Display RJCFG01 active configuration and slot\r\n");
                         SERIAL.write_str("  config save      - Persist configuration via atomic A/B slot switch\r\n");
+                        SERIAL.write_str("  auth list        - Tampilkan kredensial WebUI (nama/role/iterasi, tanpa sandi)\r\n");
+                        SERIAL.write_str(
+                            "  auth set <n> <role> - Buat/ganti akun; sandi diminta tanpa gema\r\n",
+                        );
+                        SERIAL.write_str("  auth del <n>   - Hapus akun + cabut sesinya\r\n");
+                        SERIAL.write_str("  auth revoke    - Cabut semua sesi aktif\r\n");
                         SERIAL.write_str(
                             "  hostname set <s> - Update and persist hostname to RJCFG01\r\n",
                         );
@@ -2052,8 +2570,39 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             SERIAL.write_str("\r\n");
                         }
                         SERIAL.write_str("  gateway : ");
-                        write_ip(wan_gw);
-                        SERIAL.write_str("\r\n");
+                        if wan_gw == [0, 0, 0, 0] {
+                            SERIAL.write_str("none");
+                        } else {
+                            write_ip(wan_gw);
+                        }
+                        SERIAL.write_str("  (sumber: ");
+                        SERIAL.write_str(wan_gw_src);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  netmask : ");
+                        if wan_netmask == [0, 0, 0, 0] {
+                            SERIAL.write_str("none");
+                        } else {
+                            write_ip(wan_netmask);
+                        }
+                        SERIAL.write_str("  (sumber: ");
+                        SERIAL.write_str(wan_netmask_src);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  dns     : ");
+                        if wan_dns1 == [0, 0, 0, 0] {
+                            SERIAL.write_str("none");
+                        } else {
+                            write_ip(wan_dns1);
+                            if wan_dns2 != [0, 0, 0, 0] {
+                                SERIAL.write_str(" / ");
+                                write_ip(wan_dns2);
+                            }
+                        }
+                        SERIAL.write_str("  (sumber: ");
+                        SERIAL.write_str(wan_dns_src);
+                        SERIAL.write_str(")\r\n");
+                        SERIAL.write_str("  proxy   : upstream=");
+                        write_ip(_dns_proxy.upstream_dns);
+                        SERIAL.write_str(" (dibaca dari mesin DnsProxyEngine)\r\n");
                         SERIAL.write_str("  source  : ");
                         SERIAL.write_str(wan_source);
                         SERIAL.write_str("\r\n");
@@ -2125,6 +2674,14 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                             wan_up = true;
                             wan_conflict = false;
                             wan_source = "static-dad";
+                            wan_gw_src = "static-serial";
+                            wan_netmask_src = "static-serial";
+                            // Statik berarti lease tidak berlaku: resolver lama
+                            // dilepas, bukan diwarisi.
+                            wan_dns1 = [0, 0, 0, 0];
+                            wan_dns2 = [0, 0, 0, 0];
+                            wan_dns_src = "none";
+                            _dns_proxy.upstream_dns = [0, 0, 0, 0];
                             netstack.our_ip = ip;
                             nat_engine.wan_ip = ip;
                             let _ = router_fib.add_connected_route(
@@ -2135,10 +2692,16 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                                     ip[3] & mask[3],
                                 ],
                                 pfx,
-                                1,
+                                asl_router_lpm::IF_WAN,
                             );
                             if gw != [0, 0, 0, 0] {
-                                let _ = router_fib.add_static_route([0, 0, 0, 0], 0, gw, 1, 100);
+                                let _ = router_fib.add_static_route(
+                                    [0, 0, 0, 0],
+                                    0,
+                                    gw,
+                                    asl_router_lpm::IF_WAN,
+                                    100,
+                                );
                             }
                             fib_wan_routes_added = true;
                             dad_active = true;
@@ -2247,6 +2810,107 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_str("\r\n");
                         SERIAL.write_str("  LAN Gateway : 192.168.56.1/24\r\n");
                         SERIAL.write_str("  DHCP Pool   : 192.168.56.100 - 192.168.56.150\r\n");
+                    } else if cmd.starts_with(b"auth list") || cmd.starts_with(b"auth status") {
+                        let n = api_dispatcher.auth.user_count() as usize;
+                        SERIAL.write_str("Kredensial WebUI (blok auth RJCFG01):\r\n");
+                        if n == 0 {
+                            SERIAL.write_str(
+                                "  (BELUM ADA — semua jalur API menjawab 401 no_credentials)\r\n",
+                            );
+                        }
+                        let mut i = 0usize;
+                        while i < n {
+                            let (nb, nl) = api_dispatcher.auth.user_name(i);
+                            let nm = core::str::from_utf8(&nb[..nl]).unwrap_or("?");
+                            let role = api_dispatcher
+                                .auth
+                                .user_role(i)
+                                .unwrap_or(asl_router_api::auth::Role::Viewer);
+                            SERIAL.write_str("  ");
+                            SERIAL.write_str(nm);
+                            SERIAL.write_str("  role=");
+                            SERIAL.write_str(role.name());
+                            SERIAL.write_str("  iterasi=");
+                            SERIAL.write_u32(api_dispatcher.auth.user_rounds(i));
+                            SERIAL.write_str("\r\n");
+                            i += 1;
+                        }
+                        SERIAL.write_str("  sesi_aktif=");
+                        SERIAL.write_u32(api_dispatcher.auth.sessions_active());
+                        SERIAL.write_str(" login_ok=");
+                        SERIAL.write_u32(api_dispatcher.auth.logins_ok);
+                        SERIAL.write_str(" login_gagal=");
+                        SERIAL.write_u32(api_dispatcher.auth.logins_bad);
+                        SERIAL.write_str(" ditolak_anon=");
+                        SERIAL.write_u32(api_dispatcher.auth.rejects_anon);
+                        SERIAL.write_str(" ditolak_token=");
+                        SERIAL.write_u32(api_dispatcher.auth.rejects_bad_token);
+                        SERIAL.write_str(" kedaluwarsa=");
+                        SERIAL.write_u32(api_dispatcher.auth.sessions_expired);
+                        SERIAL.write_str(" dicabut=");
+                        SERIAL.write_u32(api_dispatcher.auth.revocations);
+                        SERIAL.write_str("\r\n");
+                        SERIAL.write_str(
+                            "  (salt, hash, dan kata sandi tidak pernah ditampilkan)\r\n",
+                        );
+                    } else if cmd.starts_with(b"auth set ") {
+                        // "<nama> <role>"; role tanpa nama dibaca viewer (paling
+                        // kecil hati). Sandi diminta pada baris berikutnya tanpa
+                        // gema, jadi ia tidak pernah menjadi bagian dari perintah.
+                        let rest = &cmd[9..];
+                        let sp = rest.iter().position(|b| *b == b' ');
+                        let (uname, rtxt) = match sp {
+                            Some(p) => (&rest[..p], &rest[(p + 1)..]),
+                            None => (rest, b"viewer".as_slice()),
+                        };
+                        let code = if rtxt == b"admin" {
+                            asl_router_persistence::RJCFG_AUTH_ROLE_ADMIN
+                        } else if rtxt == b"viewer" {
+                            asl_router_persistence::RJCFG_AUTH_ROLE_VIEWER
+                        } else {
+                            0xFF
+                        };
+                        let nama_ok = core::str::from_utf8(uname)
+                            .map(asl_router_persistence::auth_user_ok)
+                            .unwrap_or(false);
+                        if !nama_ok || uname.len() > auth_pw_user.len() {
+                            SERIAL
+                                .write_str("% auth set: nama harus 3-16 karakter [a-z0-9._-]\r\n");
+                        } else if code == 0xFF {
+                            SERIAL.write_str("% auth set: role harus 'admin' atau 'viewer'\r\n");
+                        } else {
+                            auth_pw_user_len = uname.len();
+                            auth_pw_user[..uname.len()].copy_from_slice(uname);
+                            auth_pw_role = code;
+                            auth_pw_len = 0;
+                            auth_pw_wait = true;
+                            SERIAL.write_str(
+                                "Kata sandi (10-64 karakter, tidak tampil; Enter kosong membatalkan): ",
+                            );
+                        }
+                    } else if cmd.starts_with(b"auth del ") {
+                        let nm = core::str::from_utf8(&cmd[9..]).unwrap_or("");
+                        if api_dispatcher.auth.remove_user(nm) {
+                            let note = auth_persist_journal(
+                                &mut api_dispatcher,
+                                &mut rjcfg_journal,
+                                &mut ata_dev,
+                                rjcfg01_lba,
+                                block_is_ata,
+                            );
+                            SERIAL.write_str("% auth: akun '");
+                            SERIAL.write_str(nm);
+                            SERIAL.write_str("' dihapus beserta sesinya, persistensi: ");
+                            SERIAL.write_str(note);
+                            SERIAL.write_str("\r\n");
+                        } else {
+                            SERIAL.write_str("% auth del: akun tidak dikenal\r\n");
+                        }
+                    } else if cmd == b"auth revoke" {
+                        let n = api_dispatcher.auth.revoke_all();
+                        SERIAL.write_str("% auth: ");
+                        SERIAL.write_u32(n);
+                        SERIAL.write_str(" sesi aktif dicabut (klien wajib masuk ulang)\r\n");
                     } else if cmd == b"config save" {
                         let active = rjcfg_journal.active_config;
                         let res = rjcfg_journal.commit_update(active);
@@ -2360,7 +3024,13 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
                         SERIAL.write_u32(_dns_proxy.cache_hits);
                         SERIAL.write_str(" misses=");
                         SERIAL.write_u32(_dns_proxy.cache_misses);
-                        SERIAL.write_str("\r\n");
+                        // Upstream dibaca dari MESIN, bukan dari salinan runtime,
+                        // supaya baris ini membuktikan lease benar-benar tersalur.
+                        SERIAL.write_str(" upstream=");
+                        write_ip(_dns_proxy.upstream_dns);
+                        SERIAL.write_str(" (sumber: ");
+                        SERIAL.write_str(wan_dns_src);
+                        SERIAL.write_str(")\r\n");
                     } else if cmd == b"dns hosts show" || cmd == b"show dns hosts" {
                         SERIAL.write_str("Static DNS Hosts (tabel _dns_proxy.hosts):\r\n");
                         let mut hshown = 0u32;
@@ -2623,6 +3293,47 @@ fn install_print_failure(f: &asl_router_installer::InstallFailure) {
 // -----------------------------------------------------------------------------
 // [R26] RJCFG01 PERSISTENCE: tulis journal ke partisi di disk nyata + baca-balik
 // -----------------------------------------------------------------------------
+
+/// Simpan tabel kredensial ke jurnal RJCFG01: blok auth salin ke payload aktif,
+/// commit switch A/B, lalu tulis + baca kembali ke disk bila device ATA dan
+/// partisi RJCFG01 nyata ada. Nilai kembali adalah keterangan persistensi apa
+/// adanya — "hanya RAM" harus tetap tertulis begitu, bukan dinaikkan menjadi
+/// klaim tertulis.
+#[cfg(target_os = "none")]
+fn auth_persist_journal(
+    api: &mut asl_router_api::ApiDispatcher,
+    journal: &mut asl_router_persistence::RjcfgJournal,
+    ata_dev: &mut asl_router_drivers_ata::AtaDevice,
+    base: Option<u64>,
+    block_is_ata: bool,
+) -> &'static str {
+    // Bendera dipadamkan di awal: jalur ini adalah pemilik tunggal tugas
+    // persistensi kredensial, baik dari WebUI maupun dari konsol serial.
+    api.auth_dirty = false;
+    let mut cfg = journal.active_config;
+    api.auth.save_to(&mut cfg);
+    journal.active_config = cfg;
+    let active = journal.active_config;
+    match journal.commit_update(active) {
+        Ok(slot) => {
+            if !block_is_ata {
+                "commit di RAM, device block bukan ATA"
+            } else {
+                match base {
+                    Some(b) => {
+                        if rjcfg_write_and_verify(ata_dev, journal, b, slot) {
+                            "tertulis dan terbaca kembali pada RJCFG01"
+                        } else {
+                            "GAGAL readback RJCFG01, kredensial hanya di RAM"
+                        }
+                    }
+                    None => "commit di RAM, partisi RJCFG01 tidak ada",
+                }
+            }
+        }
+        Err(e) => e,
+    }
+}
 
 /// Tulis slot aktif lalu header (header LAST, atomic-switch style) ke partisi RJCFG01
 /// via PIO ATA nyata, kemudian baca-balik dan verifikasi CRC header + slot.

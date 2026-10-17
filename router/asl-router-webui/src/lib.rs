@@ -17,7 +17,8 @@ use asl_router_netstack::{
     TCP_FLAG_RST, TCP_FLAG_SYN, TCP_MAX_PAYLOAD,
 };
 use asl_router_webcore::{
-    response_status, serve_static, HttpMethod, HttpRequest, HttpResponseBuilder, HttpStatus,
+    declared_body_len, response_status, serve_static, HttpMethod, HttpRequest, HttpResponseBuilder,
+    HttpStatus,
 };
 
 pub fn dispatch_static(
@@ -631,16 +632,36 @@ impl TcpWebServer {
         let parsed = HttpRequest::parse(&self.req[slot][..raw_len]);
         let out = &mut self.resp[slot];
         match parsed {
-            Err(_) => {
-                let b = HttpResponseBuilder::new(out, HttpStatus::BadRequest)
-                    .with_content_type("application/json");
-                if let Ok(n) = b.finish_with_body(b"{\"ok\":false,\"error\":\"bad_request\"}") {
+            Err(err) => {
+                // Kode kesalahan ditentukan parser framing (400/413/501), bukan
+                // diasumsikan 400. Respons hanya memuat kode protokol umum;
+                // `err.reason` hanya tercatat di konsol, tidak dikirim ke jaringan.
+                let code: &'static str = match err.status {
+                    HttpStatus::PayloadTooLarge => "body_too_large",
+                    HttpStatus::NotImplemented => "transfer_encoding_unsupported",
+                    _ => "bad_request",
+                };
+                let body = match code {
+                    "body_too_large" => b"{\"ok\":false,\"error\":\"body_too_large\"}".as_slice(),
+                    "transfer_encoding_unsupported" => {
+                        b"{\"ok\":false,\"error\":\"transfer_encoding_unsupported\"}".as_slice()
+                    }
+                    _ => b"{\"ok\":false,\"error\":\"bad_request\"}".as_slice(),
+                };
+                let b =
+                    HttpResponseBuilder::new(out, err.status).with_content_type("application/json");
+                if let Ok(n) = b.finish_with_body(body) {
+                    let st = response_status(&out[..n]);
                     s.resp_len = n;
-                    self.stats.responses_400 += 1;
-                    self.last_status = 400;
+                    self.last_status = st;
+                    if st == 400 {
+                        self.stats.responses_400 += 1;
+                    }
                 }
                 s.responded = true;
-                log("[R28] HTTP 400 (request tidak valid secara sintaksis)\r\n");
+                log("[R28] HTTP permintaan ditolak sebelum dispatch: ");
+                log(err.reason);
+                log("\r\n");
             }
             Ok(req) => {
                 let is_head = req.method == HttpMethod::Head;
@@ -648,10 +669,18 @@ impl TcpWebServer {
                 let pl = req.path.len().min(64);
                 self.last_path[..pl].copy_from_slice(&req.path.as_bytes()[..pl]);
                 self.last_path_len = pl as u8;
-                // POST hanya diterima untuk sumber daya antarmuka dan jalur daya;
-                // metode lain yang bukan GET/HEAD tetap 405.
+                // POST hanya diterima untuk sumber daya antarmuka, jalur daya,
+                // sesi autentikasi, dan manajemen akun; metode lain yang bukan
+                // GET/HEAD tetap 405. Gerbang ini hanya membatasi metode —
+                // otorisasinya tetap di lapisan API, sehingga menambah jalur di
+                // sini tidak pernah membuka aksi tanpa sesi sah (dan tanpa
+                // role admin untuk manajemen akun).
                 let post_target_ok = is_post
-                    && (req.path.starts_with("/api/v1/interfaces/") || req.path == "/api/v1/power");
+                    && (req.path.starts_with("/api/v1/interfaces/")
+                        || req.path == "/api/v1/power"
+                        || req.path == "/api/v1/auth/login"
+                        || req.path == "/api/v1/auth/logout"
+                        || req.path == "/api/v1/auth/users");
                 if (req.method != HttpMethod::Get && !is_head && !post_target_ok)
                     || (is_post && !post_target_ok)
                 {
@@ -669,10 +698,13 @@ impl TcpWebServer {
                     return;
                 }
                 if req.path.starts_with("/api/") {
+                    // Identitas peer diambil dari sesi TCP, bukan dari header.
+                    let mut rt_peer = *rt;
+                    rt_peer.peer_ip = s.remote_ip;
                     let res = if is_post {
-                        api.dispatch_post(&req, out, rt)
+                        api.dispatch_post(&req, out, &rt_peer)
                     } else {
-                        api.dispatch(&req, rt.tick_100ms, out, rt)
+                        api.dispatch(&req, rt_peer.tick_100ms, out, &rt_peer)
                     };
                     match res {
                         Ok(n) => {
@@ -790,37 +822,15 @@ fn find_double_crlf(buf: &[u8]) -> Option<usize> {
     None
 }
 
-/// Urai nilai `Content-Length` dari wilayah header saja (case-insensitive).
-fn content_length_of(header: &[u8]) -> Option<usize> {
-    let text = core::str::from_utf8(header).ok()?;
-    for line in text.split("\r\n") {
-        if line.is_empty() {
-            break;
-        }
-        let (name, value) = match line.split_once(':') {
-            Some(pair) => pair,
-            None => continue, // baris request-line tidak punya kolon header
-        };
-        if name.trim().eq_ignore_ascii_case("content-length") {
-            let mut n = 0usize;
-            let mut digits = 0usize;
-            for b in value.trim().bytes() {
-                if b.is_ascii_digit() {
-                    n = n.saturating_mul(10).saturating_add((b - b'0') as usize);
-                    digits += 1;
-                }
-            }
-            return if digits == 0 { None } else { Some(n) };
-        }
-    }
-    None
-}
-
 /// Permintaan dianggap lengkap bila header sudah tertutup DAN seluruh body
 /// sepanjang `Content-Length` sudah mendarat. Tanpa cek kedua, POST terfragmentasi
 /// akan di-dispatch dengan body kosong — perintah tulis hilang diam-diam.
 /// Buffer permintaan yang penuh diperlakukan lengkap agar pengurai membalas 400
 /// alih-alih menggantung sampai slot kedaluwarsa.
+///
+/// Penafsiran `Content-Length` tidak lagi dimiliki fungsi ini: ia memanggil
+/// `declared_body_len` milik parser yang sama, sehingga gerbang tunggu byte dan
+/// pengurai tidak bisa berbeda baca terhadap framing yang identik.
 fn http_request_is_complete(buf: &[u8], full: bool) -> bool {
     let header_end = match find_double_crlf(buf) {
         Some(i) => i + 4,
@@ -829,9 +839,14 @@ fn http_request_is_complete(buf: &[u8], full: bool) -> bool {
     if full {
         return true;
     }
-    match content_length_of(&buf[..header_end]) {
-        Some(cl) => buf.len() >= header_end.saturating_add(cl),
-        None => true,
+    match declared_body_len(&buf[..header_end]) {
+        Ok(Some(cl)) => buf.len() >= header_end + cl,
+        // Tidak ada Content-Length: permintaan selesai pada header.
+        Ok(None) => true,
+        // Framing sudah pasti salah (chunked,CL ganda, nilai tak valid, body
+        // melebihi batas): jangan tunggu byte tambahan, serahkan ke pengurai
+        // yang mengirim kode 400/413/501 yang benar.
+        Err(_) => true,
     }
 }
 
@@ -891,15 +906,16 @@ mod tests {
     #[test]
     fn test_01_modules_registry() {
         assert_eq!(registry::MODULES.len(), 23);
-        // Sepuluh modul berdata kernel nyata + tiga belas rupa saja yang sengaja
+        // Tiga belas modul berdata kernel nyata + sepuluh rupa saja yang sengaja
         // enabled:false karena kernel tidak punya endpoint-nya (WireGuard, VPN,
-        // XRay, QoS Manager, ARP Table, Gateway, DHCP Server,
-        // Appearance, Packages, User Manager, Speed Test, Telnet, Trace Route).
+        // XRay, QoS Manager,
+        // DHCP Server, Appearance, Packages, Speed Test, Telnet,
+        // Trace Route).
         // Restart dan Shutdown tidak lagi menjadi modul berhalaman: keduanya
         // aksi daya yang langsung membuka dialog. Registri tidak boleh melaporkan
         // yang tidak ada sebagai aktif.
-        assert_eq!(registry::MODULES.iter().filter(|m| m.enabled).count(), 10);
-        assert_eq!(registry::MODULES.iter().filter(|m| !m.enabled).count(), 13);
+        assert_eq!(registry::MODULES.iter().filter(|m| m.enabled).count(), 13);
+        assert_eq!(registry::MODULES.iter().filter(|m| !m.enabled).count(), 10);
         assert!(registry::MODULES.iter().all(|m| m.path != "/restart"));
         assert!(registry::MODULES.iter().all(|m| m.path != "/shutdown"));
         // Terminal naik menjadi berdata nyata pada build ini: setiap perintahnya
@@ -907,6 +923,21 @@ mod tests {
         assert!(registry::MODULES
             .iter()
             .any(|m| m.path == "/terminal" && m.enabled));
+        // User Manager naik pada AUD-02 P0.1-D: barisnya dibaca dari AuthStore
+        // lewat /api/v1/auth/users, bukan dari teks karangan.
+        assert!(registry::MODULES
+            .iter()
+            .any(|m| m.path == "/usermanager" && m.enabled));
+        // ARP Table naik pada AUD-02: kernel kini punya ArpTable nyata yang
+        // diisi dari frame ARP yang masuk, dibaca lewat /api/v1/arp.
+        assert!(registry::MODULES
+            .iter()
+            .any(|m| m.path == "/arp" && m.enabled));
+        // Gateway naik pada AUD-02: FIB kernel (`asl-router-lpm`) dilaporkan apa
+        // adanya lewat /api/v1/routes, termasuk saat rutenya belum ada.
+        assert!(registry::MODULES
+            .iter()
+            .any(|m| m.path == "/gateway" && m.enabled));
         // Urutan mengikuti sidebar: NAT anak Firewall, grup Services (ARP Table,
         // Service List, DNS Server, Gateway, DHCP Server), Terminal, grup System,
         // lalu grup Tools.
@@ -946,12 +977,64 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 49);
+        assert_eq!(registry::ALL_ASSETS.len(), 50);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
         );
         assert!(registry::SHELL_HTML.content.len() > 0);
+    }
+
+    #[test]
+    fn test_02c_chrome_sesi_terpasang_dan_hanya_menampilkan_kode_kernel() {
+        // P0.1 di lapisan klien: kartu masuk harus dimuat chrome (bukan
+        // tersisa-malas) supaya penolakan 401 pertama dari kernel selalu punya
+        // jalan masuk, dan tidak boleh ada akun/kata sandi bawaan yang
+        // ditanamkan di aset yang terlayani.
+        let shell = core::str::from_utf8(registry::SHELL_HTML.content).expect("shell.html utf-8");
+        let pos_api = shell
+            .find("/js/core/api.js")
+            .expect("shell.html memuat api.js");
+        let pos_login = shell
+            .find("/js/core/login.js")
+            .expect("shell.html memuat login.js");
+        let pos_app = shell
+            .find("/js/core/app.js")
+            .expect("shell.html memuat app.js");
+        assert!(
+            pos_api < pos_login && pos_login < pos_app,
+            "login.js harus termuat setelah klien API dan sebelum router app.js"
+        );
+
+        let js = core::str::from_utf8(registry::JS_LOGIN.content).expect("login.js utf-8");
+        for need in [
+            "OPCR.api.onGate = open",
+            "OPCR.api.auth.status",
+            "OPCR.api.auth.login",
+            "OPCR.api.auth.logout",
+            "no_credentials",
+            "insufficient_role",
+            "session_expired",
+        ] {
+            assert!(js.contains(need), "login.js kehilangan {need}");
+        }
+        // Nilai masuk hanya lewat body form klien API; tidak ada markup dari
+        // data, tidak ada jejak konsol, dan tidak ada kredensial bawaan.
+        for banned in ["innerHTML", "console.log", "password=\"", "Bearer "] {
+            assert!(!js.contains(banned), "login.js memuat {banned}");
+        }
+
+        let api = core::str::from_utf8(registry::JS_API.content).expect("api.js utf-8");
+        assert!(
+            api.contains("setRequestHeader(\"Authorization\", \"Bearer \" + token)"),
+            "api.js tidak menempelkan token sesi"
+        );
+
+        let css = core::str::from_utf8(registry::CSS_WEBFIG.content).expect("webfig.css utf-8");
+        assert!(
+            css.contains("input[type=\"password\"]"),
+            "kolom kata sandi tidak distil"
+        );
     }
 
     #[test]
@@ -1065,6 +1148,45 @@ mod tests {
         assert!(resp.contains("OPCR"));
     }
 
+    /// Pengubah angka di ui.js dan pengikat pada kolom Tujuan rute harus bergerak
+    /// bersama. Cacat nyata yang ditutup: kolom Tujuan memakai pengubah `ip`,
+    /// sehingga rute default `0.0.0.0/0` tampil sebagai "belum terikat" dan
+    /// tabel seolah tidak punya gateway, padahal rute itulah yang membuat
+    /// lalu lintas keluar bekerja.
+    #[test]
+    fn test_05bb_fmt_addr_membedakan_rute_default_dari_belum_terikat() {
+        let mut buf = [0u8; WEB_RESP_MAX];
+        let req = HttpRequest::parse(b"GET /js/core/ui.js HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("ui.js harus terlayani")
+            .unwrap();
+        let js = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            js.contains("addr: function"),
+            "ui.js kehilangan pengubah addr"
+        );
+        // Untuk alamat antarmuka, nol tetap berarti belum terikat — pengubah ip
+        // tidak boleh ikut dilunakkan.
+        assert!(
+            js.contains("belum terikat"),
+            "ui.js kehilangan label ip nol"
+        );
+
+        let req = HttpRequest::parse(b"GET /views/gateway.html HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("gateway.html harus terlayani")
+            .unwrap();
+        let html = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            html.contains("data-bind=\"dst\" data-fmt=\"addr\""),
+            "kolom Tujuan rute belum memakai pengubah addr"
+        );
+        assert!(
+            !html.contains("data-bind=\"dst\" data-fmt=\"ip\""),
+            "kolom Tujuan rute masih memakai pengubah ip"
+        );
+    }
+
     #[test]
     fn test_05b_dispatch_view_partial_is_declarative() {
         for (raw, path, needle) in [
@@ -1131,16 +1253,19 @@ mod tests {
                 "/views/serviceslist.html",
                 "data-source=\"/api/v1/services\"",
             ),
-            ("/views/dnsserver.html", "data-source=\"/api/v1/services\""),
+            ("/views/dnsserver.html", "data-source=\"/api/v1/dns\""),
             ("/views/wireguard.html", "desain saja"),
             ("/views/vpn.html", "desain saja"),
             ("/views/xray.html", "desain saja"),
             ("/views/qos.html", "desain saja"),
-            ("/views/gateway.html", "desain saja"),
-            ("/views/arp.html", "desain saja"),
+            ("/views/gateway.html", "data-list=\"/api/v1/routes\""),
+            ("/views/arp.html", "data-list=\"/api/v1/arp\""),
             ("/views/dhcpserver.html", "desain saja"),
             ("/views/packages.html", "desain saja"),
-            ("/views/usermanager.html", "desain saja"),
+            (
+                "/views/usermanager.html",
+                "data-list=\"/api/v1/auth/users\"",
+            ),
             ("/views/speedtest.html", "desain saja"),
             ("/views/telnet.html", "desain saja"),
             ("/views/traceroute.html", "desain saja"),
@@ -1214,10 +1339,10 @@ mod tests {
     #[test]
     fn test_05g_terminal_adalah_cli_di_atas_endpoint_nyata() {
         // Terminal naik dari rupa-saja menjadi modul berdata. Penjaganya harus
-        // mengikat klaim itu pada isi dispatch_get kernel yang sebenarnya: dua
+        // mengikat klaim itu pada isi dispatch_get kernel yang sebenarnya: lima
         // belas jalur baca dan dua permukaan tulis. Perintah baru apa pun wajib
         // lewat kernel lebih dulu.
-        const READ: [&str; 12] = [
+        const READ: [&str; 15] = [
             "/api/v1/system",
             "/api/v1/interfaces",
             "/api/v1/firewall/rules",
@@ -1230,6 +1355,9 @@ mod tests {
             "/api/v1/olt/ons",
             "/api/v1/services",
             "/api/v1/writes/last",
+            "/api/v1/arp",
+            "/api/v1/routes",
+            "/api/v1/dns",
         ];
         // term.js hanya boleh menyebut satu jalur baca (salam) plus dua jalur
         // tulis kernel: aksi daya dan antarmuka WAN per nama.
@@ -1483,17 +1611,19 @@ mod tests {
             !src.contains(HARD),
             "200 dihardcode lagi: respons 304/403/429 akan tercatat sebagai 200"
         );
+        // Tiga jalur, bukan dua: API, aset, dan penolakan framing (400/413/501)
+        // semuanya wajib membaca baris status yang benar-benar dibangun.
         assert_eq!(
             src.matches(CALL).count(),
-            2,
-            "jalur API dan jalur aset wajib membaca baris status yang dikirim"
+            3,
+            "jalur API, jalur aset, dan jalur penolakan wajib membaca baris status yang dikirim"
         );
     }
 
     #[test]
     fn test_05j_penolakan_bertingkat_dan_footer_halaman_kerja() {
         // Guard AUD-01 lanjutan, dari penelusuran langsung di VM:
-        // (1) "/tool ping 10.10.66.1" dulu jatuh ke "perintah tidak dikenal"
+        // (1) "/tool ping 198.51.100.9" dulu jatuh ke "perintah tidak dikenal"
         //     padahal tabel NO punya alasan teknisnya (tanpa argumen);
         // (2) kepala sesi terminal membeku pada "menghubungkan…" setelah
         //     view dibangun ulang karena alamat host tidak dibaca lagi;
@@ -1611,6 +1741,61 @@ mod tests {
     const CLI_IP: [u8; 4] = [192, 0, 2, 20];
     const CLI_PORT: u16 = 51000;
     const CLI_WIN: u16 = 64240;
+    // Kredensial tes hanya hidup di modul ini. Build produksi tidak membawa akun
+    // bawaan apa pun (lihat `asl_router_api::auth::test_auth_no_default_credentials`).
+    const T_USER: &str = "admin";
+    const T_PW: &[u8] = b"rinjani-webui-sesi-uji";
+
+    /// Isi `ArpTable` contoh untuk tes jalur baca: satu tetangga hasil reply di
+    /// WAN, satu hasil request di LAN. Nilainya berasal dari fixture runtime,
+    /// bukan dikarang endpoint.
+    static T_ARP: [asl_router_api::ArpSnapshot; 2] = [
+        asl_router_api::ArpSnapshot {
+            ip: [192, 0, 2, 20],
+            mac: [0x08, 0x00, 0x27, 0x0A, 0x00, 0x02],
+            ifindex: 0,
+            reply: true,
+            seen: 4,
+            last_tick: 90,
+        },
+        asl_router_api::ArpSnapshot {
+            ip: [192, 0, 2, 31],
+            mac: [0x08, 0x00, 0x27, 0x0A, 0x00, 0x1F],
+            ifindex: 1,
+            reply: false,
+            seen: 1,
+            last_tick: 95,
+        },
+    ];
+
+    /// Isi FIB fixture: default via gateway WAN, connected subnet WAN, dan satu
+    /// rute tanpa antarmuka keluar (kalimat "bila tidak ada, jangan menamai").
+    static T_ROUTES: [asl_router_api::RouteSnapshot; 3] = [
+        asl_router_api::RouteSnapshot {
+            network: [0, 0, 0, 0],
+            prefix_len: 0,
+            ifindex: 1,
+            gateway: [192, 0, 2, 1],
+            metric: 100,
+            kind: asl_router_api::ROUTE_KIND_STATIC,
+        },
+        asl_router_api::RouteSnapshot {
+            network: [192, 0, 2, 0],
+            prefix_len: 24,
+            ifindex: 1,
+            gateway: [0, 0, 0, 0],
+            metric: 0,
+            kind: asl_router_api::ROUTE_KIND_CONNECTED,
+        },
+        asl_router_api::RouteSnapshot {
+            network: [10, 99, 0, 0],
+            prefix_len: 16,
+            ifindex: 0,
+            gateway: [0, 0, 0, 0],
+            metric: 0,
+            kind: asl_router_api::ROUTE_KIND_DROP,
+        },
+    ];
 
     /// Penangkap frame TX server (tanpa heap).
     struct Cap {
@@ -1664,15 +1849,115 @@ mod tests {
             lan_name: "eth1",
             wan_ip: SRV_IP,
             wan_netmask: [255, 255, 255, 0],
+            wan_netmask_src: "option-1-ack",
             wan_gw: [192, 0, 2, 1],
+            wan_gw_src: "option-3-ack",
+            wan_dns1: [192, 0, 2, 53],
+            wan_dns2: [0, 0, 0, 0],
+            wan_dns_src: "option-6-offer",
             wan_up: true,
             wan_source: "static",
             wan_mac: SRV_MAC,
             http_listening: true,
             http_port: 80,
             serial_cli_active: true,
+            arp_list: &T_ARP,
+            arp_count: 2,
+            arp_capacity: 16,
+            arp_evictions: 0,
+            arp_rejected: 0,
+            arp_timeout_s: 20,
+            route_list: &T_ROUTES,
+            route_count: 3,
+            route_capacity: 64,
+            route_lookups: 5,
+            route_forwards: 0,
+            route_drops: 5,
+            dns_active: false,
+            dns_upstream: [192, 0, 2, 53],
+            dns_cache_hits: 11,
+            dns_cache_misses: 5,
+            dns_cache_entries: 3,
+            dns_cache_capacity: 16,
+            dns_host_count: 1,
+            dns_host_capacity: 8,
+            // Tick fixture dibuat bukan-nol supaya umur tetangga ARP terhitung
+            // nyata (bukan selisih nol yang selalu lulus).
+            tick_100ms: 100,
             ..Default::default()
         }
+    }
+
+    /// Rakit permintaan HTTP dari potongan-potongan byte ke `dst`. Crate ini
+    /// `no_std`, jadi tidak ada `format!` di jalur tes.
+    fn req_parts<'a>(dst: &'a mut [u8], parts: &[&[u8]]) -> &'a [u8] {
+        let mut n = 0usize;
+        for p in parts {
+            dst[n..n + p.len()].copy_from_slice(p);
+            n += p.len();
+        }
+        &dst[..n]
+    }
+
+    /// Rakit POST `application/x-www-form-urlencoded` lengkap. `Content-Length`
+    /// dihitung dari panjang body (crate ini `no_std`, jadi digit disusun manual)
+    /// supaya tes tidak lulus karena angka yang ditulis tangan kebetulan cocok.
+    fn post_form<'a>(dst: &'a mut [u8], path: &[u8], auth: &[u8], body: &[u8]) -> &'a [u8] {
+        let mut n = 0usize;
+        let mut put = |src: &[u8]| -> Result<(), ()> {
+            if n + src.len() > dst.len() {
+                return Err(());
+            }
+            dst[n..n + src.len()].copy_from_slice(src);
+            n += src.len();
+            Ok(())
+        };
+        assert!(put(b"POST ").is_ok());
+        assert!(put(path).is_ok());
+        assert!(put(b" HTTP/1.1\r\nHost: 192.0.2.10\r\n").is_ok());
+        if !auth.is_empty() {
+            assert!(put(auth).is_ok());
+            assert!(put(b"\r\n").is_ok());
+        }
+        assert!(
+            put(b"Content-Type: application/x-www-form-urlencoded\r\nContent-Length: ").is_ok()
+        );
+        let mut digits = [0u8; 20];
+        let mut d = digits.len();
+        let mut v = body.len();
+        if v == 0 {
+            d -= 1;
+            digits[d] = b'0';
+        }
+        while v > 0 {
+            d -= 1;
+            digits[d] = b'0' + (v % 10) as u8;
+            v /= 10;
+        }
+        assert!(put(&digits[d..]).is_ok());
+        assert!(put(b"\r\n\r\n").is_ok());
+        assert!(put(body).is_ok());
+        &dst[..n]
+    }
+
+    /// Meniru bootstrap konsol serial: pasang satu akun admin lalu buka sesi
+    /// lewat login nyata (bukan token karangan). `hdr` diisi baris
+    /// `Authorization: Bearer <hex64>` dan panjangnya dikembalikan.
+    fn boot_admin(api: &mut ApiDispatcher, tick: u64, hdr: &mut [u8; 88]) -> usize {
+        use asl_router_api::auth::{AuthStore, Role, AUTH_DEFAULT_ROUNDS};
+        let salt = api.auth.new_salt();
+        let hash = AuthStore::derive(T_PW, &salt, AUTH_DEFAULT_ROUNDS);
+        api.auth
+            .set_user(T_USER, Role::Admin, &salt, AUTH_DEFAULT_ROUNDS, &hash)
+            .expect("bootstrap admin");
+        let (_, tok, _) = api.auth.login(T_USER, T_PW, tick).expect("sesi login");
+        let mut hexbuf = [0u8; 64];
+        let hx = asl_router_crypto::hex::encode(&tok, &mut hexbuf).expect("token hex");
+        let line = b"Authorization: Bearer ";
+        hdr[..line.len()].copy_from_slice(line);
+        let n = line.len() + hx.len();
+        hdr[line.len()..n].copy_from_slice(hx.as_bytes());
+        n
     }
 
     /// Bangun segmen klien lalu suapkan ke server; hasil TX tertangkap di `cap`.
@@ -1873,7 +2158,17 @@ mod tests {
             &[],
             &mut cap,
         );
-        let req = b"GET /api/v1/interfaces HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n";
+        let mut hdr = [0u8; 88];
+        let mut raw = [0u8; 256];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let req = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/interfaces HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &hdr[..hn],
+                b"\r\n\r\n",
+            ],
+        );
         client_frame(
             &mut server,
             &rt,
@@ -2308,8 +2603,19 @@ mod tests {
         let our_next = handshake(&mut server, &mut api, &mut cap, 9000);
         let frames_after_handshake = cap.n;
 
-        let head = b"POST /api/v1/interfaces/eth0 HTTP/1.1\r\nHost: 192.0.2.10\r\n\
-                    Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 67\r\n\r\n";
+        let mut hdr = [0u8; 88];
+        let mut raw = [0u8; 256];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let head = req_parts(
+            &mut raw,
+            &[
+                b"POST /api/v1/interfaces/eth0 HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &hdr[..hn],
+                b"\r\n",
+                b"Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 67\r\n\r\n",
+            ],
+        );
+        let head_len = head.len();
         client_frame(
             &mut server,
             &rt,
@@ -2337,7 +2643,7 @@ mod tests {
             &mut server,
             &rt,
             &mut api,
-            9001 + head.len() as u32,
+            9001 + head_len as u32,
             our_next,
             TCP_FLAG_ACK | TCP_FLAG_PSH,
             body,
@@ -2372,7 +2678,17 @@ mod tests {
         let mut api = ApiDispatcher::new();
         let mut cap = Cap::new();
         let our_next = handshake(&mut server, &mut api, &mut cap, 9100);
-        let req = b"GET /api/v1/writes/last HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n";
+        let mut hdr = [0u8; 88];
+        let mut raw = [0u8; 256];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let req = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/writes/last HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &hdr[..hn],
+                b"\r\n\r\n",
+            ],
+        );
         client_frame(
             &mut server,
             &rt,
@@ -2431,6 +2747,18 @@ mod tests {
         let mut api = ApiDispatcher::new();
         let mut cap = Cap::new();
         let our_next = handshake(&mut server, &mut api, &mut cap, 9600);
+        let mut hdr = [0u8; 88];
+        let mut raw = [0u8; 256];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let arm = req_parts(
+            &mut raw,
+            &[
+                b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &hdr[..hn],
+                b"\r\n",
+                b"Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 10\r\n\r\naction=arm",
+            ],
+        );
         client_frame(
             &mut server,
             &rt,
@@ -2438,7 +2766,7 @@ mod tests {
             9601,
             our_next,
             TCP_FLAG_ACK | TCP_FLAG_PSH,
-            b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 10\r\n\r\naction=arm",
+            arm,
             &mut cap,
         );
         let (resp, len) = reassemble(&cap);
@@ -2456,6 +2784,15 @@ mod tests {
         server2.listen(80);
         let mut cap2 = Cap::new();
         let our_next2 = handshake(&mut server2, &mut api, &mut cap2, 9700);
+        let restart = req_parts(
+            &mut raw,
+            &[
+                b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &hdr[..hn],
+                b"\r\n",
+                b"Content-Type: application/x-www-form-urlencoded\r\nContent-Length: 14\r\n\r\naction=restart",
+            ],
+        );
         client_frame(
             &mut server2,
             &rt,
@@ -2463,7 +2800,7 @@ mod tests {
             9701,
             our_next2,
             TCP_FLAG_ACK | TCP_FLAG_PSH,
-            b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 14\r\n\r\naction=restart",
+            restart,
             &mut cap2,
         );
         let (resp2, len2) = reassemble(&cap2);
@@ -2569,5 +2906,1055 @@ mod tests {
             text.contains("HTTP/1.1 304 Not Modified"),
             "baris status respons bukan 304: {text}"
         );
+    }
+
+    #[test]
+    fn test_21_framing_ditolak_sebelum_dispatch() {
+        // AUD02 DEFER-02/DEFER-03 lewat jalur TCP nyata, bukan hanya unit parser:
+        // (a) Transfer-Encoding chunked -> 501, bukan ditafsirkan diam-diam;
+        // (b) body kurang dari Content-Length -> server MENUNGGU byte sisa, tidak
+        //     men-dispatch POST dengan body kosong;
+        // (c) Content-Length di atas batas -> 413 sebelum satu byte body pun tiba.
+        // Tiap skenario memakai server baru: satu slot sesi hanya melayani satu
+        // permintaan (Connection: close), jadi dua skenario tidak boleh berbagi slot.
+        fn put(buf: &mut [u8], off: &mut usize, s: &[u8]) {
+            buf[*off..*off + s.len()].copy_from_slice(s);
+            *off += s.len();
+        }
+
+        // (b) POST terpotong: header tertutup, body baru 3 dari 10 byte.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let our_next = handshake(&mut server, &mut api, &mut cap, 30000);
+        let mut raw = [0u8; 512];
+        let mut n = 0usize;
+        put(&mut raw, &mut n, b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 10\r\n\r\nact");
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            30001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &raw[..n],
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        assert_eq!(
+            len,
+            0,
+            "permintaan ber-body belum lengkap tidak boleh di-dispatch: {}",
+            core::str::from_utf8(&resp[..len]).unwrap_or("?")
+        );
+
+        // Sisa body mendarat -> baru dispatch.
+        let mut rest = [0u8; 16];
+        let mut m = 0usize;
+        put(&mut rest, &mut m, b"ion=arm");
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            30001 + n as u32,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &rest[..m],
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.starts_with("HTTP/1.1 "),
+            "POST yang body-nya selesai harus dijawab: {text}"
+        );
+
+        // (a) chunked ditolak 501.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let our_next = handshake(&mut server, &mut api, &mut cap, 31000);
+        let mut raw = [0u8; 512];
+        let mut n = 0usize;
+        put(&mut raw, &mut n, b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n");
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            31001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &raw[..n],
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.contains("HTTP/1.1 501 Not Implemented"),
+            "chunked harus ditolak eksplisit: {text}"
+        );
+        assert_eq!(server.last_status, 501);
+
+        // (c) body melebihi batas: 413 tanpa menunggu body.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let our_next = handshake(&mut server, &mut api, &mut cap, 32000);
+        let mut raw = [0u8; 512];
+        let mut n = 0usize;
+        put(
+            &mut raw,
+            &mut n,
+            b"POST /api/v1/power HTTP/1.1\r\nHost: 192.0.2.10\r\nContent-Length: 4096\r\n\r\n",
+        );
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            32001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            &raw[..n],
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.contains("HTTP/1.1 413 Payload Too Large"),
+            "body di atas batas wajib 413 sebelum diproses: {text}"
+        );
+        assert_eq!(server.last_status, 413);
+    }
+
+    /// P0.1 lewat TCP penuh: gerbang autentikasi ada di lapisan server, bukan di
+    /// peramban. Empat hal yang dibuktikan di sini:
+    /// (a) API anonim -> 401 dengan tantangan Bearer, tanpa data apa pun;
+    /// (b) aset statis tetap publik, sehingga kartu masuk bisa dimuat;
+    /// (c) login nyata lewat TCP menghasilkan token yang bisa dipakai;
+    /// (d) sistem tanpa kredensial menolak seluruh jalur (tidak ada akun gaib).
+    #[test]
+    fn test_22_gerbang_autentikasi_terlewat_tcp() {
+        let rt = runtime();
+
+        // (a) GET API anonim.
+        let mut server = TcpWebServer::new(80);
+        server.listen(80);
+        let mut api = ApiDispatcher::new();
+        let mut cap = Cap::new();
+        let mut hdr = [0u8; 88];
+        let mut raw = [0u8; 512];
+
+        let our_next = handshake(&mut server, &mut api, &mut cap, 33000);
+        let req = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/system HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                b"\r\n",
+            ],
+        );
+        client_frame(
+            &mut server,
+            &rt,
+            &mut api,
+            33001,
+            our_next,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req,
+            &mut cap,
+        );
+        let (resp, len) = reassemble(&cap);
+        let text = core::str::from_utf8(&resp[..len]).unwrap();
+        assert!(
+            text.starts_with("HTTP/1.1 401 Unauthorized"),
+            "API anonim harus 401, dapat: {text}"
+        );
+        assert!(
+            text.contains("WWW-Authenticate: Bearer realm=\"rinjani\""),
+            "401 tanpa tantangan Bearer: {text}"
+        );
+        // Respons penolakan tidak boleh membocorkan isi tabel kredensial.
+        assert!(!text.contains("admin"));
+        assert!(!text.contains("\"uptime"));
+        assert_eq!(server.last_status, 401);
+
+        // (b) Aset statis tetap terlayani tanpa sesi: halaman kerja harus bisa
+        // dimuat sebelum klien punya kredensial.
+        let mut server2 = TcpWebServer::new(80);
+        server2.listen(80);
+        let mut cap2 = Cap::new();
+        let our_next2 = handshake(&mut server2, &mut api, &mut cap2, 33100);
+        let req2 = req_parts(
+            &mut raw,
+            &[
+                b"GET /views/arp.html HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                b"\r\n",
+            ],
+        );
+        client_frame(
+            &mut server2,
+            &rt,
+            &mut api,
+            33101,
+            our_next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req2,
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "jalur statis tidak boleh terkena gerbang API: {text2}"
+        );
+        assert!(!text2.contains("401"));
+
+        // (c) Login lewat TCP ke dispatcher yang sudah di-bootstrap (mode serial
+        // CLI): respons memuat token 64 hex yang kemudian dipakai untuk GET.
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        assert_eq!(hn - "Authorization: Bearer ".len(), 64, "token 64 hex");
+
+        let mut server3 = TcpWebServer::new(80);
+        server3.listen(80);
+        let mut cap3 = Cap::new();
+        let our_next3 = handshake(&mut server3, &mut api, &mut cap3, 33200);
+        let body = "user=admin&password=rinjani-webui-sesi-uji";
+        let mut cl = [0u8; 24];
+        let cln = {
+            let mut d = [0u8; 20];
+            let mut i = d.len();
+            let mut v = body.len();
+            if v == 0 {
+                i -= 1;
+                d[i] = b'0';
+            }
+            while v > 0 {
+                i -= 1;
+                d[i] = b'0' + (v % 10) as u8;
+                v /= 10;
+            }
+            let k = d.len() - i;
+            cl[..k].copy_from_slice(&d[i..]);
+            &cl[..k]
+        };
+        let mut login_raw = [0u8; 512];
+        let login = req_parts(
+            &mut login_raw,
+            &[
+                b"POST /api/v1/auth/login HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                b"Content-Type: application/x-www-form-urlencoded\r\nContent-Length: ",
+                cln,
+                b"\r\n\r\n",
+                body.as_bytes(),
+            ],
+        );
+        client_frame(
+            &mut server3,
+            &rt,
+            &mut api,
+            33201,
+            our_next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            login,
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(
+            text3.starts_with("HTTP/1.1 200 OK"),
+            "login sah harus 200, dapat: {text3}"
+        );
+        assert!(text3.contains("\"token\":\""), "tanpa token sesi: {text3}");
+        assert!(text3.contains("\"role\":\"admin\""));
+        // Kata sandi tidak pernah kembali ke klien.
+        assert!(!text3.contains("rinjani-webui-sesi-uji"));
+        assert_eq!(api.auth.logins_ok, 2, "bootstrap + login TCP");
+
+        // Token hasil login harus bisa dipakai lewat GET (dibaca dari respons,
+        // bukan dari variabel internal tes).
+        let tpos = text3.find("\"token\":\"").expect("token") + 9;
+        assert!(
+            text3[tpos..tpos + 64]
+                .bytes()
+                .all(|b| b.is_ascii_hexdigit()),
+            "token sesi bukan hex 64"
+        );
+        let mut bearer = [0u8; 88];
+        let bn = {
+            let line = b"Authorization: Bearer ";
+            bearer[..line.len()].copy_from_slice(line);
+            bearer[line.len()..line.len() + 64].copy_from_slice(text3[tpos..tpos + 64].as_bytes());
+            line.len() + 64
+        };
+        let mut server4 = TcpWebServer::new(80);
+        server4.listen(80);
+        let mut cap4 = Cap::new();
+        let our_next4 = handshake(&mut server4, &mut api, &mut cap4, 33300);
+        let req4 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/system HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &bearer[..bn],
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut server4,
+            &rt,
+            &mut api,
+            33301,
+            our_next4,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req4,
+            &mut cap4,
+        );
+        let (resp4, len4) = reassemble(&cap4);
+        let text4 = core::str::from_utf8(&resp4[..len4]).unwrap();
+        assert!(
+            text4.starts_with("HTTP/1.1 200 OK"),
+            "sesi hasil login TCP harus diterima: {text4}"
+        );
+
+        // (d) Dispatcher kosong (belum ada akun): semua jalur API ditolak dengan
+        // kode no_credentials, termasuk login.
+        let mut server5 = TcpWebServer::new(80);
+        server5.listen(80);
+        let mut api5 = ApiDispatcher::new();
+        let mut cap5 = Cap::new();
+        let our_next5 = handshake(&mut server5, &mut api5, &mut cap5, 33400);
+        let req5 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/interfaces HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                b"\r\n",
+            ],
+        );
+        client_frame(
+            &mut server5,
+            &rt,
+            &mut api5,
+            33401,
+            our_next5,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req5,
+            &mut cap5,
+        );
+        let (resp5, len5) = reassemble(&cap5);
+        let text5 = core::str::from_utf8(&resp5[..len5]).unwrap();
+        assert!(text5.starts_with("HTTP/1.1 401"), "{text5}");
+        assert!(text5.contains("\"error\":\"no_credentials\""), "{text5}");
+        assert_eq!(api5.auth.user_count(), 0, "tidak boleh ada akun gaib");
+    }
+
+    #[test]
+    fn test_23_users_tidak_ke_405_dan_anonim_401_lewat_tcp() {
+        // P0.1-D lewat jalur TCP penuh. Gerbang metode di `build_response`
+        // dulunya hanya mengenal /api/v1/interfaces/* dan /api/v1/power, jadi
+        // seluruh jalur akun mati di 405 sebelum autentikasi sempat berjalan.
+        // Empat hal yang dibuktikan: rute lolos gerbang metode, penolakan
+        // terjadi di server (anonim 401, viewer 403), tulis admin mengangkat
+        // bendera persistensi kernel, dan daftar akun tidak pernah memuat
+        // salt/hash/kata sandi.
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut hdr = [0u8; 88];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let mut raw = [0u8; 640];
+
+        const BODY: &[u8] = b"action=set&user=operator&role=viewer&password=sandi-uji-webui-02";
+        let bearer = &hdr[..hn];
+
+        // (1) POST anonim -> 401, bukan 405. Akun tidak boleh terbentuk.
+        let mut s1 = TcpWebServer::new(80);
+        s1.listen(80);
+        let mut cap1 = Cap::new();
+        let next1 = handshake(&mut s1, &mut api, &mut cap1, 34000);
+        let req1 = post_form(&mut raw, b"/api/v1/auth/users", &[], BODY);
+        client_frame(
+            &mut s1,
+            &rt,
+            &mut api,
+            34001,
+            next1,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req1,
+            &mut cap1,
+        );
+        let (resp1, len1) = reassemble(&cap1);
+        let text1 = core::str::from_utf8(&resp1[..len1]).unwrap();
+        assert!(
+            !text1.starts_with("HTTP/1.1 405"),
+            "rute akun masih tertutup gerbang metode: {text1}"
+        );
+        assert!(
+            text1.starts_with("HTTP/1.1 401 Unauthorized"),
+            "POST akun anonim harus 401, dapat: {text1}"
+        );
+        assert!(text1.contains("\"error\":\"unauthenticated\""), "{text1}");
+        assert_eq!(api.auth.user_count(), 1, "anonim tidak boleh membuat akun");
+        assert!(!text1.contains("sandi-uji-webui-02"));
+
+        // (2) POST admin -> 200 + janji antrean persistensi.
+        let mut s2 = TcpWebServer::new(80);
+        s2.listen(80);
+        let mut cap2 = Cap::new();
+        let next2 = handshake(&mut s2, &mut api, &mut cap2, 34100);
+        let req2 = post_form(&mut raw, b"/api/v1/auth/users", bearer, BODY);
+        client_frame(
+            &mut s2,
+            &rt,
+            &mut api,
+            34101,
+            next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req2,
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "POST akun admin harus 200, dapat: {text2}"
+        );
+        assert!(text2.contains("\"action\":\"set\""), "{text2}");
+        assert!(text2.contains("\"user\":\"operator\""), "{text2}");
+        assert!(text2.contains("\"role\":\"viewer\""), "{text2}");
+        // ACK hanya menjanjikan antrean; nasib RJCFG01 dibaca dari verdict tulis.
+        assert!(text2.contains("\"persist\":\"queued\""), "{text2}");
+        assert!(!text2.contains("sandi-uji-webui-02"), "sandi echo: {text2}");
+        assert_eq!(api.auth.user_count(), 2);
+        assert!(api.auth_dirty, "perubahan akun harus mengangkat bendera");
+
+        // (3) GET daftar akun oleh admin: nama, role, iterasi — tanpa secret.
+        let mut s3 = TcpWebServer::new(80);
+        s3.listen(80);
+        let mut cap3 = Cap::new();
+        let next3 = handshake(&mut s3, &mut api, &mut cap3, 34200);
+        let req3 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/auth/users HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s3,
+            &rt,
+            &mut api,
+            34201,
+            next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req3,
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(text3.starts_with("HTTP/1.1 200 OK"), "{text3}");
+        assert!(text3.contains("\"user\":\"operator\""), "{text3}");
+        assert!(text3.contains("\"rounds\":1024"), "{text3}");
+        for banned in ["salt", "hash", "password", "sandi-uji-webui-02", "Bearer "] {
+            assert!(
+                !text3.contains(banned),
+                "daftar akun membocorkan {banned}: {text3}"
+            );
+        }
+
+        // (4) Role viewer: GET dan POST akun dua-duanya 403 di lapisan server,
+        // bukan sekadar tombol yang hilang di peramban.
+        let mut s4 = TcpWebServer::new(80);
+        s4.listen(80);
+        let mut cap4 = Cap::new();
+        let next4 = handshake(&mut s4, &mut api, &mut cap4, 34300);
+        let login_body = b"user=operator&password=sandi-uji-webui-02";
+        let req4 = post_form(&mut raw, b"/api/v1/auth/login", &[], login_body);
+        client_frame(
+            &mut s4,
+            &rt,
+            &mut api,
+            34301,
+            next4,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req4,
+            &mut cap4,
+        );
+        let (resp4, len4) = reassemble(&cap4);
+        let text4 = core::str::from_utf8(&resp4[..len4]).unwrap();
+        assert!(
+            text4.starts_with("HTTP/1.1 200 OK"),
+            "login akun baru harus 200, dapat: {text4}"
+        );
+        let tpos = text4.find("\"token\":\"").expect("token viewer") + 9;
+        let mut vbearer = [0u8; 88];
+        let vn = {
+            let line = b"Authorization: Bearer ";
+            vbearer[..line.len()].copy_from_slice(line);
+            vbearer[line.len()..line.len() + 64].copy_from_slice(text4[tpos..tpos + 64].as_bytes());
+            line.len() + 64
+        };
+
+        let mut s5 = TcpWebServer::new(80);
+        s5.listen(80);
+        let mut cap5 = Cap::new();
+        let next5 = handshake(&mut s5, &mut api, &mut cap5, 34400);
+        let req5 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/auth/users HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                &vbearer[..vn],
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s5,
+            &rt,
+            &mut api,
+            34401,
+            next5,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req5,
+            &mut cap5,
+        );
+        let (resp5, len5) = reassemble(&cap5);
+        let text5 = core::str::from_utf8(&resp5[..len5]).unwrap();
+        assert!(
+            text5.starts_with("HTTP/1.1 403 Forbidden"),
+            "viewer tidak boleh membaca tabel akun: {text5}"
+        );
+        assert!(text5.contains("\"error\":\"insufficient_role\""), "{text5}");
+        assert!(!text5.contains("\"user\":\"operator\""));
+
+        let mut s6 = TcpWebServer::new(80);
+        s6.listen(80);
+        let mut cap6 = Cap::new();
+        let next6 = handshake(&mut s6, &mut api, &mut cap6, 34500);
+        let req6 = post_form(
+            &mut raw,
+            b"/api/v1/auth/users",
+            &vbearer[..vn],
+            b"action=del&user=admin",
+        );
+        client_frame(
+            &mut s6,
+            &rt,
+            &mut api,
+            34501,
+            next6,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req6,
+            &mut cap6,
+        );
+        let (resp6, len6) = reassemble(&cap6);
+        let text6 = core::str::from_utf8(&resp6[..len6]).unwrap();
+        assert!(
+            text6.starts_with("HTTP/1.1 403 Forbidden"),
+            "viewer tidak boleh menghapus admin: {text6}"
+        );
+        assert_eq!(
+            api.auth.user_count(),
+            2,
+            "penolakan role tidak mengubah tabel"
+        );
+    }
+
+    #[test]
+    fn test_24_tabel_arp_terlayani_lewat_tcp_dan_hanya_baca() {
+        // Modul ARP Table naik dari "desain saja" menjadi data kernel nyata.
+        // Yang dibuktikan di sini ada empat: rute baru lolos gerbang metode,
+        // pembacaan anonim ditolak di lapisan server (bukan tombol yang
+        // disembunyikan), baris yang keluar adalah milik WebRuntime apa adanya
+        // (IP/MAC/umur dari tick, tidak ada yang ditambah-tambahi), dan tidak
+        // ada jalur tulis menuju tabel sehingga POST mati di 405.
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut hdr = [0u8; 88];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let bearer = &hdr[..hn];
+        let mut raw = [0u8; 512];
+
+        // (1) Anonim -> 401 dan tabel tidak bocor sama sekali.
+        let mut s1 = TcpWebServer::new(80);
+        s1.listen(80);
+        let mut cap1 = Cap::new();
+        let next1 = handshake(&mut s1, &mut api, &mut cap1, 35000);
+        let req1 = req_parts(
+            &mut raw,
+            &[b"GET /api/v1/arp HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n"],
+        );
+        client_frame(
+            &mut s1,
+            &rt,
+            &mut api,
+            35001,
+            next1,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req1,
+            &mut cap1,
+        );
+        let (resp1, len1) = reassemble(&cap1);
+        let text1 = core::str::from_utf8(&resp1[..len1]).unwrap();
+        assert!(
+            text1.starts_with("HTTP/1.1 401 Unauthorized"),
+            "GET tabel ARP anonim harus 401, dapat: {text1}"
+        );
+        assert!(text1.contains("\"error\":\"unauthenticated\""), "{text1}");
+        assert!(
+            !text1.contains("08:00:27"),
+            "MAC bocor ke klien anonim: {text1}"
+        );
+        assert!(
+            !text1.contains("192.0.2.20"),
+            "IP bocor ke klien anonim: {text1}"
+        );
+
+        // (2) Admin -> 200 berisi dua baris fixture persis seperti snapshot.
+        let mut s2 = TcpWebServer::new(80);
+        s2.listen(80);
+        let mut cap2 = Cap::new();
+        let next2 = handshake(&mut s2, &mut api, &mut cap2, 35100);
+        let req2 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/arp HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s2,
+            &rt,
+            &mut api,
+            35101,
+            next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req2,
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "GET tabel ARP admin harus 200, dapat: {text2}"
+        );
+        // Baris WAN: ifindex 0 memakai nama antarmuka WAN, opcode reply.
+        assert!(text2.contains("\"iface\":\"eth0\""), "{text2}");
+        assert!(text2.contains("\"ip\":\"192.0.2.20\""), "{text2}");
+        assert!(text2.contains("\"mac\":\"08:00:27:0a:00:02\""), "{text2}");
+        assert!(text2.contains("\"source\":\"reply\""), "{text2}");
+        assert!(text2.contains("\"seen\":4"), "{text2}");
+        // Umur dari tick: (100 - 90) tick x 100 ms = 1 s, dihitung kernel lewat.
+        assert!(text2.contains("\"age_s\":1}"), "{text2}");
+        // Baris LAN: ifindex 1 memakai nama antarmuka LAN, opcode request.
+        assert!(text2.contains("\"iface\":\"eth1\""), "{text2}");
+        assert!(text2.contains("\"ip\":\"192.0.2.31\""), "{text2}");
+        assert!(text2.contains("\"mac\":\"08:00:27:0a:00:1f\""), "{text2}");
+        assert!(text2.contains("\"source\":\"request\""), "{text2}");
+        // (100 - 95) / 10 = 0,5 s -> 0 s. Jangan ada angka kesegaran karangan.
+        assert!(text2.contains("\"age_s\":0}"), "{text2}");
+        assert!(!text2.contains("\"reachable\""), "status karangan: {text2}");
+        assert_eq!(
+            text2.matches("\"iface\":").count(),
+            2,
+            "jumlah baris harus sama dengan snapshot: {text2}"
+        );
+
+        // (3) Statistik terpisah: kapasitas & penolakan terlihat, bukan hilang
+        // di balik tabel yang tampak terisi wajar.
+        let mut s3 = TcpWebServer::new(80);
+        s3.listen(80);
+        let mut cap3 = Cap::new();
+        let next3 = handshake(&mut s3, &mut api, &mut cap3, 35200);
+        let req3 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/arp/stats HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s3,
+            &rt,
+            &mut api,
+            35201,
+            next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req3,
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(
+            text3.starts_with("HTTP/1.1 200 OK"),
+            "GET statistik ARP harus 200, dapat: {text3}"
+        );
+        assert!(text3.contains("\"entries\":2"), "{text3}");
+        assert!(text3.contains("\"capacity\":16"), "{text3}");
+        assert!(text3.contains("\"timeout_s\":20"), "{text3}");
+        assert!(text3.contains("\"evictions\":0"), "{text3}");
+        assert!(text3.contains("\"rejected\":0"), "{text3}");
+
+        // (4) Tidak ada jalur tulis tabel: POST ditolak gerbang metode sebelum
+        // menyentuh autentikasi, dan tidak mengangkat bendera persistensi.
+        let mut s4 = TcpWebServer::new(80);
+        s4.listen(80);
+        let mut cap4 = Cap::new();
+        let next4 = handshake(&mut s4, &mut api, &mut cap4, 35300);
+        let req4 = post_form(&mut raw, b"/api/v1/arp", bearer, b"ip=192.0.2.99");
+        client_frame(
+            &mut s4,
+            &rt,
+            &mut api,
+            35301,
+            next4,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req4,
+            &mut cap4,
+        );
+        let (resp4, len4) = reassemble(&cap4);
+        let text4 = core::str::from_utf8(&resp4[..len4]).unwrap();
+        assert!(
+            text4.starts_with("HTTP/1.1 405"),
+            "tabel ARP tidak punya jalur tulis, harus 405: {text4}"
+        );
+        assert!(!api.auth_dirty, "POST tabel ARP tidak boleh menulis config");
+        assert!(api.take_write().is_none());
+    }
+
+    #[test]
+    fn test_25_rute_terlayani_lewat_tcp_dan_pencacah_tidak_dibagus() {
+        // Modul Gateway naik dari "desain saja" menjadi isi FIB kernel. Yang
+        // ditagih di sini: rute lolos gerbang metode + gerbang sesi, baris yang
+        // keluar hanyalah salinan snapshot (termasuk rute tanpa antarmuka yang
+        // tetap strip), statistik memisahkan "tabel terisi" dari "datapath
+        // bertanya", dan tidak ada jalur tulis rute lewat HTTP.
+        let rt = runtime();
+        let mut api = ApiDispatcher::new();
+        let mut hdr = [0u8; 88];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let bearer = &hdr[..hn];
+        let mut raw = [0u8; 512];
+
+        // (1) Anonim -> 401 di lapisan server, bukan 404 dan bukan tabel.
+        let mut s1 = TcpWebServer::new(80);
+        s1.listen(80);
+        let mut cap1 = Cap::new();
+        let next1 = handshake(&mut s1, &mut api, &mut cap1, 36000);
+        let req1 = req_parts(
+            &mut raw,
+            &[b"GET /api/v1/routes HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n"],
+        );
+        client_frame(
+            &mut s1,
+            &rt,
+            &mut api,
+            36001,
+            next1,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req1,
+            &mut cap1,
+        );
+        let (resp1, len1) = reassemble(&cap1);
+        let text1 = core::str::from_utf8(&resp1[..len1]).unwrap();
+        assert!(
+            text1.starts_with("HTTP/1.1 401 Unauthorized"),
+            "GET rute anonim harus 401, dapat: {text1}"
+        );
+        assert!(text1.contains("\"error\":\"unauthenticated\""), "{text1}");
+        assert!(!text1.contains("\"dst\""), "rute bocor ke anonim: {text1}");
+
+        // (2) Admin -> tiga baris FIB, persis seperti snapshot kernel.
+        let mut s2 = TcpWebServer::new(80);
+        s2.listen(80);
+        let mut cap2 = Cap::new();
+        let next2 = handshake(&mut s2, &mut api, &mut cap2, 36100);
+        let req2 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/routes HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s2,
+            &rt,
+            &mut api,
+            36101,
+            next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req2,
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "GET rute admin harus 200, dapat: {text2}"
+        );
+        assert!(
+            text2.contains(
+                "{\"dst\":\"0.0.0.0\",\"prefix\":0,\"gw\":\"192.0.2.1\",\"iface\":\"eth0\",\"metric\":100,\"type\":\"static\"}"
+            ),
+            "rute default salah: {text2}"
+        );
+        assert!(
+            text2.contains(
+                "{\"dst\":\"192.0.2.0\",\"prefix\":24,\"gw\":\"0.0.0.0\",\"iface\":\"eth0\",\"metric\":0,\"type\":\"connected\"}"
+            ),
+            "rute connected salah: {text2}"
+        );
+        // Rute tanpa antarmuka keluar tidak boleh diberi nama antarmuka.
+        assert!(
+            text2.contains(
+                "{\"dst\":\"10.99.0.0\",\"prefix\":16,\"gw\":\"0.0.0.0\",\"iface\":\"-\",\"metric\":0,\"type\":\"blackhole\"}"
+            ),
+            "rute tanpa antarmuka salah: {text2}"
+        );
+        assert_eq!(text2.matches("\"dst\":").count(), 3, "{text2}");
+
+        // (3) Statistik: angka datapath dilaporkan apa adanya, termasuk nol.
+        let mut s3 = TcpWebServer::new(80);
+        s3.listen(80);
+        let mut cap3 = Cap::new();
+        let next3 = handshake(&mut s3, &mut api, &mut cap3, 36200);
+        let req3 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/routes/stats HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s3,
+            &rt,
+            &mut api,
+            36201,
+            next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req3,
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(
+            text3.starts_with("HTTP/1.1 200 OK"),
+            "GET statistik rute harus 200, dapat: {text3}"
+        );
+        for want in [
+            "\"entries\":3",
+            "\"capacity\":64",
+            "\"lookups\":5",
+            "\"forwards\":0",
+            "\"drops\":5",
+            "\"default_active\":true",
+            "\"default_gw\":\"192.0.2.1\"",
+            "\"snapshot\":3",
+        ] {
+            assert!(text3.contains(want), "{want} hilang: {text3}");
+        }
+        // `forwards` 0 harus benar-benar tampil 0, bukan dibuang dari respons.
+        assert!(text3.contains("\"forwards\":0"), "{text3}");
+
+        // (4) Rute tidak punya jalur tulis HTTP: ditolak gerbang metode, dan
+        // tidak mengangkat bendera persistensi maupun mengisi antrean tulis.
+        let mut s4 = TcpWebServer::new(80);
+        s4.listen(80);
+        let mut cap4 = Cap::new();
+        let next4 = handshake(&mut s4, &mut api, &mut cap4, 36300);
+        let req4 = post_form(&mut raw, b"/api/v1/routes", bearer, b"dst=10.0.0.0");
+        client_frame(
+            &mut s4,
+            &rt,
+            &mut api,
+            36301,
+            next4,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req4,
+            &mut cap4,
+        );
+        let (resp4, len4) = reassemble(&cap4);
+        let text4 = core::str::from_utf8(&resp4[..len4]).unwrap();
+        assert!(
+            text4.starts_with("HTTP/1.1 405"),
+            "tabel rute tidak punya jalur tulis, harus 405: {text4}"
+        );
+        assert!(!api.auth_dirty, "POST rute tidak boleh menulis config");
+        assert!(api.take_write().is_none());
+    }
+
+    #[test]
+    fn test_26_dns_terlayani_lewat_tcp_dengan_resolver_dari_lease() {
+        // Modul DNS Server naik dari "desain saja" menjadi pembaca lease + mesin
+        // proksi. Yang ditagih di sini: jalur baca terkunci sesi, angka yang
+        // keluar adalah pasangan (lease -> mesin) dan bukan resolver publik
+        // karangan, ketiadaan opsi 6 dilaporkan sebagai nol (bukan diisi
+        // cadangan), dan tidak ada jalur tulis DNS lewat HTTP.
+        let mut rt = runtime();
+        rt.wan_config_static = false;
+        rt.wan_source = "dhcp";
+        rt.dhcp_client_active = true;
+        let mut api = ApiDispatcher::new();
+        let mut hdr = [0u8; 88];
+        let hn = boot_admin(&mut api, 0, &mut hdr);
+        let bearer = &hdr[..hn];
+        let mut raw = [0u8; 512];
+
+        // (1) Anonim -> 401, tanpa kebocoran setelan resolver.
+        let mut s1 = TcpWebServer::new(80);
+        s1.listen(80);
+        let mut cap1 = Cap::new();
+        let next1 = handshake(&mut s1, &mut api, &mut cap1, 36500);
+        let req1 = req_parts(
+            &mut raw,
+            &[b"GET /api/v1/dns HTTP/1.1\r\nHost: 192.0.2.10\r\n\r\n"],
+        );
+        client_frame(
+            &mut s1,
+            &rt,
+            &mut api,
+            36501,
+            next1,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req1,
+            &mut cap1,
+        );
+        let (resp1, len1) = reassemble(&cap1);
+        let text1 = core::str::from_utf8(&resp1[..len1]).unwrap();
+        assert!(
+            text1.starts_with("HTTP/1.1 401 Unauthorized"),
+            "GET dns anonim harus 401, dapat: {text1}"
+        );
+        assert!(text1.contains("\"error\":\"unauthenticated\""), "{text1}");
+        assert!(
+            !text1.contains("resolver_1"),
+            "setelan resolver bocor ke anonim: {text1}"
+        );
+
+        // (2) Admin + lease DHCP ber-opsi 6: nilai lease DAN nilai mesin
+        //     ditampilkan, keduanya menunjuk angka yang sama.
+        let mut s2 = TcpWebServer::new(80);
+        s2.listen(80);
+        let mut cap2 = Cap::new();
+        let next2 = handshake(&mut s2, &mut api, &mut cap2, 36600);
+        let req2 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/dns HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s2,
+            &rt,
+            &mut api,
+            36601,
+            next2,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req2,
+            &mut cap2,
+        );
+        let (resp2, len2) = reassemble(&cap2);
+        let text2 = core::str::from_utf8(&resp2[..len2]).unwrap();
+        assert!(
+            text2.starts_with("HTTP/1.1 200 OK"),
+            "GET dns admin harus 200, dapat: {text2}"
+        );
+        for want in [
+            "\"config_mode\":\"dhcp\"",
+            "\"lease_source\":\"dhcp\"",
+            "\"resolver_1\":\"192.0.2.53\"",
+            "\"resolver_2\":\"0.0.0.0\"",
+            "\"resolver_src\":\"option-6-offer\"",
+            "\"from_dhcp\":true",
+            "\"proxy_upstream\":\"192.0.2.53\"",
+            "\"proxy_upstream_ready\":true",
+            "\"serving\":false",
+            "\"cache_hits\":11",
+            "\"cache_misses\":5",
+            "\"cache_entries\":3",
+            "\"cache_capacity\":16",
+            "\"static_hosts\":1",
+            "\"hosts_capacity\":8",
+        ] {
+            assert!(text2.contains(want), "{want} hilang: {text2}");
+        }
+        // Resolver publik tidak boleh muncul sebagai nilai bawaan.
+        for banned in ["8.8.8.8", "8.8.4.4", "1.1.1.1", "192.0.2.254"] {
+            assert!(!text2.contains(banned), "dns mengarang {banned}: {text2}");
+        }
+
+        // (3) Server tanpa opsi 6: fail-closed, bukan penebakan.
+        rt.wan_dns1 = [0, 0, 0, 0];
+        rt.wan_dns_src = "none";
+        rt.dns_upstream = [0, 0, 0, 0];
+        rt.dns_cache_entries = 0;
+        rt.dns_cache_hits = 0;
+        rt.dns_cache_misses = 0;
+        let mut s3 = TcpWebServer::new(80);
+        s3.listen(80);
+        let mut cap3 = Cap::new();
+        let next3 = handshake(&mut s3, &mut api, &mut cap3, 36700);
+        let req3 = req_parts(
+            &mut raw,
+            &[
+                b"GET /api/v1/dns HTTP/1.1\r\nHost: 192.0.2.10\r\n",
+                bearer,
+                b"\r\n\r\n",
+            ],
+        );
+        client_frame(
+            &mut s3,
+            &rt,
+            &mut api,
+            36701,
+            next3,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req3,
+            &mut cap3,
+        );
+        let (resp3, len3) = reassemble(&cap3);
+        let text3 = core::str::from_utf8(&resp3[..len3]).unwrap();
+        assert!(
+            text3.starts_with("HTTP/1.1 200 OK"),
+            "dns tanpa opsi 6 tetap harus terbaca: {text3}"
+        );
+        for want in [
+            "\"resolver_1\":\"0.0.0.0\"",
+            "\"resolver_src\":\"none\"",
+            "\"from_dhcp\":false",
+            "\"proxy_upstream\":\"0.0.0.0\"",
+            "\"proxy_upstream_ready\":false",
+            "\"cache_entries\":0",
+        ] {
+            assert!(text3.contains(want), "{want} hilang: {text3}");
+        }
+
+        // (4) Setelan DNS belum punya jalur tulis HTTP: gerbang metode menolak,
+        //     bendera persistensi tidak naik, antrean tulis tetap kosong.
+        let mut s4 = TcpWebServer::new(80);
+        s4.listen(80);
+        let mut cap4 = Cap::new();
+        let next4 = handshake(&mut s4, &mut api, &mut cap4, 36800);
+        let req4 = post_form(&mut raw, b"/api/v1/dns", bearer, b"upstream=192.0.2.53");
+        client_frame(
+            &mut s4,
+            &rt,
+            &mut api,
+            36801,
+            next4,
+            TCP_FLAG_ACK | TCP_FLAG_PSH,
+            req4,
+            &mut cap4,
+        );
+        let (resp4, len4) = reassemble(&cap4);
+        let text4 = core::str::from_utf8(&resp4[..len4]).unwrap();
+        assert!(
+            text4.starts_with("HTTP/1.1 405"),
+            "setelan DNS tidak punya jalur tulis, harus 405: {text4}"
+        );
+        assert!(!api.auth_dirty, "POST dns tidak boleh menulis config");
+        assert!(api.take_write().is_none());
     }
 }

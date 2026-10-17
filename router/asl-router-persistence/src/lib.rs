@@ -43,6 +43,89 @@ const OFF_WAN_END: usize = 167;
 const _: () = assert!(OFF_WAN_END <= RJCFG_SLOT_SIZE);
 const _: () = assert!(OFF_WAN_END == OFF_LAN_NAME + RJCFG_IFACE_NAME_MAX);
 
+// --- Blok kredensial (sprint AUD-02) ----------------------------------------
+/// Jumlah slot kredensial dalam satu slot jurnal.
+pub const RJCFG_AUTH_SLOTS: usize = 4;
+/// Panjang maksimum nama pengguna WebUI.
+pub const RJCFG_AUTH_USER_MAX: usize = 16;
+/// Panjang salt yang disimpan per kredensial.
+pub const RJCFG_AUTH_SALT_MAX: usize = 16;
+/// Panjang byte hash ter-stretch yang disimpan per kredensial.
+pub const RJCFG_AUTH_HASH_MAX: usize = 32;
+/// Role: pengelola penuh (baca + tulis + aksi daya).
+pub const RJCFG_AUTH_ROLE_ADMIN: u8 = 0;
+/// Role: baca-saja.
+pub const RJCFG_AUTH_ROLE_VIEWER: u8 = 1;
+/// Versi skema blok kredensial; pembaca menolak nilai lain.
+pub const RJCFG_AUTH_SCHEMA: u8 = 1;
+/// Lebar minimum byte hash yang dicocokkan saat ada kredensial.
+pub const RJCFG_AUTH_MATCH_MIN: u8 = 16;
+
+const OFF_AUTH_TAG: usize = 167;
+const OFF_AUTH_COUNT: usize = 168;
+const OFF_AUTH_RECORD: usize = 169;
+/// Lebar satu rekaman: user_len + user + role + salt_len + salt + rounds(4 BE)
+/// + hash_len + hash.
+pub const RJCFG_AUTH_RECORD_SIZE: usize =
+    1 + RJCFG_AUTH_USER_MAX + 1 + 1 + RJCFG_AUTH_SALT_MAX + 4 + 1 + RJCFG_AUTH_HASH_MAX;
+const OFF_AUTH_MATCH: usize = OFF_AUTH_RECORD + RJCFG_AUTH_SLOTS * RJCFG_AUTH_RECORD_SIZE;
+const OFF_AUTH_END: usize = OFF_AUTH_MATCH + 1;
+// Layout satu rekaman. Dikunci oleh assert agar penulis dan pembaca tidak bisa
+// bergeser diam-diam.
+const R_USER_LEN: usize = 0;
+const R_USER: usize = R_USER_LEN + 1;
+const R_ROLE: usize = R_USER + RJCFG_AUTH_USER_MAX;
+const R_SALT_LEN: usize = R_ROLE + 1;
+const R_SALT: usize = R_SALT_LEN + 1;
+const R_ROUNDS: usize = R_SALT + RJCFG_AUTH_SALT_MAX;
+const R_HASH_LEN: usize = R_ROUNDS + 4;
+const R_HASH: usize = R_HASH_LEN + 1;
+const _: () = assert!(RJCFG_AUTH_RECORD_SIZE == 72);
+const _: () = assert!(R_HASH + RJCFG_AUTH_HASH_MAX == RJCFG_AUTH_RECORD_SIZE);
+const _: () = assert!(OFF_AUTH_MATCH == 457);
+const _: () = assert!(OFF_AUTH_END == 458);
+const _: () = assert!(OFF_AUTH_END <= RJCFG_SLOT_SIZE);
+
+/// Satu kredensial seperti tersimpan di jurnal RJCFG01. Struktur ini sengaja
+/// tidak memuat kata sandi, hanya penurunannya.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AuthRecord {
+    pub user: [u8; RJCFG_AUTH_USER_MAX],
+    pub user_len: u8,
+    pub role: u8,
+    pub salt: [u8; RJCFG_AUTH_SALT_MAX],
+    pub salt_len: u8,
+    pub rounds: u32,
+    pub hash: [u8; RJCFG_AUTH_HASH_MAX],
+    pub hash_len: u8,
+}
+
+impl AuthRecord {
+    /// Slot kosong: `user_len` nol.
+    pub const fn empty() -> Self {
+        Self {
+            user: [0u8; RJCFG_AUTH_USER_MAX],
+            user_len: 0,
+            role: RJCFG_AUTH_ROLE_VIEWER,
+            salt: [0u8; RJCFG_AUTH_SALT_MAX],
+            salt_len: 0,
+            rounds: 0,
+            hash: [0u8; RJCFG_AUTH_HASH_MAX],
+            hash_len: 0,
+        }
+    }
+}
+
+/// Nama pengguna WebUI: huruf/angka kecil, `-`, `_`, `.`; panjang 3..=16.
+pub fn auth_user_ok(s: &str) -> bool {
+    if s.len() < 3 || s.len() > RJCFG_AUTH_USER_MAX {
+        return false;
+    }
+    s.bytes().all(|b| {
+        b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'-' || b == b'_' || b == b'.'
+    })
+}
+
 #[repr(C, packed)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RjcfgHeader {
@@ -65,6 +148,9 @@ pub struct RjcfgConfigPayload {
     pub lan_ip: [u8; 4],
     pub dhcp_pool_start: [u8; 4],
     pub dhcp_pool_end: [u8; 4],
+    /// Upstream DNS yang disimpan operator. Defaultnya NOL: pada mode DHCP
+    /// resolver datang dari opsi 6 lease, bukan dari templat. Angka riil tidak
+    /// boleh dibakar ke dalam templat (AGENTS.md: nol secret di repositori).
     pub dns_upstream: [u8; 4],
     pub static_dns_host: [u8; 32],
     pub static_dns_host_len: u8,
@@ -78,6 +164,11 @@ pub struct RjcfgConfigPayload {
     pub wan_name_len: u8,
     pub lan_name: [u8; RJCFG_IFACE_NAME_MAX],
     pub lan_name_len: u8,
+    /// Tabel kredensial WebUI (sprint AUD-02). Hanya hash ter-stretch yang
+    /// disimpan; kata sandi tidak pernah masuk jurnal.
+    pub auth: [AuthRecord; RJCFG_AUTH_SLOTS],
+    /// Jumlah byte hash yang dicocokkan saat login.
+    pub auth_match_bytes: u8,
 }
 
 /// Nama antarmuka: huruf/angka kecil, `-`, `_`, `.`; panjang 1..=16. Aturan ini
@@ -141,7 +232,7 @@ impl RjcfgConfigPayload {
             lan_ip: [192, 168, 56, 1],
             dhcp_pool_start: [192, 168, 56, 100],
             dhcp_pool_end: [192, 168, 56, 150],
-            dns_upstream: [10, 10, 66, 254],
+            dns_upstream: [0, 0, 0, 0],
             static_dns_host,
             static_dns_host_len: s_str.len() as u8,
             static_dns_ip: [192, 168, 56, 1],
@@ -153,6 +244,9 @@ impl RjcfgConfigPayload {
             wan_name_len: wn_str.len() as u8,
             lan_name,
             lan_name_len: ln_str.len() as u8,
+            auth: [AuthRecord::empty(); RJCFG_AUTH_SLOTS],
+            // Penjaga regresi: default tidak boleh menyingkap kredensial apa pun.
+            auth_match_bytes: 0,
         }
     }
 
@@ -182,6 +276,23 @@ impl RjcfgConfigPayload {
         out[OFF_WAN_NAME..OFF_WAN_NAME + RJCFG_IFACE_NAME_MAX].copy_from_slice(&self.wan_name);
         out[OFF_LAN_NAME_LEN] = self.lan_name_len;
         out[OFF_LAN_NAME..OFF_LAN_NAME + RJCFG_IFACE_NAME_MAX].copy_from_slice(&self.lan_name);
+        // Blok kredensial (sprint AUD-02): ditulis selalu. Rekam pra-AUD-02
+        // punya byte 167 == 0 sehingga pembaca mengenalinya sebagai "belum ada
+        // kredensial", bukan sebagai rekam rusak.
+        out[OFF_AUTH_TAG] = RJCFG_AUTH_SCHEMA;
+        out[OFF_AUTH_COUNT] = self.auth.iter().filter(|r| r.user_len > 0).count() as u8;
+        for (i, r) in self.auth.iter().enumerate() {
+            let b = OFF_AUTH_RECORD + i * RJCFG_AUTH_RECORD_SIZE;
+            out[b + R_USER_LEN] = r.user_len;
+            out[b + R_USER..b + R_USER + RJCFG_AUTH_USER_MAX].copy_from_slice(&r.user);
+            out[b + R_ROLE] = r.role;
+            out[b + R_SALT_LEN] = r.salt_len;
+            out[b + R_SALT..b + R_SALT + RJCFG_AUTH_SALT_MAX].copy_from_slice(&r.salt);
+            out[b + R_ROUNDS..b + R_ROUNDS + 4].copy_from_slice(&r.rounds.to_be_bytes());
+            out[b + R_HASH_LEN] = r.hash_len;
+            out[b + R_HASH..b + R_HASH + RJCFG_AUTH_HASH_MAX].copy_from_slice(&r.hash);
+        }
+        out[OFF_AUTH_MATCH] = self.auth_match_bytes;
     }
 
     pub fn deserialize(buf: &[u8; RJCFG_SLOT_SIZE]) -> Result<Self, &'static str> {
@@ -263,6 +374,58 @@ impl RjcfgConfigPayload {
             lan_name_len = d.len() as u8;
         }
 
+        // Blok kredensial: tag skema harus cocok persis; rekam pra-AUD-02
+        // (tag 0) menghasilkan tabel kosong, yaitu "belum ada akun".
+        let mut auth = [AuthRecord::empty(); RJCFG_AUTH_SLOTS];
+        let mut auth_match_bytes = 0u8;
+        if buf[OFF_AUTH_TAG] == RJCFG_AUTH_SCHEMA {
+            let n = buf[OFF_AUTH_COUNT];
+            if n as usize > RJCFG_AUTH_SLOTS {
+                return Err("Invalid auth record count");
+            }
+            for (i, r) in auth.iter_mut().enumerate().take(n as usize) {
+                let b = OFF_AUTH_RECORD + i * RJCFG_AUTH_RECORD_SIZE;
+                let user_len = buf[b + R_USER_LEN];
+                let salt_len = buf[b + R_SALT_LEN];
+                let hash_len = buf[b + R_HASH_LEN];
+                if user_len as usize > RJCFG_AUTH_USER_MAX
+                    || salt_len as usize > RJCFG_AUTH_SALT_MAX
+                    || hash_len as usize > RJCFG_AUTH_HASH_MAX
+                {
+                    return Err("Invalid auth record field length");
+                }
+                let role = buf[b + R_ROLE];
+                if role > RJCFG_AUTH_ROLE_VIEWER {
+                    return Err("Invalid auth role");
+                }
+                r.user_len = user_len;
+                r.user
+                    .copy_from_slice(&buf[b + R_USER..b + R_USER + RJCFG_AUTH_USER_MAX]);
+                r.role = role;
+                r.salt_len = salt_len;
+                r.salt
+                    .copy_from_slice(&buf[b + R_SALT..b + R_SALT + RJCFG_AUTH_SALT_MAX]);
+                r.rounds = u32::from_be_bytes([
+                    buf[b + R_ROUNDS],
+                    buf[b + R_ROUNDS + 1],
+                    buf[b + R_ROUNDS + 2],
+                    buf[b + R_ROUNDS + 3],
+                ]);
+                r.hash_len = hash_len;
+                r.hash
+                    .copy_from_slice(&buf[b + R_HASH..b + R_HASH + RJCFG_AUTH_HASH_MAX]);
+            }
+            auth_match_bytes = buf[OFF_AUTH_MATCH];
+            if auth_match_bytes as usize > RJCFG_AUTH_HASH_MAX {
+                return Err("Invalid auth match length");
+            }
+            // Slot kosong (belum ada kredensial) boleh memakai 0; begitu ada
+            // rekaman, lebar pencocokan wajib nyata dan tidak boleh kecil.
+            if n > 0 && auth_match_bytes < RJCFG_AUTH_MATCH_MIN {
+                return Err("Auth match length too small");
+            }
+        }
+
         Ok(Self {
             hostname,
             hostname_len,
@@ -283,6 +446,8 @@ impl RjcfgConfigPayload {
             wan_name_len,
             lan_name,
             lan_name_len,
+            auth,
+            auth_match_bytes,
         })
     }
 
@@ -831,6 +996,133 @@ mod tests {
         assert_eq!(loaded.active_config.wan_ip, [203, 0, 113, 9]);
         let mut nb = [0u8; RJCFG_IFACE_NAME_MAX];
         assert_eq!(loaded.active_config.lan_name_str(&mut nb), "lan-home");
+    }
+
+    #[test]
+    fn test_21_auth_block_roundtrip() {
+        let mut cfg = RjcfgConfigPayload::default_config();
+        let mut a = AuthRecord::empty();
+        a.user_len = 5;
+        a.user[..5].copy_from_slice(b"admin");
+        a.role = RJCFG_AUTH_ROLE_ADMIN;
+        a.salt_len = 16;
+        a.salt.copy_from_slice(&[0x11u8; RJCFG_AUTH_SALT_MAX]);
+        a.rounds = 1024;
+        a.hash_len = 32;
+        for (i, b) in a.hash.iter_mut().enumerate() {
+            *b = i as u8;
+        }
+        let mut v = AuthRecord::empty();
+        v.user_len = 6;
+        v.user[..6].copy_from_slice(b"reader");
+        v.role = RJCFG_AUTH_ROLE_VIEWER;
+        v.salt_len = 8;
+        v.salt[..8].copy_from_slice(&[0x22u8; 8]);
+        v.rounds = 2048;
+        v.hash_len = 20;
+        cfg.auth[0] = a;
+        cfg.auth[1] = v;
+        cfg.auth_match_bytes = 32;
+
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        cfg.serialize(&mut slot);
+        let back = RjcfgConfigPayload::deserialize(&slot).expect("blok kredensial wajib terbaca");
+        assert_eq!(back.auth[0], a);
+        assert_eq!(back.auth[1], v);
+        assert_eq!(back.auth[2], AuthRecord::empty(), "slot kosong harus nol");
+        assert_eq!(back.auth_match_bytes, 32);
+        // Nama hostname warisan tidak boleh ikut berubah oleh ekstensi baru.
+        assert_eq!(back.hostname_len, cfg.hostname_len);
+        assert_eq!(back.wan_ip, cfg.wan_ip);
+    }
+
+    #[test]
+    fn test_22_legacy_slot_without_auth_block_is_empty() {
+        // Rekam pra-AUD-02: byte 167..458 nol karena serialize lama menolkan
+        // area tersebut. Pembaca wajib menghasilkan tabel kosong, bukan error.
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        RjcfgConfigPayload::default_config().serialize(&mut slot);
+        for b in slot[OFF_AUTH_TAG..OFF_AUTH_END].iter_mut() {
+            *b = 0;
+        }
+        let back = RjcfgConfigPayload::deserialize(&slot).expect("rekam warisan wajib diterima");
+        for r in back.auth.iter() {
+            assert_eq!(r.user_len, 0, "slot warisan tidak boleh berisi akun");
+            assert_eq!(r.hash_len, 0);
+        }
+        assert_eq!(back.auth_match_bytes, 0);
+    }
+
+    #[test]
+    fn test_23_auth_block_rejects_corrupt_records() {
+        let mut cfg = RjcfgConfigPayload::default_config();
+        cfg.auth[0] = AuthRecord {
+            user_len: 5,
+            user: {
+                let mut u = [0u8; RJCFG_AUTH_USER_MAX];
+                u[..5].copy_from_slice(b"admin");
+                u
+            },
+            role: RJCFG_AUTH_ROLE_ADMIN,
+            salt_len: 16,
+            salt: [3u8; RJCFG_AUTH_SALT_MAX],
+            rounds: 1024,
+            hash_len: 32,
+            hash: [9u8; RJCFG_AUTH_HASH_MAX],
+        };
+        cfg.auth_match_bytes = 32;
+        let mut slot = [0u8; RJCFG_SLOT_SIZE];
+        cfg.serialize(&mut slot);
+        assert!(RjcfgConfigPayload::deserialize(&slot).is_ok());
+
+        // Role di luar daftar.
+        let mut bad = slot;
+        bad[OFF_AUTH_RECORD + R_ROLE] = 7;
+        assert_eq!(
+            RjcfgConfigPayload::deserialize(&bad),
+            Err("Invalid auth role")
+        );
+
+        let mut bad2 = slot;
+        bad2[OFF_AUTH_RECORD + R_USER_LEN] = 99;
+        assert_eq!(
+            RjcfgConfigPayload::deserialize(&bad2),
+            Err("Invalid auth record field length")
+        );
+
+        let mut bad3 = slot;
+        bad3[OFF_AUTH_COUNT] = RJCFG_AUTH_SLOTS as u8 + 1;
+        assert_eq!(
+            RjcfgConfigPayload::deserialize(&bad3),
+            Err("Invalid auth record count")
+        );
+
+        // Kredensial ada tapi lebar pencocokan di bawah minimum: ditolak,
+        // karena login akan membandingkan 0 byte dan selalu lolos.
+        let mut bad4 = slot;
+        bad4[OFF_AUTH_MATCH] = 8;
+        assert_eq!(
+            RjcfgConfigPayload::deserialize(&bad4),
+            Err("Auth match length too small")
+        );
+    }
+
+    #[test]
+    fn test_24_auth_user_name_validator() {
+        assert!(auth_user_ok("adm"));
+        assert!(
+            auth_user_ok("rinjani-admin_1."),
+            "16 karakter adalah batas atas"
+        );
+        assert!(!auth_user_ok("ad"), "minimum 3 karakter");
+        assert!(!auth_user_ok(""), "kosong ditolak");
+        assert!(!auth_user_ok("ADMIN"), "huruf besar ditolak");
+        assert!(!auth_user_ok("a b"), "spasi ditolak");
+        assert!(!auth_user_ok("a/b"), "pemisah jalur ditolak");
+        assert!(
+            !auth_user_ok("abcdefghijklmnopq"),
+            "17 karakter melebihi batas"
+        );
     }
 
     #[test]
