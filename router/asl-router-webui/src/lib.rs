@@ -977,7 +977,7 @@ mod tests {
 
     #[test]
     fn test_02_all_assets_present() {
-        assert_eq!(registry::ALL_ASSETS.len(), 50);
+        assert_eq!(registry::ALL_ASSETS.len(), 52);
         assert_eq!(
             registry::SHELL_HTML.content_type,
             "text/html; charset=utf-8"
@@ -1184,6 +1184,114 @@ mod tests {
         assert!(
             !html.contains("data-bind=\"dst\" data-fmt=\"ip\""),
             "kolom Tujuan rute masih memakai pengubah ip"
+        );
+    }
+
+    /// CRUD User Manager: modal akun harus benar-benar terlayani sebagai aset
+    /// dan tersambung ke kontrak tulis kernel yang sama dengan konsol serial.
+    /// Yang dijaga di sini adalah sambungannya (aset terdaftar, view memanggil,
+    /// ketiga action ada, kata sandi tidak pernah menjadi teks polos), bukan
+    /// klaim bahwa aksi berhasil — keberhasilan hanya terbukti di runtime.
+    #[test]
+    fn test_05k_usermanager_crud_terpasang() {
+        let mut buf = [0u8; WEB_RESP_MAX];
+
+        let req = HttpRequest::parse(b"GET /js/core/useredit.js HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/js/core/useredit.js tidak terdaftar")
+            .expect("useredit.js terlalu besar untuk buffer respons");
+        let js = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(js.contains("\"/api/v1/auth/users\""), "target POST hilang");
+        assert!(
+            js.contains("\"/views/user-modal.html\""),
+            "sumber markup hilang"
+        );
+        assert!(
+            js.contains("/api/v1/writes/last"),
+            "verdict jurnal tidak dibaca"
+        );
+        assert!(js.contains("kredensial:"), "laporan kernel tidak disaring");
+        for action in ["action=set", "action=del", "action=revoke"] {
+            assert!(js.contains(action), "useredit.js kehilangan {action}");
+        }
+        // Data kernel tidak pernah menjadi markup (needle ber-dot agar komentar
+        // yang menyebut innerHTML tidak ikut menyala).
+        assert!(!js.contains(".innerHTML"), "useredit.js menulis innerHTML");
+
+        let req = HttpRequest::parse(b"GET /views/user-modal.html HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/views/user-modal.html tidak terdaftar")
+            .expect("user-modal.html terlalu besar untuk buffer respons");
+        let html = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            html.contains("id=\"user-overlay\""),
+            "overlay tidak dikenali"
+        );
+        assert!(
+            html.contains("id=\"user-lockrole\""),
+            "penanda peran sesi hilang"
+        );
+        assert!(
+            html.contains("insufficient_role"),
+            "penolakan viewer tidak dilaporkan di modal"
+        );
+        assert_eq!(
+            html.matches("type=\"password\"").count(),
+            2,
+            "kata sandi harus dua field bertipe password, bukan teks"
+        );
+        assert_eq!(
+            html.matches("autocomplete=\"new-password\"").count(),
+            2,
+            "browser tidak boleh menawarkan sandi lama"
+        );
+        assert!(!html.contains("192.168."), "parsial memuat alamat karangan");
+
+        let req = HttpRequest::parse(b"GET /views/usermanager.html HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/views/usermanager.html tidak terdaftar")
+            .expect("usermanager.html terlalu besar untuk buffer respons");
+        let view = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            view.contains("data-list=\"/api/v1/auth/users\" data-modal=\"user\""),
+            "tabel akun belum mendeklarasikan modal user"
+        );
+        assert!(
+            view.contains("data-actions=\"new,edit,remove\""),
+            "toolbar User Manager belum punya aksi tulis"
+        );
+        assert!(
+            !view.contains("belum dipasang"),
+            "view masih mengklaim formulir tulis belum ada"
+        );
+
+        let req = HttpRequest::parse(b"GET / HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("shell tidak terlayani")
+            .expect("shell terlalu besar untuk buffer respons");
+        let shell = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            shell.contains("/js/core/useredit.js"),
+            "shell tidak memuat useredit.js"
+        );
+
+        // Dispatch chrome: modal yang benar harus terbuka untuk tabel yang benar.
+        let req = HttpRequest::parse(b"GET /js/core/webfig.js HTTP/1.1\r\n\r\n").unwrap();
+        let len = dispatch_static(&req, &mut buf)
+            .expect("/js/core/webfig.js tidak terdaftar")
+            .expect("webfig.js terlalu besar untuk buffer respons");
+        let wf = core::str::from_utf8(&buf[..len]).unwrap();
+        assert!(
+            wf.contains("kind === \"user\""),
+            "dblclick belum ke modal user"
+        );
+        assert!(
+            wf.contains("OPCR.useredit.open"),
+            "aksi toolbar tidak memanggil modal"
+        );
+        assert!(
+            !wf.contains("OPCR.useredit.remove()"),
+            "Remove menghapus tanpa peneguhan operator"
         );
     }
 

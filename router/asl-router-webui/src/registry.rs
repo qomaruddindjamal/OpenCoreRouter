@@ -331,6 +331,15 @@ asset!(
     "rinjani-js-ifedit-ui02",
     "js/core/ifedit.js"
 );
+// Modal akun AUD-02: jalur tulis nyata ke POST /api/v1/auth/users. Diminta
+// client-side oleh useredit.js, sama seperti pola modal antarmuka.
+asset!(
+    JS_USEREDIT,
+    "/js/core/useredit.js",
+    "application/javascript; charset=utf-8",
+    "rinjani-js-useredit-aud02",
+    "js/core/useredit.js"
+);
 asset!(
     JS_NAV,
     "/js/core/nav.js",
@@ -567,6 +576,13 @@ asset!(
     "views/iface-modal.html"
 );
 asset!(
+    VIEW_USER_MODAL,
+    "/views/user-modal.html",
+    "text/html; charset=utf-8",
+    "rinjani-view-user-modal-aud02",
+    "views/user-modal.html"
+);
+asset!(
     LOGO_SVG,
     "/images/logo.svg",
     "image/svg+xml; charset=utf-8",
@@ -574,7 +590,7 @@ asset!(
     "images/logo.svg"
 );
 
-pub const ALL_ASSETS: [&StaticAsset; 50] = [
+pub const ALL_ASSETS: [&StaticAsset; 52] = [
     &SHELL_HTML,
     &CSS_BASE,
     &CSS_LAYOUT,
@@ -592,6 +608,7 @@ pub const ALL_ASSETS: [&StaticAsset; 50] = [
     &JS_TBLCOLS,
     &JS_PLOT,
     &JS_IFEDIT,
+    &JS_USEREDIT,
     &JS_NAV,
     &JS_LOGIN,
     &JS_APP,
@@ -624,5 +641,6 @@ pub const ALL_ASSETS: [&StaticAsset; 50] = [
     &VIEW_TELNET,
     &VIEW_TRACEROUTE,
     &VIEW_IFACE_MODAL,
+    &VIEW_USER_MODAL,
     &LOGO_SVG,
 ];
