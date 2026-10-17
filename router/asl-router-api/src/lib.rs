@@ -604,9 +604,11 @@ const RATE_IDLE_TICKS: u64 = 100;
 
 const fn policy(category: u8) -> (u32, u32, u64) {
     match category {
-        // Baca: 60 burst + 20 token/tick (200/menit per klien). Pola refresh UI
-        // terukur 4 permintaan/5 s = 0,8/s, jadi ini longgar untuk operator sah
-        // dan tetap membatasi banjir dari satu klien.
+        // Baca: 60 burst + 20 token per tick 100 ms = 200 permintaan/s per
+        // klien. Pola refresh UI terukur 4 permintaan/5 s = 0,8/s, jadi ini
+        // longgar untuk operator sah dan tetap membatasi banjir dari satu
+        // klien. Ukur: plafon nyata jalur ini 105 permintaan/s pada 4 MiB RAM,
+        // sehingga ember baca tidak pernah menjadi pembatas (BENCH-01).
         RATE_READ => (60, 20, 1),
         // Tulis: 6 burst + 1 token per 2 tick (5/s).
         RATE_WRITE => (6, 1, 2),
