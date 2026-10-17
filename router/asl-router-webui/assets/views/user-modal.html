@@ -1,0 +1,52 @@
+<div class="wf-overlay" id="user-overlay">
+    <div class="wf-modal" role="dialog" aria-modal="true" aria-labelledby="user-title">
+        <div class="wf-modal-head">
+            <h3 id="user-title">Akun</h3>
+            <span class="wf-modal-tag" id="user-tag"></span>
+            <button type="button" class="icon-btn" id="user-x" title="Tutup">&#10005;</button>
+        </div>
+        <div class="wf-modal-body">
+            <p class="wf-locked" id="user-locked"><span id="user-lockrole"></span> Aksi tulis akun khusus admin dan kernel menjawab
+                <code>403 insufficient_role</code>; tombol tulis di sini hanya disembunyikan
+                sebagai pengalaman pakai, bukan sebagai penjaga.</p>
+            <div class="wf-f" id="user-form">
+                <fieldset>
+                    <legend>Akun</legend>
+                    <div class="f-row">
+                        <label for="u-name">Nama akun</label>
+                        <input type="text" id="u-name" maxlength="16" spellcheck="false" autocomplete="off">
+                    </div>
+                    <p class="f-hint">3&mdash;16 karakter: huruf kecil, angka, &quot;-&quot;, &quot;_&quot;, &quot;.&quot;. Tabel kredensial kernel menampung 4 akun.</p>
+                    <div class="f-row">
+                        <label for="u-role">Role</label>
+                        <select id="u-role">
+                            <option value="admin">admin &mdash; baca, tulis, aksi daya, daftar akun</option>
+                            <option value="viewer">viewer &mdash; hanya baca</option>
+                        </select>
+                    </div>
+                </fieldset>
+                <fieldset>
+                    <legend>Kata sandi</legend>
+                    <div class="f-row">
+                        <label for="u-pw">Kata sandi baru</label>
+                        <input type="password" id="u-pw" maxlength="64" autocomplete="new-password">
+                    </div>
+                    <div class="f-row">
+                        <label for="u-pw2">Ulangi kata sandi</label>
+                        <input type="password" id="u-pw2" maxlength="64" autocomplete="new-password">
+                    </div>
+                    <p class="f-hint" id="user-pwhint">10&mdash;64 karakter. Sandi hanya turun menjadi PBKDF2-HMAC-SHA256 di lapisan server; ia tidak pernah dapat dibaca kembali, sehingga mengubah akun selalu menuntut sandi baru.</p>
+                    <p class="f-hint" id="user-pwedit" style="display:none">Ubah akun menuntut kata sandi baru: lapisan server tidak pernah mengeluarkan garam, hash, maupun sandi lama, jadi tidak ada nilai yang bisa disalin kembali.</p>
+                </fieldset>
+            </div>
+            <p class="f-hint">Balasan status di bawah adalah kutipan kernel: <span class="mono">set</span> dan <span class="mono">del</span> berjanji <span class="mono">persist=queued</span> lalu verdict RJCFG01 dibaca ulang, sedangkan <span class="mono">revoke</span> hanya membalas jumlah sesi yang dicabut dan ikut mematikan sesi ini.</p>
+        </div>
+        <div class="wf-modal-foot">
+            <span class="wf-status" id="user-status"></span>
+            <button type="button" class="wf-btn wf-btn-primary" id="u-save">Pasang akun</button>
+            <button type="button" class="wf-btn" id="u-del">Hapus akun</button>
+            <button type="button" class="wf-btn" id="u-revoke">Cabut semua sesi</button>
+            <button type="button" class="wf-btn" id="u-close">Tutup</button>
+        </div>
+    </div>
+</div>

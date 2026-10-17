@@ -66,12 +66,16 @@
                 });
                 tr.className += " selected";
             });
-            // Dobel-klik baris nyata membuka modal; baris "tidak ada baris dari
-            // kernel" tidak punya _data sehingga tidak pernah bisa dibuka.
+            // Dobel-klik baris nyata membuka modal milik tabel itu. Baris
+            // "tidak ada baris dari kernel" tidak punya _data sehingga tidak
+            // pernah bisa dibuka.
             tb.addEventListener("dblclick", function (ev) {
-                if (tb.getAttribute("data-modal") !== "iface") return;
+                var kind = tb.getAttribute("data-modal");
+                if (!kind) return;
                 var tr = closestRow(ev.target);
-                if (tr && tr._data) OPCR.ifedit.open(tr._data);
+                if (!(tr && tr._data)) return;
+                if (kind === "iface" && OPCR.ifedit) OPCR.ifedit.open(tr._data);
+                else if (kind === "user" && OPCR.useredit) OPCR.useredit.open(tr._data);
             });
         });
     }
@@ -90,8 +94,6 @@
         }, delayMs);
     };
 
-    // Aksi toolbar melapor jujur: build ini belum punya jalur tulis
-    // create/destroy maupun admin-state, jadi state tidak diubah di browser.
     function modulName(scope) {
         var n = (scope.matches && scope.matches("[data-module]"))
             ? scope : scope.querySelector("[data-module]");
@@ -117,18 +119,44 @@
         if (d) say(scope, kata + ": kernel tidak punya admin-state; " + d.name + " tetap " + d.status + ".");
     }
 
+    // Aksi toolbar. Tabel yang mendeklarasikan data-modal punya jalur tulis
+    // nyata di kernel dan modalnya yang memanggil; tabel lain tetap mendapat
+    // laporan jujur bahwa mesinnya belum ada, bukan tombol yang mengubah
+    // keadaan di browser saja.
+    function modalKind(scope) {
+        var tb = scope.querySelector(".wf-panel.active tbody[data-modal]") ||
+            scope.querySelector("tbody[data-modal]");
+        return tb ? tb.getAttribute("data-modal") : "";
+    }
+
     wf.actions = {
         refresh: function () { if (OPCR.app && OPCR.app.reload) OPCR.app.reload(); },
         "new": function (scope) {
+            var k = modalKind(scope);
+            if (k === "user" && OPCR.useredit) return OPCR.useredit.open(null);
             say(scope, "New: kernel belum punya jalur pembuatan " + modulName(scope) + ".");
+        },
+        // Edit diperiksa di sini (sebelum table.js) karena hanya modul bertulis
+        // yang boleh membuka modal; ifedit tetap dipakai untuk antarmuka.
+        edit: function (scope) {
+            var d = wf.selectedData(scope);
+            if (!d) return say(scope, "Edit: pilih satu baris lebih dulu.");
+            if (modalKind(scope) === "user" && OPCR.useredit) return OPCR.useredit.open(d);
+            if (OPCR.ifedit && d.name) return OPCR.ifedit.open(d);
+            return say(scope, "Edit: modul ini belum punya modal pengeditan.");
         },
         enable: function (scope) { adminState(scope, "Enable"); },
         disable: function (scope) { adminState(scope, "Disable"); },
         // Remove hanya sah untuk antarmuka virtual; NIC fisik hasil enumerasi
-        // PCI tidak boleh dihapus dari inventaris.
+        // PCI tidak boleh dihapus dari inventaris. Penghapusan akun menuntut
+        // peneguhan: modal dibuka, tombol "Hapus akun" yang mengirim.
         remove: function (scope) {
             var d = chosen(scope, "Remove");
             if (!d) return;
+            if (modalKind(scope) === "user" && OPCR.useredit) {
+                OPCR.useredit.open(d);
+                return say(scope, "Remove: teguhkan dengan tombol Hapus akun di modal.");
+            }
             say(scope, d.type === "ethernet"
                 ? "Remove ditolak: " + d.name + " adalah NIC fisik ethernet."
                 : "Remove: kernel belum punya penghancur baris " + modulName(scope) + ".");

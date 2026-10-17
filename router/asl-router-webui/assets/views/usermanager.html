@@ -10,7 +10,7 @@
             <button type="button" class="wf-tab" data-tab="sect">Secrets</button>
         </div>
 
-        <div class="wf-toolbar" data-tools="refresh"
+        <div class="wf-toolbar" data-actions="new,edit,remove" data-tools="find,refresh"
              data-hint="satu permintaan /api/v1/auth/users per penyegaran"></div>
 
         <div class="wf-panel active" data-panel="users">
@@ -23,7 +23,7 @@
                         <th class="num">Iterasi PBKDF2</th>
                     </tr>
                 </thead>
-                <tbody data-list="/api/v1/auth/users">
+                <tbody data-list="/api/v1/auth/users" data-modal="user">
                     <tr data-row>
                         <td class="col-st"></td>
                         <td class="row-name" data-bind="user" data-fmt="text"></td>
@@ -33,7 +33,8 @@
                 </tbody>
             </table>
             <p class="wf-note">Baris bersumber dari <span class="mono">AuthStore</span> kernel lewat <span class="mono">GET /api/v1/auth/users</span>: nama, role, dan iterasi PBKDF2 per akun. Garam, hash, dan kata sandi tidak pernah keluar dari lapisan server, jadi tidak ada kolom untuk itu di halaman ini. Viewer yang mencoba jalur yang sama dijawab <span class="mono">403 insufficient_role</span> oleh kernel.</p>
-            <p class="wf-note">Tulis akun tersedia di server sebagai <span class="mono">POST /api/v1/auth/users</span> (<span class="mono">action=set|del|revoke</span>, khusus admin) dan di konsol serial sebagai <span class="mono">auth set/del/list/revoke</span>. Formulir web untuk aksi tulis belum dipasang, jadi tombol New/Edit/Remove sengaja tidak ditampilkan alih-alih menjanjikan yang belum ada.</p>
+            <p class="wf-note">Tulis akun memakai jalur kernel yang sama dengan konsol serial: <span class="mono">POST /api/v1/auth/users</span> dengan <span class="mono">action=set</span> (nama 3&ndash;16 karakter <span class="mono">[a-z0-9._-]</span>, role <span class="mono">admin|viewer</span>, sandi 10&ndash;64 karakter), <span class="mono">action=del</span>, atau <span class="mono">action=revoke</span>. Modal dibuka lewat New, dobel-klik baris, Edit, atau Remove &mdash; Remove hanya membuka modal, penghapusan terjadi setelah tombol &quot;Hapus akun&quot; ditekan. Yang tampil di status modal adalah kutipan balasan kernel, bukan kesimpulan browser: penolakan seperti <span class="mono">last_account</span> (sisa satu akun), <span class="mono">last_admin</span>, <span class="mono">bad_user_or_table_full</span> (kapasitas 4 akun), dan <span class="mono">password_too_short</span> dilaporkan apa adanya.</p>
+            <p class="wf-note">Setelah aksi diterapkan <span class="mono">AuthStore</span>, jurnal RJCFG01 baru ditulis pada tick poll berikutnya, karena itu status akhir dibaca ulang dari <span class="mono">/api/v1/writes/last</span>. Konsol serial tetap jalur pemulihan: bila akun admin terakhir hilang sebelum sempat menghapusnya, hanya <span class="mono">auth set</span> di serial yang bisa memasang kembali.</p>
         </div>
 
         <div class="wf-panel" data-panel="sect">
