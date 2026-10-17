@@ -1,11 +1,18 @@
 # Build bootable Rinjani 1.0.0 DISK image (GPT + FAT32 ESP + Limine) for IS-01
 # Pipeline: kernel ELF -> opcr-mkdisk (GPT+FAT32) -> limine bios-install -> verify -> VDI
+#
+# Profil default = release. Limine membaca SELURUH berkas ELF ke high memory
+# sebelum memetakan segmen, jadi ukuran berkas menentukan RAM minimum guest:
+# ELF debug 3 703 992 B tidak muat di guest 4 MiB (PANIC 'High memory allocator:
+# Out of memory' di freadall), sedangkan ELF release 707 168 B muat. Debug tetap
+# tersedia lewat -Profile debug untuk pengembangan di guest ber-RAM besar.
 [CmdletBinding()]
 param(
-    [string]$Profile = "debug",
+    [string]$Profile = "release",
     [long]$DiskMib = 2048,
     [string]$RawOut = "target/rinjani-1.0.0-x86_64-disk.raw",
-    [string]$VdiOut = "target/rinjani-1.0.0-x86_64-disk.vdi"
+    [string]$VdiOut = "target/rinjani-1.0.0-x86_64-disk.vdi",
+    [long]$ElfMaxBytes = 1048576
 )
 
 $ErrorActionPreference = "Stop"
@@ -25,6 +32,36 @@ if (!(Test-Path $kernelBin)) {
     cargo build -p asl-kernel-bin --target x86_64-unknown-none @profileFlag
     if (!(Test-Path $kernelBin)) { throw "kernel binary missing: $kernelBin" }
 }
+
+# 1b. Gerbang tapak boot: berkas ELF harus termuat di high memory guest.
+$elf = Get-Item $kernelBin
+$elfBytes = $elf.Length
+if ($elfBytes -gt $ElfMaxBytes) {
+    throw "kernel ELF $elfBytes B > batas $ElfMaxBytes B; guest 4 MiB tidak akan termuat (pakai -Profile release)"
+}
+# Jumlah memsz segmen PT_LOAD = citra residen kernel di RAM.
+$fs = [System.IO.File]::OpenRead($kernelBin)
+try {
+    $hdr = New-Object byte[] 64
+    $fs.Read($hdr, 0, 64) | Out-Null
+    if ($hdr[0] -ne 0x7F -or $hdr[1] -ne 0x45 -or $hdr[2] -ne 0x4C -or $hdr[3] -ne 0x46) { throw "bukan ELF" }
+    if ($hdr[4] -ne 2) { throw "bukan ELF64" }
+    $phoff = [System.BitConverter]::ToInt64($hdr, 32)
+    $phentsize = [System.BitConverter]::ToInt16($hdr, 54)
+    $phnum = [System.BitConverter]::ToInt16($hdr, 56)
+    $resident = [long]0
+    $loads = 0
+    for ($i = 0; $i -lt $phnum; $i++) {
+        $ph = New-Object byte[] $phentsize
+        $fs.Seek($phoff + $i * $phentsize, [System.IO.SeekOrigin]::Begin) | Out-Null
+        $fs.Read($ph, 0, $phentsize) | Out-Null
+        if ([System.BitConverter]::ToInt32($ph, 0) -eq 1) {
+            $loads++
+            $resident += [System.BitConverter]::ToInt64($ph, 40)
+        }
+    }
+} finally { $fs.Close() }
+Write-Host ("BOOT FOOTPRINT: ELF {0} B, PT_LOAD {1} segmen, residen {2} B (batas ELF {3} B)" -f $elfBytes, $loads, $resident, $ElfMaxBytes)
 
 # 2. Limine provisioned?
 if (!(Test-Path "$limineDir\limine.exe") -or !(Test-Path "$limineDir\limine-bios.sys")) {

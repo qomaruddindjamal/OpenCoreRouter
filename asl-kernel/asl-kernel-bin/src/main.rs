@@ -289,6 +289,36 @@ fn hhdm_place<T>(hhdm: u64, pa: u64, val: T) -> &'static mut T {
     }
 }
 
+/// Total RAM yang benar-benar USABLE menurut peta memori bootloader, beserta
+/// alamat fisik terendahnya. Sumbernya Limine memmap, bukan angka karangan:
+/// klaim "[R3] RAM nyata" harus bisa dibuktikan pada guest 4 MiB maupun 64 MiB.
+/// `None` bila bootloader tidak mengisi respons atau tidak ada region usable.
+#[cfg(target_os = "none")]
+fn usable_ram() -> Option<(u64, u64)> {
+    let mut total = 0u64;
+    let mut lowest = u64::MAX;
+    let mut i = 0usize;
+    loop {
+        match DmaArena::entry_at(i) {
+            Some((base, len, typ)) => {
+                i += 1;
+                if typ == 0 {
+                    total = total.saturating_add(len);
+                    if base < lowest {
+                        lowest = base;
+                    }
+                }
+            }
+            None => break,
+        }
+    }
+    if total == 0 {
+        None
+    } else {
+        Some((lowest, total))
+    }
+}
+
 // -----------------------------------------------------------------------------
 // DEDICATED ASSEMBLY ENTRY STUB & 512KB STACK
 // -----------------------------------------------------------------------------
@@ -349,11 +379,22 @@ pub extern "C" fn rinjani_kernel_main() -> ! {
     SERIAL.write_str(banner_r2);
     SERIAL.write_str("\n");
 
-    // [R3]: CORE INIT
-    let boot_info = asl_bootloader::BootInfo::new(0x1000_0000, 0x4000_0000, 2);
+    // [R3]: CORE INIT — basis & besar RAM diambil dari memmap bootloader.
+    let (mem_base, mem_bytes) = match usable_ram() {
+        Some(v) => v,
+        None => {
+            SERIAL.write_str("[R3] CORE INIT FAILED: Limine memmap kosong/tanpa region USABLE\n");
+            loop {
+                core::hint::spin_loop();
+            }
+        }
+    };
+    let boot_info = asl_bootloader::BootInfo::new(mem_base, mem_bytes, 2);
     let _executive = match asl_kernel_bin::kernel_init(&boot_info) {
         Ok(exec) => {
-            SERIAL.write_str("[R3] CORE INIT\n");
+            SERIAL.write_str("[R3] CORE INIT (RAM usable ");
+            SERIAL.write_u32((mem_bytes >> 10) as u32);
+            SERIAL.write_str(" KiB dari Limine memmap)\n");
             exec
         }
         Err(_) => {
