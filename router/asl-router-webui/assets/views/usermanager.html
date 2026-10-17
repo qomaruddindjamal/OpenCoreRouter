@@ -2,7 +2,7 @@
     <div class="panel">
         <div class="panel-head">
             <h2>User Manager</h2>
-            <span class="panel-note">desain saja &middot; WebUI tanpa autentikasi</span>
+            <span class="panel-note">kredensial nyata &middot; jalur ini khusus role admin</span>
         </div>
 
         <div class="wf-tabs">
@@ -10,22 +10,40 @@
             <button type="button" class="wf-tab" data-tab="sect">Secrets</button>
         </div>
 
-        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
-             data-hint="0 pengguna &middot; konsol ini belum meminta login"></div>
+        <div class="wf-toolbar" data-tools="refresh"
+             data-hint="satu permintaan /api/v1/auth/users per penyegaran"></div>
 
         <div class="wf-panel active" data-panel="users">
-            <table class="wf-kv">
-                <tr><td>Tabel pengguna</td><td>tidak ada di state kernel</td></tr>
-                <tr><td>Akses saat ini</td><td>siapa pun yang dapat merute ke alamat bind boleh membaca API</td></tr>
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Nama</th>
+                        <th>Role</th>
+                        <th class="num">Iterasi PBKDF2</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/auth/users">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="user" data-fmt="text"></td>
+                        <td data-bind="role" data-fmt="text"></td>
+                        <td class="num" data-bind="rounds" data-fmt="num"></td>
+                    </tr>
+                </tbody>
             </table>
+            <p class="wf-note">Baris bersumber dari <span class="mono">AuthStore</span> kernel lewat <span class="mono">GET /api/v1/auth/users</span>: nama, role, dan iterasi PBKDF2 per akun. Garam, hash, dan kata sandi tidak pernah keluar dari lapisan server, jadi tidak ada kolom untuk itu di halaman ini. Viewer yang mencoba jalur yang sama dijawab <span class="mono">403 insufficient_role</span> oleh kernel.</p>
+            <p class="wf-note">Tulis akun tersedia di server sebagai <span class="mono">POST /api/v1/auth/users</span> (<span class="mono">action=set|del|revoke</span>, khusus admin) dan di konsol serial sebagai <span class="mono">auth set/del/list/revoke</span>. Formulir web untuk aksi tulis belum dipasang, jadi tombol New/Edit/Remove sengaja tidak ditampilkan alih-alih menjanjikan yang belum ada.</p>
         </div>
 
         <div class="wf-panel" data-panel="sect">
             <table class="wf-kv">
                 <tr><td>Kata sandi / kunci</td><td>tidak disimpan, tidak dikirim, dan tidak ditampilkan</td></tr>
+                <tr><td>Penurunan sandi</td><td>PBKDF2-HMAC-SHA256, garam 16 byte per akun</td></tr>
+                <tr><td>Penyimpanan</td><td>blok auth jurnal RJCFG01 (dijamin CRC + baca-balik)</td></tr>
+                <tr><td>Akun pertama</td><td>konsol serial <span class="mono">auth set</span>; tidak ada akun bawaan</td></tr>
             </table>
+            <p class="wf-note">Kebijakan repo melarang kredensial tampil di antarmuka maupun versi: tab ini melaporkan bentuk penyimpanan, bukan isinya.</p>
         </div>
-
-        <p class="wf-note">Halaman ini menandai pekerjaan yang belum dikerjakan, bukan fitur yang sudah ada. Menambahkan autentikasi berarti menambah state kredensial ke kernel dan jurnal RJCFG01; kebijakan repo melarang kredensial tampil di antarmuka maupun versi, jadi tab Secrets sengaja kosong.</p>
     </div>
 </section>

@@ -317,6 +317,7 @@
 }
 
 .wf-f input[type="text"],
+.wf-f input[type="password"],
 .wf-f select {
     width: 100%;
     height: 26px;

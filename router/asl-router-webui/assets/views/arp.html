@@ -2,7 +2,7 @@
     <div class="panel">
         <div class="panel-head">
             <h2>ARP Table</h2>
-            <span class="panel-note">desain saja &middot; kernel tidak punya tabel ARP maupun endpoint-nya</span>
+            <span class="panel-note">data kernel nyata &middot; dipelajari pasif dari frame ARP yang masuk</span>
         </div>
 
         <div class="wf-tabs">
@@ -11,33 +11,52 @@
             <button type="button" class="wf-tab" data-tab="stat">Static</button>
         </div>
 
-        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="find,filter,refresh"
-             data-hint="0 baris: tidak ada endpoint /api/v1/arp untuk disaring"></div>
+        <div class="wf-toolbar" data-tools="find,filter,refresh"
+             data-hint="baris hanya muncul bila tetangga benar-benar mengirim frame ARP"></div>
 
         <div class="wf-panel active" data-panel="arp">
             <table class="tbl wf-table">
                 <thead>
                     <tr>
                         <th class="col-st"></th>
-                        <th>Nama</th>
+                        <th>Antarmuka</th>
                         <th>Alamat IP</th>
                         <th>MAC</th>
                         <th>Tipe</th>
-                        <th class="num">Ambil</th>
+                        <th>Asal frame</th>
+                        <th class="num">Terlihat</th>
+                        <th class="num">Umur</th>
                     </tr>
                 </thead>
-                <tbody>
-                    <tr><td class="row-mode" colspan="6">0 baris: kernel tidak menyimpan tabel ARP.</td></tr>
+                <tbody data-list="/api/v1/arp">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="iface" data-fmt="text"></td>
+                        <td data-bind="ip" data-fmt="ip"></td>
+                        <td data-bind="mac" data-fmt="text"></td>
+                        <td data-bind="type" data-fmt="text"></td>
+                        <td data-bind="source" data-fmt="text"></td>
+                        <td class="num" data-bind="seen" data-fmt="num"></td>
+                        <td class="num" data-bind="age_s" data-fmt="num"></td>
+                    </tr>
                 </tbody>
             </table>
-            <p class="wf-note">Yang ada di kernel hanyalah <span class="mono">penjawab</span> ARP: router membangun balasan ARP dan gratuitous ARP untuk alamatnya sendiri lewat <span class="mono">build_arp_reply</span> / <span class="mono">build_arp_gratuitous</span> di <span class="mono">asl-router-netstack</span>. Tidak ada struktur tabel (cache IP&rarr;MAC) maupun endpoint <span class="mono">/api/v1/arp</span>, jadi halaman ini sengaja 0 baris dan tidak ada angka yang dikarang. Host lain yang melihat MAC router memakai tabel ARP miliknya sendiri, bukan tabel router.</p>
+            <p class="wf-note">Tabel ini adalah <span class="mono">neighbor cache</span> kernel (<span class="mono">ArpTable</span> di <span class="mono">asl-router-netstack</span>). Setiap baris bersumber dari field <span class="mono">sender IP</span> + <span class="mono">sender MAC</span> pada frame ARP yang benar-benar tiba di eth0/eth1, jadi alamat yang diam tidak pernah terdaftar. Router tidak mengirim probe ARP sendiri dan tidak punya daftar host karangan; kolom <span class="mono">Umur</span> adalah detik sejak frame terakhir, dan entri hilang saat melewati <span class="mono">arp-timeout</span>.</p>
         </div>
 
         <div class="wf-panel" data-panel="dyn">
-            <p class="wf-note">Entri dinamis (hasil pembelajaran dari trafik) butuh tabel ARP di kernel; mesinnya belum ada &mdash; 0 baris.</p>
+            <table class="wf-kv" data-source="/api/v1/arp/stats">
+                <tr><td>Entri segar</td><td data-bind="entries" data-fmt="num"></td></tr>
+                <tr><td>Kapasitas tabel</td><td data-bind="capacity" data-fmt="num"></td></tr>
+                <tr><td>Baris dalam respons</td><td data-bind="snapshot" data-fmt="num"></td></tr>
+                <tr><td>arp-timeout</td><td data-bind="timeout_s" data-fmt="num"></td></tr>
+                <tr><td>Penggusuran tabel penuh</td><td data-bind="evictions" data-fmt="num"></td></tr>
+                <tr><td>Frame ARP ditolak</td><td data-bind="rejected" data-fmt="num"></td></tr>
+            </table>
+            <p class="wf-note">Semua entri yang ada hari ini bersifat dinamis: satu-satunya sumber pengisian adalah traffic yang masuk. Kolom <span class="mono">Penggusuran</span> dan <span class="mono">Frame ditolak</span> membuat kapasitas yang habis dan frame yang tidak wajar terlihat, bukan hilang diam-diam. Angka ini dihitung sejak router dinyalakan.</p>
         </div>
         <div class="wf-panel" data-panel="stat">
-            <p class="wf-note">Entri statis (pemetaan IP&rarr;MAC yang dipatok operator) belum punya penyimpanan konfigurasi maupun jalur tulis &mdash; 0 baris.</p>
+            <p class="wf-note">Entri statis (pemetaan IP&rarr;MAC yang dipatok operator) belum punya penyimpanan di blok konfigurasi RJCFG01 maupun jalur tulis, jadi tab ini sengaja kosong. Menambahkan satu baris statis berarti menambah skema persisten baru, bukan sekadar kolom di tabel.</p>
         </div>
     </div>
 </section>

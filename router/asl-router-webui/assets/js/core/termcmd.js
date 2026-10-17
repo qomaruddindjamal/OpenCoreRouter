@@ -33,19 +33,19 @@
         ["/interface olt print", "/api/v1/olt", "status vOlt/GPON"],
         ["/interface olt ont print", "/api/v1/olt/ons", "daftar ONT"],
         ["/ip service print", "/api/v1/services", "flag layanan yang hidup di kernel"],
-        ["/system write-status print", "/api/v1/writes/last", "hasil jalur tulis terakhir"]
+        ["/system write-status print", "/api/v1/writes/last", "hasil jalur tulis terakhir"],
+        ["/ip arp print", "/api/v1/arp", "tetangga yang dipelajari dari frame ARP masuk"],
+        ["/ip route print", "/api/v1/routes", "isi FIB kernel: prefiks, gerbang, antarmuka, tipe"],
+        ["/ip dns print", "/api/v1/dns", "resolver dari lease DHCP + upstream yang dipegang proksi"]
     ];
 
     // Ditolak dengan sebab teknis, bukan dengan keluaran kosong atau contoh.
     data.NO = [
         ["/tool ping", "kernel hanya menyusun balasan gema ICMP untuk permintaan yang masuk; tidak ada pemancar echo keluar"],
-        ["/tool traceroute", "tidak ada penerusan IPv4 maupun penurunan TTL, jadi hop tengah tidak mungkin dihasilkan"],
+        ["/tool traceroute", "penerusan IPv4 dan penurunan TTL sudah ada, tetapi kernel belum memancar balasan ICMP Time Exceeded"],
         ["/tool bandwidth-test", "tidak ada mesin penghasil beban; kernel hanya mencatat rx_packets/tx_packets"],
         ["/telnet", "TCP kernel hanya menerima koneksi, tidak ada klien maupun parser NVT"],
-        ["/ip arp print", "penjawab ARP ada, tetapi tidak ada struktur tabel maupun endpoint bacanya"],
-        ["/ip route print", "tidak ada endpoint baca tabel rute, jadi path apa pun di luar daftar atas dibalas not_found"],
-        ["/ip dhcp-server print", "yang dibangun hanya klien DHCP; server DHCP belum ada di kernel"],
-        ["/ip dns print", "peroute DNS nonaktif pada build ini dan tidak punya endpoint baca"]
+        ["/ip dhcp-server print", "yang dibangun hanya klien DHCP; server DHCP belum ada di kernel"]
     ];
 
     data.ART = [

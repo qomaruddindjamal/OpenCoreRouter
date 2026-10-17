@@ -14,8 +14,7 @@
         return Array.prototype.slice.call(root.querySelectorAll(sel));
     }
 
-    // querySelectorAll hanya memuat keturunan; akar parsial (section[...]) harus
-    // diperhitungkan sendiri, kalau tidak pengikat tingkat dokumen terlewat.
+    // querySelectorAll tidak memuat akar; cocokkan akar parsial sendiri.
     function listIn(root, sel) {
         var nodes = list(root, sel);
         if (root.matches && root.matches(sel)) nodes.unshift(root);
@@ -32,6 +31,8 @@
         num: function (v) { return empty(v) ? DASH : String(v); },
         dash: function (v) { return empty(v) ? DASH : String(v); },
         ip: function (v) { return v === "0.0.0.0" ? "belum terikat" : (v || DASH); },
+        // 0.0.0.0/0 pada kolom Tujuan = rute default, bukan kosong.
+        addr: function (v) { return v == null || v === "" ? DASH : v; },
         uptime: function (ms) {
             if (typeof ms !== "number") return DASH;
             var s = Math.floor(ms / 1000);
@@ -75,9 +76,7 @@
             node.setAttribute("data-base-class", base);
         }
         var pill = P[kind];
-        // Nama formatter tak dikenal harus tampil, bukan diam-diam jatuh ke
-        // teks mentah: typo data-fmt dulu membuat status string dibaca
-        // boolean-only dan baris terlihat valid padahal salah arti.
+        // Formatter tak dikenal harus tampil, tidak diam-diam jadi teks mentah.
         var out;
         if (!kind) {
             out = { t: F.text(value), c: null };

@@ -2,32 +2,64 @@
     <div class="panel">
         <div class="panel-head">
             <h2>Gateway</h2>
-            <span class="panel-note">desain saja &middot; tabel rute kernel belum diekspos API</span>
+            <span class="panel-note">data kernel nyata &middot; isi FIB seperti yang dipasang mesin rute</span>
         </div>
 
         <div class="wf-tabs">
             <button type="button" class="wf-tab active" data-tab="routes">Rute</button>
+            <button type="button" class="wf-tab" data-tab="stat">Statistik penerusan</button>
             <button type="button" class="wf-tab" data-tab="defgw">Gateway default</button>
         </div>
 
-        <div class="wf-toolbar" data-actions="new,edit,remove,comment" data-tools="refresh"
-             data-hint="daftar rute tidak dibaca kernel: endpoint /api/v1/routes belum ada"></div>
+        <div class="wf-toolbar" data-tools="find,filter,refresh"
+             data-hint="baris hanyalah rute yang benar-benar terpasang di FIB kernel"></div>
 
         <div class="wf-panel active" data-panel="routes">
-            <table class="wf-kv">
-                <tr><td>Mesin rute</td><td>ada &mdash; FIB kernel diisi rute terhubung saat WAN statik diadopsi dan rute default lewat gerbang WAN</td></tr>
-                <tr><td>Pembacaan WebUI</td><td>belum ada &mdash; tidak ada endpoint yang menampilkan isi FIB</td></tr>
-                <tr><td>Penulisan rute</td><td>belum ada &mdash; jalur tulis HTTP hanya untuk konfigurasi WAN</td></tr>
+            <table class="tbl wf-table">
+                <thead>
+                    <tr>
+                        <th class="col-st"></th>
+                        <th>Alamat tujuan</th>
+                        <th class="num">Prefiks</th>
+                        <th>Gerbang</th>
+                        <th>Antarmuka</th>
+                        <th class="num">Metrik</th>
+                        <th>Tipe</th>
+                    </tr>
+                </thead>
+                <tbody data-list="/api/v1/routes">
+                    <tr data-row>
+                        <td class="col-st"></td>
+                        <td class="row-name" data-bind="dst" data-fmt="addr"></td>
+                        <td class="num" data-bind="prefix" data-fmt="num"></td>
+                        <td data-bind="gw" data-fmt="ip"></td>
+                        <td data-bind="iface" data-fmt="text"></td>
+                        <td class="num" data-bind="metric" data-fmt="num"></td>
+                        <td data-bind="type" data-fmt="text"></td>
+                    </tr>
+                </tbody>
             </table>
+            <p class="wf-note">Kolom di atas adalah salinan langsung <span class="mono">RouteEntry</span> pada FIB (<span class="mono">asl-router-lpm</span>) &mdash; endpoint <span class="mono">/api/v1/routes</span> tidak menambah atau menggabung baris. Rute muncul hanya dari tiga kejadian nyata: alamat WAN terbentuk (lease DHCP atau <span class="mono">'wan static'</span>), gateway ikut terpasang saat alamat itu punya gerbang, dan subnet LAN terhubung saat <span class="mono">eth1</span> benar-benar ada. Nomor antarmuka kernel (<span class="mono">IF_WAN</span>=1, <span class="mono">IF_LAN</span>=2) diterjemahkan ke nama yang dilaporkan kernel; rute tanpa antarmuka keluar tampil sebagai strip, bukan nama yang dikarang. Kolom Tujuan memakai angka telanjang karena <span class="mono">0.0.0.0/0</span> berarti semua alamat &mdash; itu rute default, bukan alamat yang belum terikat.</p>
+        </div>
+
+        <div class="wf-panel" data-panel="stat">
+            <table class="wf-kv" data-source="/api/v1/routes/stats">
+                <tr><td>Rute aktif</td><td data-bind="entries" data-fmt="num"></td></tr>
+                <tr><td>Kapasitas FIB</td><td data-bind="capacity" data-fmt="num"></td></tr>
+                <tr><td>Baris dalam respons</td><td data-bind="snapshot" data-fmt="num"></td></tr>
+                <tr><td>Keputusan rute diminta</td><td data-bind="lookups" data-fmt="num"></td></tr>
+                <tr><td>Paket diteruskan</td><td data-bind="forwards" data-fmt="num"></td></tr>
+                <tr><td>Paket transit dibatalkan</td><td data-bind="drops" data-fmt="num"></td></tr>
+            </table>
+            <p class="wf-note">Pemisahan ini sengaja: tabel yang terisi belum berarti mesin rutenya ditanya. Kolom <span class="mono">Keputusan rute diminta</span> naik hanya bila datapath kernel benar-benar memanggil <span class="mono">route_packet</span> untuk paket yang bukan ditujukan ke alamat router. Pada topologi satu NIC bridged, <span class="mono">eth1</span> tidak ada sehingga penerusan keluar tidak mungkin terjadi &mdash; angka <span class="mono">Paket diteruskan</span> wajar bernilai 0 dan tidak pernah disulap menjadi angka indah.</p>
         </div>
 
         <div class="wf-panel" data-panel="defgw">
-            <table class="wf-kv">
-                <tr><td>Gerbang terpakai</td><td>dibaca dari state WAN pada Dashboard/Interfaces, bukan dari halaman ini</td></tr>
-                <tr><td>Rute statis tambahan</td><td>0 ditampilkan &mdash; mengarang baris rute akan memalsukan status</td></tr>
+            <table class="wf-kv" data-source="/api/v1/routes/stats">
+                <tr><td>Rute default terpasang</td><td data-bind="default_active" data-fmt="pill-bool"></td></tr>
+                <tr><td>Gerbang default</td><td data-bind="default_gw" data-fmt="ip"></td></tr>
             </table>
+            <p class="wf-note">Gerbang default dibaca dari rute <span class="mono">0.0.0.0/0</span> di FIB, bukan dari kolom lain. Bila belum ada lease dan belum ada alamat statik, nilainya <span class="mono">0.0.0.0</span> dengan status tidak aktif &mdash; keadaan itu dilaporkan apa adanya, tidak diisi alamat contoh.</p>
         </div>
-
-        <p class="wf-note">Item ini ada di sidebar atas permintaan owner. Karena FIB kernel nyata tetapi belum punya jalur baca, halaman ini sengaja tidak menampilkan satu baris rute pun; begitu <span class="mono">/api/v1/routes</span> tersedia, tab Rute diisi oleh pengikat data yang sama dengan modul lain.</p>
     </div>
 </section>

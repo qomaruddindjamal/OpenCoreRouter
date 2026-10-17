@@ -33,7 +33,11 @@
                         <th>MAC</th>
                         <th>IPv4</th>
                         <th>Netmask</th>
+                        <th>Asal netmask</th>
                         <th>Gateway</th>
+                        <th>Asal gateway</th>
+                        <th>DNS 1</th>
+                        <th>Asal DNS</th>
                         <th>Mode</th>
                         <th>Sumber</th>
                         <th class="num">RX</th>
@@ -50,7 +54,11 @@
                         <td class="mono" data-bind="mac" data-fmt="dash"></td>
                         <td class="mono" data-bind="ip" data-fmt="ip"></td>
                         <td class="mono" data-bind="netmask" data-fmt="dash"></td>
+                        <td data-bind="netmask_src" data-fmt="dash"></td>
                         <td class="mono" data-bind="gateway" data-fmt="dash"></td>
+                        <td data-bind="gateway_src" data-fmt="dash"></td>
+                        <td class="mono" data-bind="dns1" data-fmt="ip"></td>
+                        <td data-bind="dns_src" data-fmt="dash"></td>
                         <td data-bind="config_mode" data-fmt="text"></td>
                         <td data-bind="source" data-fmt="dash"></td>
                         <td class="num v-rx" data-bind="rx_packets" data-fmt="num"></td>
@@ -58,6 +66,7 @@
                     </tr>
                 </tbody>
             </table>
+            <p class="wf-note">Kolom Asal = sumber nilai: <span class="mono">option-1/3/6</span> dengan akhiran <span class="mono">-ack</span> atau <span class="mono">-offer</span>, <span class="mono">classful-turunan</span>, <span class="mono">none</span> = tak dikirim. Tidak ada nilai cadangan.</p>
         </div>
 
         <div class="wf-panel" data-panel="veth">

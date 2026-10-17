@@ -156,7 +156,7 @@
         var cw = c.split(" ");
         for (i = 0; i < D.NO.length; i++) {
             // NO tanpa argumen: padanan dibaca per kata dari depan supaya
-            // "/tool ping 10.10.66.1" ikut mendapat alasan penolakan.
+            // "/tool ping 198.51.100.9" ikut mendapat alasan penolakan.
             var nw = D.NO[i][0].split(" "), k, hit = nw.length <= cw.length;
             for (k = 0; hit && k < nw.length; k++) hit = nw[k] === cw[k];
             if (hit) { say("tl-err", "ditolak: " + D.NO[i][1]); return; }
