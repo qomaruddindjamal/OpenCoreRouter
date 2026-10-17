@@ -116,6 +116,8 @@ Bukti satu rantai, tiga permukaan (boot VM, disk final):
 | AUD02-D02 | Rail "modul belum aktif" masih mencantumkan Rute & Gateway serta Tabel ARP yang endpoint-nya sudah hidup | rail ditulis manual pada sprint UI-02E dan tidak punya penjaga yang membandingkannya dengan registry |
 | AUD02-D03 | Rute default `0.0.0.0/0` dilabeli "belum terikat" | satu pengubah `ip` dipakai dua semantik berlawanan; pengubah `addr` baru memisahkan makna |
 | AUD02-D04 | Assert waktu-compile mengizinkan aset 7 936 B padahal header riil `ui.js` menuntut > 258 B | konstanta anggaran header bersifat tetap; penjaga sejati adalah dispatch nyata `test_02b` |
+| AUD02-D05 | User Manager hanya membaca: tidak ada jalur CRUD dari WebUI padahal kernel sudah menerima `action=set/del/revoke` | endpoint tulis dan konsol serial dibuat lebih dulu; tidak ada penjaga yang mengikat toolbar modul ke jalur tulis |
+| AUD02-D06 | Persistensi kredensial lintas reboot belum pernah diukur | setiap verifikasi dikerjakan sesudah `build-disk` yang membentuk image 2 GiB baru, sehingga RJCFG01 selalu terhapus sebelum boot berikutnya |
 
 Koreksi D01 diverifikasi anti-vakum: cacat `]}}` dimasukkan kembali dan `test_35b` **FAILED** dengan pesan `"… JSON tidak berimbang: {'ok':true,'data':[{…}]}}"`, lalu dikoreksi dan lulus.
 
@@ -150,3 +152,20 @@ Urutan pekerjaan dijalankan sesuai perintah berdiri: perbaikan di project utama 
 - **Direktori `Python/` di root repo** (untracked, berisi runtime CPython 3.15) dan **`Analysis/logs/`, `Analysis/tmp/`** bukan buatan sprint ini; saya tidak menghapusnya. AGENTS.md §4.1 mewajibkan root bersih — mohon putuskan dipindah/di-gitignore/dibuang.
 - **`Analysis/reports/is02_rjcfg3.log`** di-track git dan memuat IP intern riil; ia punya perubahan yang **sengaja tidak saya stage**. Perlu diputuskan: sanitize file track-an ini atau keluarkan dari version control.
 - Push dan commit dilakukan per kelompok (aset sebelum kode, staging per jalur) setelah gerbang hijau, sesuai persetujuan "Commit + push setelah bukti VM".
+
+## 10. Lanjutan sprint — perintah owner: "usermanager harus bisa merubah dan menambah dengan CRUD"
+
+| Lapisan | Status kosakata mandat | Bunyi bukti |
+|---|---|---|
+| Modal `js/core/useredit.js` + `views/user-modal.html` (aset 51 & 52) | **RUNTIME-VERIFIED** | `ETag "rinjani-js-useredit-aud02-7782"` dan `Content-Length 7782` terlayani utuh; modal terbuka dari New, dobel-klik baris, Edit, dan Remove |
+| Cipta akun (`action=set`) | **RUNTIME-VERIFIED** | baris kernel bertambah `[nama, viewer, 1024]`; status modal mengutip `kredensial: tertulis dan terbaca kembali pada RJCFG01` hasil baca ulang `/api/v1/writes/last`; isian sandi dikosongkan sehabis kirim |
+| Ubah akun (`action=set` dengan nama terkunci) | **RUNTIME-VERIFIED** | role baris berpindah `viewer` → `admin`; nama tidak dapat diubah karena ia kunci tabel kredensial |
+| Hapus akun (`action=del`) | **RUNTIME-VERIFIED** | baris hilang dari daftar kernel; Remove pada toolbar hanya membuka modal dan penghapusan menuntut tombol "Hapus akun" |
+| Penjaga tabel (`last_account`, `last_admin`, `bad_user_or_table_full`, `password_too_short`) | **RUNTIME-VERIFIED** | `action=del` pada akun terakhir dijawab `ditolak kernel: last_account` dan barisnya tetap ada; prose halaman menyebut kode ini |
+| Cabut sesi (`action=revoke`) | **RUNTIME-VERIFIED** | `kernel: mencabut sesi (status applied, sesi cabut 1)`, token sesi menjadi 0 panjang dan gerbang login kembali; kalimat `jurnal ?` yang dahulu mengarang janji persistensi untuk aksi sesi sudah dihapus |
+| Gerbang peran | **RUNTIME-VERIFIED** | pada sesi viewer: `GET` dan `POST` keduanya `403 insufficient_role`, isian disabled, tombol tulis hilang; penjaga tetap di kernel, bukan di DOM |
+| Persistensi kredensial lintas reboot tanpa rebuild disk (D06) | **RUNTIME-VERIFIED** | `arm` → `restart` lewat `/api/v1/power`; boot berikutnya mencetak `[R26] RJCFG01 journal DIBACA DARI DISK: slot 1 seq=6` dan `[R30] Auth: 1 kredensial dimuat dari RJCFG01`, lalu login berhasil |
+| `table.js` (chrome toolbar) | **UNIT-TESTED** tidak diubah | 7 790 B mepet anggaran; penerusan aksi ke `OPCR.wf.actions` sudah terbukti di runtime sebelumnya sehingga tidak perlu disentuh |
+
+Rincian langkah dan angka byte ada di `AUD01_TEST_RESULTS.md` §11. Item terbuka §8 tidak berubah: #81, #83, #84, UDP/53, `/api/v1/leases`, TLS, dan laporan §19 mandat tetap pada statusnya masing-masing; sepuluh modul `BLOCKED` belum diaktifkan.
+

@@ -146,4 +146,41 @@ Sapuan penuh **23 view SPA** menghasilkan 0 galat JavaScript. Modul berdata nyat
 - `/api/v1/leases` menjawab `not_found` — halaman DHCP Server tetap rupa-saja dan berada di rail.
 - ICMP echo egress (#81), 802.1Q VLAN / shaper QoS / tangkap paket (#83), serta DEFER-05 & DEFER-06 (#84) belum dikerjakan; modul yang bergantung pada primitive itu **tidak** diaktifkan.
 - Boot disk hasil build sengaja kosong kredensialnya; akun lab dibuat lewat bootstrap serial untuk pengujian dan tidak pernah di-commit. Sandi lab tidak dicatat di dokumen ini.
+- Persistensi kredensial **lintas reboot tanpa rebuild disk** kini terukur (§11.3); klaim lama hanya bersandar pada satu siklus boot.
 - Konfirmasi rupa oleh mata operator tetap `BLOCKED` (harness tanpa permukaan layar); bukti berupa DOM + computed style + byte aset, dan memerlukan reload `ignoreCache` untuk melihat aset baru karena cache peramban mengabulkan ETag lama.
+
+## 11. AUD02-D05 & D06 — CRUD User Manager dan persistensi lintas reboot
+
+Gerbang pada build ini: `cargo fmt --all -- --check` exit 0; `cargo test --workspace` **391 lulus / 0 gagal** (webui 37); `cargo check --target x86_64-unknown-none -p asl-kernel-bin` exit 0 dengan 1 warning `dead_code` warisan. Aset baru terbesar `js/core/useredit.js` **7 782 B**, di bawah anggaran 7 936 B dan terlayani utuh (`ETag "rinjani-js-useredit-aud02-7782"`, `Content-Length 7782`); `views/user-modal.html` 3 554 B; `views/usermanager.html` 4 021 B.
+
+### 11.1 Putaran CRUD di VM (sesi admin, tanpa nilai karangan)
+
+| Aksi | Permintaan nyata | Yang dibaca dari kernel | Status modal |
+|---|---|---|---|
+| Cipta | `POST /api/v1/auth/users action=set role=viewer` | baris baru `[nama, viewer, 1024]` pada `GET` daftar | `kernel: kredensial: tertulis dan terbaca kembali pada RJCFG01` (`wf-status good`), kedua isian sandi kembali kosong |
+| Validasi pra-kirim | tidak ada POST dikirim | — | `kata sandi ditolak browser: 10-64 karakter` — browser menahan bentuk yang pasti ditolak, tidak menebak |
+| Ubah | `action=set` dengan nama terkunci | role baris berpindah `viewer` → `admin` | verdict RJCFG01 yang sama; nama tidak dapat diedit karena ia kunci tabel kredensial |
+| Hapus | `action=del` lewat tombol "Hapus akun" | baris hilang dari daftar kernel | verdict RJCFG01 dikutip, bukan disimpulkan |
+| Penjaga | `action=del` pada akun terakhir | baris `admin` **tetap ada** | `ditolak kernel: last_account` (`wf-status bad`) — prose halaman kini menyebut kode ini |
+| Cabut sesi | `action=revoke` | token sesi mati di kernel | `kernel: mencabut sesi (status applied, sesi cabut 1)`; `sessionStorage` token = 0, `role = null`, gerbang login muncul kembali |
+| Peran lemah | `GET`/`POST` sebagai viewer | `403 insufficient_role` pada keduanya | footer `(insufficient_role)`, isian disabled, tombol tulis disembunyikan + teks kunci statis |
+
+Dobel-klik baris dan tombol New/Edit/Remove membuka modal yang sama lewat `data-modal="user"`; Remove sengaja hanya membuka modal agar penghapusan menuntut penegasan tombol. `table.js` tidak diubah (7 790 B, mepet anggaran) dan tetap meneruskan aksi ke `OPCR.wf.actions`.
+
+### 11.2 Perbaikan kejujuran yang lahir dari bukti runtime
+
+Balasan `revoke` dari kernel **tidak** membawa `persist` (ia aksi sesi, bukan perubahan kredensial), tetapi modal dahulu mencetak `jurnal ?`. Kalimat status sekarang bercabang: `set`/`del` menampilkan `jurnal <persist>` lalu membaca ulang `/api/v1/writes/last`, `revoke` menampilkan `sesi cabut <N>` apa adanya. Penjelasan ini juga dipindah ke markup modal sehingga JS hanya mengutip, tidak menyusun klaim.
+
+### 11.3 D06 — reboot tanpa rebuild disk
+
+Prosedur: `POST /api/v1/power action=arm` → `action=restart` (penjaga dua langkah, `exec_in_ms 1500`), **tanpa** menjalankan `scripts/build-disk.ps1` sehingga RJCFG01 tidak tersentuh. Boot berikutnya pada konsol serial:
+
+```
+[R1] RINJANI 1.0.0 — Open Core Router
+[R2] Powered by ASL Core Kernel v1.0.0
+[R26] RJCFG01 journal DIBACA DARI DISK: slot 1 seq=6 (CRC slot + header terverifikasi, PIO nyata)
+[R30] Auth: 1 kredensial dimuat dari RJCFG01, entropi token diaduk dari TSC+MAC+jurnal
+```
+
+Login dengan sandi yang sama setelah reboot berhasil: `role = admin`, token 64 karakter, tabel menampilkan `[admin, admin, 1024]`. Ini memisahkan bukti "tertulis" dari bukti "termuat saat boot berikutnya" yang sebelumnya `NOT RUN`.
+
