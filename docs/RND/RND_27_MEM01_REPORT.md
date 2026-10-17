@@ -21,12 +21,13 @@ Sprint ini menutup satu lubang yang selama ini disembunyikan oleh kemewahan: lab
 | Pemulihan basis | Tree kode = `ce93913` = `origin/main`; gerbang diulang sebelum perubahan apa pun | `RUNTIME-VERIFIED` (fmt 0, 400/0, no-std selesai) |
 | Kejujuran `[R3]` | `BootInfo` tidak lagi dikarang (dahulu basis fisik 256 MB, besar 1 GB); kini basis dan total RAM diambil dari Limine memmap, dan `None` => gagal boot secara eksplisit | `RUNTIME-VERIFIED` |
 | Jalur build lab | `scripts/build-disk.ps1` default `-Profile release` (ELF 707 168 B, dulu debug 3 703 992 B) + gerbang ukuran ELF dengan **tes negatif** yang terbukti menolak profil debug | `RUNTIME-VERIFIED` |
+| Jalur build ISO | `scripts/build-iso.ps1` disamakan (default release + gerbang ELF yang sama + fallback kompilasi yang kini menghormati profil); ELF di dalam ISO diverifikasi byte-identik dengan berkas release | `VERIFIED` (artefak) · boot ISO di VM `NOT RUN` |
 | Boot pada 4 MB | Dua boot independen guest 4 MB: jurnal lengkap tanpa PANIC, ring virtio aktif, DHCP BOUND, GARP periodik, RJCFG01 terbaca | `RUNTIME-VERIFIED` |
 | WebUI pada 4 MB | Login + `/api/v1/system` + `/api/v1/interfaces` + `/login.html` + seluruh aset rujukannya berbalas `200` dari **dua alamat** (`10.10.MM.RRR` eth0 dan `192.168.56.100` eth1); sandi salah => `401` | `RUNTIME-VERIFIED` |
 | Kredensial default owner | Akun `admin` dipasang sekali lewat konsol serial, tertulis ke RJCFG01, dan **terbaca kembali tanpa bootstrap ulang** pada dua reboot berikutnya | `RUNTIME-VERIFIED` |
 | Pemangkasan runtime (ring, pool, stack) | **Tidak diperlukan** untuk mencapai 4 MB; tidak ada satu pun kapasitas yang diturunkan | `NOT RUN` (sengaja, lihat §6) |
 
-Gerbang akhir: `cargo fmt --all -- --check` exit 0; `cargo test --workspace` **400 passed / 0 failed / 0 ignored**; `cargo check --target x86_64-unknown-none -p asl-kernel-bin` selesai (1 peringatan `dead_code` warisan `power.rs:120`). Tidak ada tes yang dihapus, diturunkan kriterianya, atau dinonaktifkan.
+Gerbang akhir: `cargo fmt --all -- --check` exit 0; `cargo test --workspace` **400 passed / 0 failed / 0 ignored**; `cargo check --target x86_64-unknown-none -p asl-kernel-bin` selesai (1 peringatan `dead_code` warisan `power.rs:120`). Tidak ada tes yang dihapus, diturunkan kriterianya, atau dinonaktifkan. Perbaikan `scripts/build-iso.ps1` (§4) dibuat **setelah** gerbang ini dan hanya menyentuh PowerShell — tidak ada berkas Rust yang berubah sejak angka di atas diukur; kedua skrip (termasuk dua koreksi kosmetik di `build-disk.ps1`: nomor langkah "2." yang sempat hilang dan angka komentar 715 256 → 707 168 B) divalidasi lewat parser (`0 syntax errors`) lalu dieksekusi nyata (build disk §4, build ISO §4 termasuk satu penolakan gerbang).
 
 ## 2. Recovery: apa yang dianggap "keadaan terakhir yang berfungsi normal"
 
@@ -73,6 +74,20 @@ VDI   : target/rinjani-1.0.0-x86_64-disk.vdi (6291456 bytes)
 ```
 
 Dua build release berturut-turut menghasilkan SHA256 RAW yang identik, jadi perubahan ini deterministik dan bisa diaudit ulang.
+
+**`scripts/build-iso.ps1`** (dilakukan pada sesi yang sama, setelah dua commit pertama) — jalur ISO dibujuk mengikuti anggaran yang sama: default `$Profile` menjadi `release`, gerbang `$ElfMaxBytes` + urai `PT_LOAD` disalin, danfallback kompilasi yang dahulu selalu `cargo build ... --target x86_64-unknown-none` (profile debug) kini memakai `--release` ketika `$Profile` release. Tanpa perbaikan fallback itu, ISO ber-profil release akan membangun ELF debug lalu gagal cari berkas.
+
+```
+REJECTED: kernel ELF 3703992 B > batas 1048576 B; guest 4 MiB tidak akan termuat (pakai -Profile release)   [-Profile debug]
+BOOT FOOTPRINT: ELF 707168 B, PT_LOAD 4 segmen, residen 1212415 B (batas ELF 1048576 B)
+=== ISO BUILD SUCCESSFUL ===
+Size  : 4313088 bytes
+SHA256: E7B8A41C5AA0EB4E2D126B2150AD1B54F0C77247A52B78FD0CAC16A41705642E
+```
+
+Sebelum dijalankan, berkas ISO di `target/` berukuran 7 297 024 B (build lama dari profil debug). ISO baru 4 313 088 B; selisihnya 2 983 936 B konsisten dengan selisih ukuran ELF debug−release (2 996 824 B). Klaim "yang lama membawa ELF debug" berstatus `INFERRED` dari aritmetika itu — berkas lamanya sudah tertimpa oleh build baru, jadi tidak bisa saya bandingkan isinya secara langsung.
+
+Bukti bahwa artefak ISO benar-benar membawa ELF release (bukan sekadar klaim dari skrip): `/boot/rinjani-kernel.elf` diekstrak kembali dari ISO dengan `xorriso -osirrox on -extract`, menghasilkan 707 168 B dengan SHA256 `ee74ad73d64ec5116719e98d204d339671976faf04e4acc2f0d8a5a2c02f7b10` — sama persis dengan `target/x86_64-unknown-none/release/asl-kernel`. Bukti level artefak ini `VERIFIED`; eksekusi boot-nya di VM masih `NOT RUN`.
 
 ## 5. Kredensial default: keputusan owner dan eksekusinya
 
@@ -124,6 +139,7 @@ Penghentian daya dilakukan lewat perintah CLI kernel `shutdown` (ACPI) pada kedu
 4. **Temuan warisan versi (belum saya ubah, menunggu keputusan owner).** Empat crate kernel masih membawa penanda `RINJANI_1_0_3` (`asl-bootloader`, `asl-hal`, `asl-memory`, `asl-afdx-ipc`), termasuk satu tes yang mengasersinya, padahal `AGENTS.md` §2 mengunci distro pada Rinjani 1.0.0 dan menyatakan histori 1.0.3 dipensiunkan. `asl-kernel-core` sudah benar (`ASL_CORE_KERNEL_v1_0_0`). Saya tidak menyentuhnya di sprint ini agar MEM-01 tetap satu topik.
 5. **Pangkas RAM runtime sengaja TIDAK dikerjakan.** Ring 1024 descriptor, stack 512 KiB, dan tabel statis masih utuh karena 4 MB tercapai tanpa menyentuhnya. Menurunkan kapasitas hanya untuk angka yang lebih cantik akan melanggar aturan "jangan turunkan kriteria".
 6. **Angka ini milik lab VirtualBox.** 708–712 KiB usable adalah hasil peta memori guest 4 MB di Hyper-V/NEM, bukan klaim perangkat keras carrier-grade mana pun.
+7. **Satu scratch saya sendiri sempat mencemari root repo.** Saat mengekstrak ELF dari ISO, penulisan ulang path oleh MSYS membuat direktori literal bernama `C:` muncul di root `C:\OpenCR`. Saya temukan, periksa isinya (satu salinan `rinjani-kernel.elf` hasil ekstraksi saya, bukan pekerjaan owner), lalu buang; `git status` sesudahnya bersih dan `ls` root tidak lagi menampilkan direktori itu. `target/iso-check/` (scratch kedua) juga dihapus.
 
 ## 8. Batas yang masih jujur
 
@@ -132,16 +148,16 @@ Penghentian daya dilakukan lewat perintah CLI kernel `shutdown` (ACPI) pada kedu
 | Uji di bawah 4 MB | `NOT RUN` — VirtualBox menolak konfigurasi lebih rendah untuk profil guest ini; 4 MB adalah batas bawah yang teruji |
 | RAM yang dilaporkan ke WebUI | `BLOCKED` — `/api/v1/system` belum memuat kolom memori; nilai `[R3]` hanya terlihat di jurnal konsol (calon Tahap B, agar operator melihat RAM dari peramban) |
 | Profil debug untuk pengembangan | `UNIT-TESTED` (gerbang menolak > 1 MiB); jalur `-Profile debug` tetap tersedia untuk guest ber-RAM besar |
-| ISO | `NOT RUN` — `scripts/build-iso.ps1` masih berdefault `debug`; tidak dipakai loop lab ini, diubah pada sprint berikutnya agar konsisten |
+| ISO | `VERIFIED` level artefak — `scripts/build-iso.ps1` kini berdefault `release` dengan gerbang ukuran ELF yang sama; `/boot/rinjani-kernel.elf` yang diekstrak kembali dari ISO terbukti identik byte dengan berkas release (§4). **Boot dari ISO di VM: `NOT RUN`** (menuntut pertukaran media optik VM yang sedang memegang disk lab 4 MB) |
 | Modul `BLOCKED` (WireGuard, VPN, XRay, QoS, DHCP Server, Packages, Tools/Speed Test/Telnet/Trace) | tetap `BLOCKED` dan tidak dinaikkan ke navigasi aktif |
 
 ## 9. Kosakata status yang dipakai
 
-`RUNTIME-VERIFIED` — teruji dari boot nyata di guest; `UNIT-TESTED` — terbukti pada level tes/gerbang host tanpa eksekusi guest; `NOT RUN` — direncanakan, belum dijalankan; `BLOCKED` — tertahan dependensi atau keputusan owner. Tidak ada `PASS` untuk sesuatu yang tidak dijalankan.
+`RUNTIME-VERIFIED` — teruji dari boot nyata di guest; `UNIT-TESTED` — terbukti pada level tes/gerbang host tanpa eksekusi guest; `NOT RUN` — direncanakan, belum dijalankan; `BLOCKED` — tertahan dependensi atau keputusan owner. Untuk taksonomi bukti: `VERIFIED` dipakai pada pemeriksaan byte-level artefak ISO di host (ekstraksi + SHA256) yang bukan eksekusi guest. Tidak ada `PASS` untuk sesuatu yang tidak dijalankan.
 
 ## 10. Rekomendasi lanjutan (urutan saran)
 
-1. **MEM-01-B2:** samakan `scripts/build-iso.ps1` ke profil release dan salin gerbang ukuran ELF, agar artefak ISO tidak lagi menghasilkan boot yang gagal di RAM kecil.
+1. **MEM-01-B2 — SELESAI pada sesi ini:** `scripts/build-iso.ps1` disamakan ke profil release dengan gerbang ukuran ELF yang sama (lihat §4). Yang masih terbuka hanyalah **boot ISO di VM** (`NOT RUN`), karena menuntut melepas media optik yang sekarang memegang konfigurasi lab 4 MB; lakukan pada siklus lab berikutnya bila owner menghendaki bukti RINJANI-boot-dari-ISO.
 2. **MEM-01-C:** tampilkan RAM usable nyata di `/api/v1/system` + sel Dashboard (sumber tetap Limine memmap), supaya klaim memori bisa dibaca operator tanpa konsol serial.
 3. **IFACE-01 Tahap B** (tetap terbuka): registry NIC 3–5, himpunan alamat melayani di JSON, alamat eth1 dari RJCFG01, jalur terima UDP/67 + UDP/53.
 4. **Keputusan owner:** penyeragaman penanda versi `RINJANI_1_0_3` → 1.0.0 (lihat §7.4).
