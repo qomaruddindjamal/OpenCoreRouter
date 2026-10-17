@@ -106,6 +106,39 @@ Ini pengukuran paling menentukan jawabannya. **Laju permintaan hampir tidak beru
 
 ---
 
+## 5b. TX/RX pada tingkat bingkai (counter nyata kernel, bukan hitungan saya)
+
+Counter dibaca langsung dari CLI serial guest (`show counter`) pada boot 4 MiB yang sama, dalam tiga langkah: potret awal → **jendela derau tanpa beban** (35 s) → potret → **beban terkendali 300 permintaan** `/js/core/term.js` (body 2 363 100 B, dinding jam 2 732 ms) → potret akhir. Selisih dikurangi laju derau, bukan dilaporkan mentah.
+
+```text
+Packet Counters:
+  eth0 (WAN): rx=79174, tx=50295
+  eth1 (LAN): rx=20, tx=0
+  Forward   : 0 (path eth1->eth0 belum diwire; bukan angka karangan)
+```
+
+| Jendela | Durasi | Delta rx eth0 | Delta tx eth0 | Hasil bagi |
+|---|---|---|---|---|
+| Derau idle (tanpa beban; GARP + ARP host + polling tab peramban) | 35 s | **+475** | **+4** | 13,6 rx/s dan 0,11 tx/s latar |
+| Beban 300 permintaan keep-alive | 2,732 s | **+2 581** | **+2 702** | 945 rx fps / 989 tx fps |
+| Derau yang diperhitungkan di jendela beban | 2,732 s | ±37 | ±0 | — |
+| **Bingkai milik beban saja** | — | ≈ 2 544 | ≈ 2 702 | **8,48 bingkai RX dan 9,00 bingkai TX per permintaan** |
+
+Konversi ke bit di kawat (L2, `INFERRED` dari komposisi bingkai: respons 7 877 B body + header ≈ 8 130 B → 6 segmen 1 460 B + ACK kecil; permintaan satu segmen ±750 B + 7 ACK ±66 B):
+
+| Arah | Perkiraan bit rate selama jendela beban | Label |
+|---|---|---|
+| Turun (router → klien) | ≈ 1,01 MB/s ≈ **8,1 Mbit/s** di L2; body murni 844,7 KiB/s = **6,9 Mbit/s** | `VERIFIED` (body) / `INFERRED` (L2) |
+| Naik (klien → router) | ≈ 133 KB/s ≈ **1,1 Mbit/s** | `INFERRED` |
+
+Tiga hal yang wajib ikut dibaca bersama angka ini:
+
+1. **`Forward : 0` adalah jawaban paling jujur untuk sisi transit.** Jalur eth1→eth0 memang belum dirangkai di build ini (tulisan pendampingnya di cetak langsung oleh kernel: "path eth1->eth0 belum diwire; bukan angka karangan"), jadi RX/TX *forwarding* bernilai nol harfiah — dan itu sebabnya angka 842 Mbps tidak bisa diuji hari ini (§9).
+2. **Sisi LAN nyaris diam** (`eth1 rx=20, tx=0`) karena host penguji tidak berada di segmen LAN; seluruh beban lewat eth0 (WAN). Tidak ada klaim bandwidth LAN yang bisa dibuat dari sesi ini (`NOT RUN`).
+3. Rasio **9 tx / 8,5 rx bingkai per permintaan** menjelaskan kenapa plafonnya adalah *jumlah permintaan*: dari 9 bingkai keluar, hanya 6 yang membawa data, dan satu permintaan hanya boleh satu respons ≤ 8 KiB (§5).
+
+---
+
 ## 6. Batas struktural yang memotong bandwidth (dibaca dari kode, lalu dicocokkan dengan pengukuran)
 
 | Konstanta | Nilai | Efek pada bandwidth | Bukti |
